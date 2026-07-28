@@ -1,0 +1,217 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { UserPlus, Mail, Lock, Phone, User, Building, MapPin, ArrowRight, MessageSquare } from 'lucide-react';
+import { api } from '@/lib/api-client';
+import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    phone: '',
+    agency_name: '',
+    city: 'Bengaluru',
+    whatsapp_number: ''
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email || !formData.password || !formData.phone) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await api.auth.register(formData);
+      router.push('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please check your inputs.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0A0D14] text-white flex items-center justify-center p-4 relative overflow-hidden my-8">
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-purple-600/20 to-blue-600/20 rounded-full blur-[140px] pointer-events-none" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-xl bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl relative z-10"
+      >
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-5">
+            <BeetleLabsLogo dark href="/" iconSize={32} textSize="text-2xl" />
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+            Create Your Broker Account
+          </h1>
+          <p className="text-sm text-gray-400 mt-2">
+            Start your 7-day free trial. Qualify real estate leads on WhatsApp automatically.
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              Full Name *
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Rahul Sharma"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              Email Address *
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="rahul@realty.com"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              Password *
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="password"
+                required
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              Phone Number *
+            </label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="tel"
+                required
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+919876543210"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              WhatsApp Number
+            </label>
+            <div className="relative">
+              <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="tel"
+                value={formData.whatsapp_number}
+                onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })}
+                placeholder="+919876543210"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              Agency Name
+            </label>
+            <div className="relative">
+              <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                value={formData.agency_name}
+                onChange={(e) => setFormData({ ...formData, agency_name: e.target.value })}
+                placeholder="Apex Realty"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+              City
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                placeholder="Bengaluru"
+                className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="md:col-span-2 mt-4">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              ) : (
+                <>
+                  <span>Create Free Account & Start Trial</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6 pt-6 border-t border-white/10 text-center text-sm text-gray-400">
+          Already registered?{' '}
+          <Link href="/login" className="text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-4">
+            Sign In Here
+          </Link>
+        </div>
+      </motion.div>
+    </div>
+  );
+}

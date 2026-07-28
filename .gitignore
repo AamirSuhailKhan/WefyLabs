@@ -1,0 +1,26 @@
+# Environment — never commit real credentials
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/web/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+.next/
+out/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log

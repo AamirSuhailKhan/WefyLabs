@@ -1,0 +1,125 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-api:
+    name: Test FastAPI Backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leadscore_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.3
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: apps/api/.venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install Dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: |
+          cd apps/api
+          poetry install --no-interaction --no-root
+
+      - name: Run Pytest Suite
+        env:
+          ENV: testing
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_super_secret_jwt_key_ci_environment
+          OPENAI_API_KEY: sk-placeholder
+          DIALOG360_API_KEY: d360_key_placeholder
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: secret_placeholder
+        run: |
+          cd apps/api
+          poetry run pytest -v
+
+  lint:
+    name: Linting Codebase
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff / Flake8
+        run: pip install ruff
+
+      - name: Run Python Linter
+        run: ruff check apps/api
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-api, lint]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
+          push: false
+          tags: leadscore-api:latest
+
+      - name: Build Web Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/web
+          file: ./apps/web/Dockerfile
+          push: false
+          tags: leadscore-web:latest

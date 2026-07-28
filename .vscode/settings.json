@@ -1,0 +1,11 @@
+{
+  "python.analysis.extraPaths": [
+    "C:/Users/aamir/AppData/Local/Python/pythoncore-3.14-64/Lib/site-packages",
+    "${workspaceFolder}/apps/api"
+  ],
+  "python.autoComplete.extraPaths": [
+    "C:/Users/aamir/AppData/Local/Python/pythoncore-3.14-64/Lib/site-packages",
+    "${workspaceFolder}/apps/api"
+  ],
+  "css.lint.unknownAtRules": "ignore"
+}

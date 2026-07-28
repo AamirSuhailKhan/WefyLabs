@@ -1,0 +1,14 @@
+{
+  "name": "leadscore-crm",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload",
+    "dev:web": "npm run dev --prefix apps/web",
+    "build": "npm run build --prefix apps/web",
+    "start": "npm run start --prefix apps/web",
+    "lint": "npm run lint --prefix apps/web",
+    "test": "cd apps/api && pytest"
+  }
+}

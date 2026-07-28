@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: leadscore_postgres
+    environment:
+      POSTGRES_DB: leadscore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d leadscore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: leadscore_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: leadscore_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
+      - DIALOG360_API_BASE=${DIALOG360_API_BASE:-https://waba.360dialog.io/v1}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_placeholder}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-secret_placeholder}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-whsec_placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  celery_worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: leadscore_celery_worker
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_beat:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: leadscore_celery_beat
+    command: celery -A app.celery_app.celery_app beat --loglevel=info
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
