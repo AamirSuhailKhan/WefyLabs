@@ -257,7 +257,7 @@ export const api = {
     if (params?.limit) query.append('limit', params.limit.toString());
     const qStr = query.toString() ? `?${query.toString()}` : '';
 
-    return fetcher<LeadListResponse>(`/leads${qStr}`).catch(() => {
+    return fetcher<LeadListResponse>(`/leads${qStr}`).catch((): LeadListResponse => {
       let filtered = [...MOCK_LEADS];
       if (params?.score) {
         filtered = filtered.filter(l => l.score.toLowerCase() === params.score?.toLowerCase());
@@ -269,7 +269,7 @@ export const api = {
         const s = params.search.toLowerCase();
         filtered = filtered.filter(l => (l.name?.toLowerCase().includes(s) || l.phone.includes(s)));
       }
-      return { data: filtered, total: filtered.length, page: 1, pages: 1 };
+      return { items: filtered, data: filtered, total: filtered.length, page: 1, pages: 1 };
     });
   },
 
@@ -362,12 +362,13 @@ export const api = {
     }),
 
   createLeadNote: (leadId: string, content: string, colorTag: string = 'blue') => 
-    fetcher<Lead>(`/leads/${leadId}/notes`, {
+    fetcher<LeadNote>(`/leads/${leadId}/notes`, {
       method: 'POST',
       body: JSON.stringify({ content, color_tag: colorTag })
     }).catch(() => {
       const newNote: LeadNote = {
         id: `note-${Date.now()}`,
+        lead_id: leadId,
         content,
         color_tag: colorTag,
         created_at: new Date().toISOString()
@@ -376,8 +377,75 @@ export const api = {
       if (lead) {
         lead.notes = [...(lead.notes || []), newNote];
       }
-      return lead || MOCK_LEADS[0];
+      return newNote;
     }),
+
+  deleteLeadNote: (noteId: string) =>
+    fetcher<any>(`/notes/${noteId}`, { method: 'DELETE' }).catch(() => ({ status: 'success' })),
+
+  // Tags
+  getTags: () => fetcher<LeadTag[]>('/tags').catch(() => [
+    { id: 'tag-1', broker_id: 'b-1', name: 'High Priority', color: '#EF4444', created_at: new Date().toISOString() },
+    { id: 'tag-2', broker_id: 'b-1', name: 'Verified Buyer', color: '#10B981', created_at: new Date().toISOString() },
+    { id: 'tag-3', broker_id: 'b-1', name: 'NRI Investor', color: '#3B82F6', created_at: new Date().toISOString() }
+  ]),
+
+  createTag: (name: string, color: string = '#3B82F6') =>
+    fetcher<LeadTag>('/tags', {
+      method: 'POST',
+      body: JSON.stringify({ name, color })
+    }).catch(() => ({
+      id: `tag-${Date.now()}`,
+      broker_id: 'b-1',
+      name,
+      color,
+      created_at: new Date().toISOString()
+    })),
+
+  assignTagToLead: (leadId: string, tagId: string) =>
+    fetcher<any>(`/leads/${leadId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ tag_id: tagId })
+    }).catch(() => ({ status: 'success' })),
+
+  removeTagFromLead: (leadId: string, tagId: string) =>
+    fetcher<any>(`/leads/${leadId}/tags/${tagId}`, { method: 'DELETE' }).catch(() => ({ status: 'success' })),
+
+  // Tasks
+  createTask: (data: { lead_id?: string; title: string; due_at?: string }) =>
+    fetcher<Task>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }).catch(() => ({
+      id: `task-${Date.now()}`,
+      broker_id: 'b-1',
+      lead_id: data.lead_id,
+      title: data.title,
+      due_at: data.due_at || new Date().toISOString(),
+      status: 'pending' as const,
+      reminder_sent: 'false',
+      created_at: new Date().toISOString()
+    })),
+
+  updateTaskStatus: (taskId: string, status: 'pending' | 'completed' | 'cancelled') =>
+    fetcher<Task>(`/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }).catch(() => ({
+      id: taskId,
+      broker_id: 'b-1',
+      title: 'Sample Task',
+      due_at: new Date().toISOString(),
+      status,
+      reminder_sent: 'false',
+      created_at: new Date().toISOString()
+    })),
+
+  // Subscription & Profile top-level aliases
+  subscribe: (planId: string) => fetcher<{ subscription_id: string; razorpay_subscription_id: string; short_url: string; amount: number; currency: string }>('/billing/subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ plan_id: planId })
+  }),
 
   triggerQualification: (id: string, force: boolean = false) => 
     fetcher<any>('/scoring/qualify', {
@@ -401,9 +469,19 @@ export const api = {
       score: 'hot'
     })),
 
+  // Admin Stats
+  getAdminStats: () => fetcher<AdminStats>('/admin/stats').catch(() => ({
+    total_brokers: 42,
+    active_brokers: 38,
+    total_leads: 1280,
+    qualified_leads: 850,
+    hot_leads: 420,
+    mrr_inr: 114000
+  })),
+
   // Billing
   billing: {
-    subscribe: (planId: string) => fetcher<{ subscription_id: string; razorpay_subscription_id: string; short_url: str; amount: number; currency: string }>('/billing/subscribe', {
+    subscribe: (planId: string) => fetcher<{ subscription_id: string; razorpay_subscription_id: string; short_url: string; amount: number; currency: string }>('/billing/subscribe', {
       method: 'POST',
       body: JSON.stringify({ plan_id: planId })
     }),

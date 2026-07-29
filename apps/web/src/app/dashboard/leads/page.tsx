@@ -61,7 +61,7 @@ export default function LeadsPage() {
         score: scoreFilter !== 'all' ? scoreFilter : undefined,
         search: search ? search : undefined
       });
-      setLeads(res.data || (res as any).items || []);
+      setLeads(res.data || res.items || []);
     } catch (e) {
       console.warn('Failed fetching leads from API', e);
     }

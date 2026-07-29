@@ -14,9 +14,10 @@ export interface PipelineStage {
 
 export interface LeadNote {
   id: string;
-  lead_id: string;
-  broker_id: string;
+  lead_id?: string;
+  broker_id?: string;
   content: string;
+  color_tag?: string;
   created_at: string;
 }
 
@@ -50,6 +51,7 @@ export interface Broker {
   subscription_status: string;
   subscription_plan?: string;
   trial_ends_at?: string;
+  trial_days_remaining?: number;
   created_at: string;
 }
 
@@ -100,7 +102,8 @@ export interface Lead {
   loan_status?: string;
   status: LeadStatus;
   stage_id?: string;
-  stage_name: string;
+  stage_name?: string;
+  pipeline_stage?: string;
   tags?: LeadTag[];
   notes?: LeadNote[];
   tasks?: Task[];
@@ -117,7 +120,10 @@ export interface LeadDetail extends Lead {
 
 export interface LeadListResponse {
   total: number;
-  items: Lead[];
+  items?: Lead[];
+  data?: Lead[];
+  page?: number;
+  pages?: number;
 }
 
 export interface AdminStats {
