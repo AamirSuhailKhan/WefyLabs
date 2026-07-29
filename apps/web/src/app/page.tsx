@@ -6,6 +6,7 @@ import type { Variants, Easing } from 'framer-motion';
 import Navbar from '@/components/shared/Navbar';
 import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
 import FeaturesGrid from '@/components/shared/FeaturesGrid';
+import WasteCalculator from '@/components/landing/WasteCalculator';
 import HeroRobot from '@/components/shared/HeroRobot';
 import { motion, AnimatePresence } from 'framer-motion';
 import ScrollReveal from '@/components/shared/ScrollReveal';
@@ -402,6 +403,9 @@ export default function LandingPage() {
             </div>
           </ScrollReveal>
         </section>
+
+        {/* ─── SECTION 3.5: WASTE CALCULATOR ────────────────────── */}
+        <WasteCalculator />
 
         {/* ─── SECTION 4: WORKFLOW (NEW INDEPENDENT 4-CARD FEATURES GRID) ─ */}
         <FeaturesGrid />
