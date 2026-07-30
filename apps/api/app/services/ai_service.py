@@ -76,6 +76,32 @@ Respond ONLY with a valid JSON object:
   "end_conversation": boolean
 }}"""
 
+from pydantic import BaseModel, Field
+
+class ExtractedLeadData(BaseModel):
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    preferred_locations: Optional[List[str]] = None
+    property_type: Optional[str] = None
+    transaction_type: Optional[str] = None
+    timeline: Optional[str] = None
+    loan_status: Optional[str] = None
+
+class AIQualificationResponseModel(BaseModel):
+    response_message: str
+    extracted_data: ExtractedLeadData
+    qualification_complete: bool = False
+    end_conversation: bool = False
+
+def sanitize_user_input(text: str) -> str:
+    """Sanitizes user input messages to prevent prompt injection and control character issues."""
+    if not text:
+        return ""
+    # Strip dangerous formatting or system instruction overrides
+    clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+    clean = clean.replace("```", "").strip()
+    return clean[:1000]
+
 async def generate_ai_qualification_response(
     broker_name: str,
     agency_name: str,
@@ -86,15 +112,16 @@ async def generate_ai_qualification_response(
 ) -> Dict[str, Any]:
     """
     Generates conversational qualification response using Google Gemini 1.5 Flash (Free 1,500 calls/day),
-    OpenAI GPT-4o, or rule fallback.
+    OpenAI GPT-4o, or rule fallback with strict Pydantic output validation.
     """
+    safe_latest_message = sanitize_user_input(latest_message)
     formatted_prompt = QUALIFICATION_SYSTEM_PROMPT_TEMPLATE.format(
         broker_name=broker_name or "our team",
         agency_name=agency_name or "Premier Realty",
         city=city or "Bengaluru",
         current_extracted_data=json.dumps(current_extracted_data),
         last_5_messages=json.dumps(history[-5:] if history else []),
-        latest_message=latest_message
+        latest_message=safe_latest_message
     )
 
     # 1. Prefer Google Gemini 1.5 Flash API (Free 1,500 req/day)

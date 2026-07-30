@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.models import Broker
+from app.models import Broker
 from app.schemas.schemas import BrokerCreate, BrokerLogin, BrokerResponse, BrokerUpdate
 
 router = APIRouter(prefix="/auth", tags=["auth"])

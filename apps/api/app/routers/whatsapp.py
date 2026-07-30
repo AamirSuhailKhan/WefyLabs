@@ -1,3 +1,5 @@
+import hmac
+import hashlib
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, Request, Response, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +9,18 @@ from app.dependencies import get_db
 from app.services.conversation_service import process_incoming_whatsapp_message
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
+
+def verify_meta_signature(raw_body: bytes, signature_header: str, app_secret: str) -> bool:
+    """Verifies X-Hub-Signature-256 header sent by Meta Cloud API."""
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    expected_hash = signature_header.split("sha256=")[1]
+    calculated_hash = hmac.new(
+        app_secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(calculated_hash, expected_hash)
 
 @router.get("/webhook")
 @router.get("/webhook/")
@@ -40,8 +54,16 @@ async def whatsapp_webhook_verification(request: Request):
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """
     Incoming WhatsApp webhook listener for Meta Cloud API Direct and 360dialog.
-    Always returns 200 OK to prevent infinite webhook retries.
+    Verifies HMAC signature if configured and processes incoming lead message.
     """
+    raw_body = await request.body()
+    sig_header = request.headers.get("X-Hub-Signature-256")
+    
+    # Enforce signature verification in production if WHATSAPP_APP_SECRET is set
+    if settings.ENV == "production" and hasattr(settings, "WHATSAPP_APP_SECRET") and settings.WHATSAPP_APP_SECRET:
+        if not verify_meta_signature(raw_body, sig_header or "", settings.WHATSAPP_APP_SECRET):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Meta webhook HMAC signature")
+
     try:
         data = await request.json()
     except Exception:

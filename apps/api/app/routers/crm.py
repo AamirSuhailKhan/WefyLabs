@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.models import Broker, Lead, PipelineStage, LeadNote, LeadTag, LeadTagAssignment, Task
+from app.models import Broker, Lead, PipelineStage, LeadNote, LeadTag, LeadTagAssignment, Task
 from app.routers.auth import get_current_broker
 
 router = APIRouter(prefix="/crm", tags=["CRM Lite"])

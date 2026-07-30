@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beetlelabs-api
+  namespace: production
+  labels:
+    app: beetlelabs-api
+    tier: backend
+spec:
+  replicas: 5
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: beetlelabs-api
+  template:
+    metadata:
+      labels:
+        app: beetlelabs-api
+    spec:
+      containers:
+        - name: api
+          image: registry.beetlelabs.ai/beetlelabs-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2048Mi
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          envFrom:
+            - configMapRef:
+                name: beetlelabs-config
+            - secretRef:
+                name: beetlelabs-secrets
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: beetlelabs-api-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: beetlelabs-api
+  minReplicas: 5
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: beetlelabs-api-pdb
+  namespace: production
+spec:
+  minAvailable: 80%
+  selector:
+    matchLabels:
+      app: beetlelabs-api

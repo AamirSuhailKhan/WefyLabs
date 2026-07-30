@@ -4,6 +4,8 @@ import { ReactNode, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import Lenis from 'lenis';
 
+import { RegionProvider } from '@/lib/i18n/region-context';
+
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     const lenis = new Lenis({
@@ -18,5 +20,9 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => lenis.destroy();
   }, []);
 
-  return <AnimatePresence mode="wait">{children}</AnimatePresence>;
+  return (
+    <RegionProvider>
+      <AnimatePresence mode="wait">{children}</AnimatePresence>
+    </RegionProvider>
+  );
 }

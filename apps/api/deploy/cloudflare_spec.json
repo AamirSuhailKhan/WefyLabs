@@ -1,0 +1,35 @@
+{
+  "project": "BeetleLabs Hyperscale Edge",
+  "dns": {
+    "zone": "beetlelabs.ai",
+    "proxied": true,
+    "anycast_routing": "global"
+  },
+  "caching": {
+    "edge_cache_ttl": 7200,
+    "browser_cache_ttl": 14400,
+    "brotli_compression": true,
+    "minify": {
+      "js": true,
+      "css": true,
+      "html": true
+    }
+  },
+  "security": {
+    "waf_rules": [
+      { "action": "block", "expression": "http.request.uri.path contains '/.env'" },
+      { "action": "rate_limit", "threshold": 100, "period": 60, "action_type": "challenge" }
+    ],
+    "ssl": "full_strict",
+    "hsts": {
+      "enabled": true,
+      "max_age": 31536000,
+      "include_subdomains": true
+    }
+  },
+  "multi_region_origins": [
+    { "region": "us-east", "endpoint": "api-us.beetlelabs.ai", "weight": 40 },
+    { "region": "eu-central", "endpoint": "api-eu.beetlelabs.ai", "weight": 30 },
+    { "region": "ap-south", "endpoint": "api-in.beetlelabs.ai", "weight": 30 }
+  ]
+}

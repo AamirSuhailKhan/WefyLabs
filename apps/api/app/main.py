@@ -12,6 +12,11 @@ from app.routers.scoring import router as scoring_router
 from app.routers.follow_ups import router as followups_router
 from app.routers.billing import router as billing_router
 from app.routers.conversations import router as conversations_router
+from app.presentation.api.v1.leads import router as clean_leads_v1_router
+from app.presentation.api.health import health_router
+from app.infrastructure.middleware.request_tracing import RequestTracingMiddleware
+from app.infrastructure.middleware.idempotency import IdempotencyMiddleware
+from app.infrastructure.errors.handlers import register_exception_handlers
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,12 +27,19 @@ async def lifespan(app: FastAPI):
     # Perform shutdown cleanup
     await engine.dispose()
 
+from app.infrastructure.security.security_headers import SecurityHeadersMiddleware
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
+
+# Register Custom Middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestTracingMiddleware)
+app.add_middleware(IdempotencyMiddleware)
 
 # Configure CORS
 app.add_middleware(
@@ -38,23 +50,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register Global Exception Handlers
+register_exception_handlers(app)
+
 # Mount Routers under /api/v1
+app.include_router(health_router)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(brokers_router, prefix=settings.API_V1_STR)
 app.include_router(leads_router, prefix=settings.API_V1_STR)
+app.include_router(clean_leads_v1_router, prefix=settings.API_V1_STR)
 app.include_router(conversations_router, prefix=settings.API_V1_STR)
 app.include_router(whatsapp_router, prefix=settings.API_V1_STR)
 app.include_router(scoring_router, prefix=settings.API_V1_STR)
 app.include_router(followups_router, prefix=settings.API_V1_STR)
 app.include_router(billing_router, prefix=settings.API_V1_STR)
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    return {
-        "status": "ok",
-        "project": settings.PROJECT_NAME,
-        "version": settings.VERSION
-    }
 
 @app.get("/", tags=["Root"])
 async def root():

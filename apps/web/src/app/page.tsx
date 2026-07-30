@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { useRegion } from '@/lib/i18n/region-context';
 import Link from 'next/link';
 import type { Variants, Easing } from 'framer-motion';
 import Navbar from '@/components/shared/Navbar';
 import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
 import FeaturesGrid from '@/components/shared/FeaturesGrid';
-import WasteCalculator from '@/components/landing/WasteCalculator';
+import MarketSelector from '@/components/landing/MarketSelector';
+import GlobalWasteCalculator from '@/components/landing/GlobalWasteCalculator';
+import GlobalPricing from '@/components/landing/GlobalPricing';
 import HeroRobot from '@/components/shared/HeroRobot';
 import { motion, AnimatePresence } from 'framer-motion';
 import ScrollReveal from '@/components/shared/ScrollReveal';
@@ -100,6 +103,36 @@ export default function LandingPage() {
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const reduced = useReducedMotion();
+  const { region } = useRegion();
+
+  // Region-specific hero subheadline
+  const getHeroSubheadline = () => {
+    switch (region.code) {
+      case 'AE': return 'Dubai real estate brokers lose 12 hours/week on unqualified Property Finder leads. Our AI bot qualifies every lead on WhatsApp and scores them';
+      case 'GB': return 'Estate agents lose 10+ hours/week chasing unqualified Rightmove leads. Our AI bot qualifies every lead on WhatsApp and scores them';
+      case 'SG': return 'Singapore property agents lose 10 hours/week on cold PropertyGuru leads. Our AI bot qualifies every lead on WhatsApp and scores them';
+      case 'US': return 'Real estate agents lose 10+ hours/week on Zillow leads that never convert. Our AI bot qualifies every lead and scores them';
+      case 'AU': return 'Aussie real estate agents lose hours every week on unqualified REA leads. Our AI bot qualifies every lead on WhatsApp and scores them';
+      case 'CA': return 'Canadian realtors lose 10+ hours/week on Realtor.ca leads that never close. Our AI bot qualifies every lead and scores them';
+      case 'IN':
+      default:   return 'Indian real estate brokers lose 15 hours/week calling unqualified leads. Our AI bot chats with every lead on WhatsApp and scores them';
+    }
+  };
+
+  // Region-specific stats bar data
+  const getRegionStats = () => {
+    switch (region.code) {
+      case 'AE': return { coldPct: 65, platform: 'Property Finder', agentTerm: 'brokers' };
+      case 'GB': return { coldPct: 60, platform: 'Rightmove', agentTerm: 'estate agents' };
+      case 'SG': return { coldPct: 60, platform: 'PropertyGuru', agentTerm: 'property agents' };
+      case 'US': return { coldPct: 65, platform: 'Zillow', agentTerm: 'agents' };
+      case 'AU': return { coldPct: 60, platform: 'REA Group', agentTerm: 'agents' };
+      case 'CA': return { coldPct: 60, platform: 'Realtor.ca', agentTerm: 'realtors' };
+      case 'IN':
+      default:   return { coldPct: 70, platform: 'online ad', agentTerm: 'brokers' };
+    }
+  };
+  const regionStats = getRegionStats();
 
   const faqs = [
     {
@@ -139,6 +172,7 @@ export default function LandingPage() {
 
   return (
     <>
+      <MarketSelector />
       <Navbar />
       <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] pt-24 relative overflow-hidden">
         <CursorGlow />
@@ -179,7 +213,7 @@ export default function LandingPage() {
                   className="text-[17px] text-[#4A4A4A] leading-[1.65] max-w-lg"
                   style={{ fontFamily: 'Inter, sans-serif' }}
                 >
-                  Indian real estate brokers lose 15 hours/week calling unqualified leads. Our AI bot chats with every lead on WhatsApp and scores them{' '}
+                  {getHeroSubheadline()}{' '}
                   <strong className="text-[#1A1A1A]">Hot 🔥</strong>,{' '}
                   <strong className="text-[#1A1A1A]">Warm 🟡</strong>, or{' '}
                   <strong className="text-[#1A1A1A]">Cold 🔵</strong>.
@@ -358,19 +392,19 @@ export default function LandingPage() {
           </ScrollReveal>
         </section>
 
-        {/* ─── SECTION 3: STATS (SOLO BROKERS ONLY) ─────────────────── */}
+        {/* ─── SECTION 3: STATS (REGION-AWARE) ───────────────────────── */}
         <section className="py-16 px-4 max-w-6xl mx-auto">
           <ScrollReveal>
             <div className="text-center mb-10">
               <h2 className="text-4xl md:text-5xl font-bold mono-headline">
-                Built for Indian real estate brokers
+                Built for {region.name} real estate {regionStats.agentTerm}
               </h2>
             </div>
 
             <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-3xl p-8 md:p-10 shadow-sm">
               <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#D4D0C8]">
                 {[
-                  { end: 70, suffix: '%', label: 'of leads are cold or fake', sub: 'compared to manual calling' },
+                  { end: regionStats.coldPct, suffix: '%', label: `of ${regionStats.platform} leads are cold or fake`, sub: 'based on industry data' },
                   { end: 15, suffix: '+', label: 'hours wasted per week', sub: 'on unqualified prospects' },
                   { end: 2, suffix: ' min', label: 'to qualify with AI', sub: 'using AI WhatsApp bot' },
                 ].map((stat, i) => (
@@ -404,8 +438,8 @@ export default function LandingPage() {
           </ScrollReveal>
         </section>
 
-        {/* ─── SECTION 3.5: WASTE CALCULATOR ────────────────────── */}
-        <WasteCalculator />
+        {/* ─── SECTION 3.5: GLOBAL WASTE CALCULATOR ────────────────── */}
+        <GlobalWasteCalculator />
 
         {/* ─── SECTION 4: WORKFLOW (NEW INDEPENDENT 4-CARD FEATURES GRID) ─ */}
         <FeaturesGrid />
@@ -508,7 +542,7 @@ export default function LandingPage() {
               </motion.div>
 
               <motion.h2 variants={reduced ? undefined : textItem} className="text-3xl md:text-4xl font-bold mono-headline mb-3">
-                Be among the first 50 brokers in Bengaluru
+                Be among the first {regionStats.agentTerm} in {region.name}
               </motion.h2>
               <motion.p variants={reduced ? undefined : textItem} className="text-[16px] text-[#4A4A4A] max-w-xl mx-auto mb-8" style={{ fontFamily: 'Inter, sans-serif' }}>
                 We're rolling out to a small group of active brokers. Get 14 days free + 20% off for life as an early user.
@@ -557,6 +591,9 @@ export default function LandingPage() {
             </motion.p>
           </motion.div>
         </section>
+
+        {/* ─── SECTION 6.5: GLOBAL PRICING ──────────────────────────── */}
+        <GlobalPricing />
 
         {/* ─── SECTION 7: SECURITY ──────────────────────────────────── */}
         <section className="py-16 px-4 max-w-6xl mx-auto">
@@ -703,116 +740,7 @@ export default function LandingPage() {
           </motion.div>
         </section>
 
-        {/* ─── SECTION 9: PRICING ───────────────────────────────────── */}
-        <section id="pricing" className="py-16 px-4 max-w-5xl mx-auto">
-          <ScrollReveal>
-            <div className="text-center mb-10">
-              <h2 className="text-4xl font-bold mono-headline mb-3">Simple pricing. No hidden fees.</h2>
-              <p className="text-[17px] text-[#4A4A4A]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Cancel anytime. No credit card required to start.
-              </p>
-              <div className="flex items-center justify-center gap-3 mt-6">
-                <button
-                  onClick={() => setAnnual(false)}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                    !annual ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#D4D0C8] text-[#6B6B6B]'
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setAnnual(true)}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border flex items-center gap-2 ${
-                    annual ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'border-[#D4D0C8] text-[#6B6B6B]'
-                  }`}
-                >
-                  Annual
-                  <span className="bg-[#E8F5A8] text-[#1A1A1A] text-[10px] px-2 py-0.5 rounded-full font-bold">17% OFF</span>
-                </button>
-              </div>
-            </div>
-          </ScrollReveal>
-
-          {/* Pricing cards stagger */}
-          <motion.div
-            variants={reduced ? undefined : pricingContainer}
-            initial={reduced ? false : 'hidden'}
-            whileInView={reduced ? {} : 'visible'}
-            viewport={VP60}
-            className="grid md:grid-cols-2 gap-6"
-          >
-            {[
-              {
-                name: 'STARTER PLAN',
-                monthly: '₹2,999',
-                annual: '₹2,499',
-                desc: 'Perfect for solo real estate brokers.',
-                features: ['100 leads qualified/month', 'AI Qualification Engine', 'Pipeline Stages & Notes', 'Up to 3 Color Tags'],
-                popular: false,
-              },
-              {
-                name: 'PRO PLAN',
-                monthly: '₹4,999',
-                annual: '₹4,149',
-                desc: 'For power users who close more deals.',
-                features: ['300 leads qualified/month', 'Unlimited Tags & Stages', 'Task Reminders & Alerts', 'Lead Source Tracking'],
-                popular: true,
-              },
-            ].map((plan) => (
-              <motion.div
-                key={plan.name}
-                variants={reduced ? undefined : pricingCard}
-                whileHover={reduced ? {} : { y: -6 }}
-                transition={{ duration: 0.3, ease: EXPO }}
-                className={`bg-[#FAF7F2] border rounded-3xl p-8 relative shadow-sm ${
-                  plan.popular ? 'border-[#1A1A1A] border-2' : 'border-[#D4D0C8]'
-                }`}
-              >
-                {plan.popular && (
-                  <motion.div
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E8F5A8] border border-[#D4D0C8] text-[#1A1A1A] text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider"
-                    animate={reduced ? {} : { scale: [1, 1.05, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    MOST POPULAR
-                  </motion.div>
-                )}
-                <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {plan.name}
-                </p>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className="text-5xl font-extrabold text-[#1A1A1A]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {annual ? plan.annual : plan.monthly}
-                  </span>
-                  <span className="text-sm text-[#6B6B6B]">/mo</span>
-                </div>
-                <p className="text-sm text-[#6B6B6B] mb-6" style={{ fontFamily: 'Inter, sans-serif' }}>{plan.desc}</p>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-[#1A1A1A] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-                      <Check className="w-4 h-4 text-[#1A1A1A] shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/register"
-                  className={`block text-center py-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${
-                    plan.popular
-                      ? 'bg-[#E8F5A8] text-[#1A1A1A] hover:bg-[#D4E894]'
-                      : 'border border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white'
-                  }`}
-                >
-                  START 7-DAY FREE TRIAL →
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
-
-          <div className="text-center mt-8 text-xs font-mono text-[#6B6B6B]">
-            🛡️ 7-day free trial &nbsp;•&nbsp; Cancel anytime &nbsp;•&nbsp; No credit card required
-          </div>
-        </section>
+        {/* ─── SECTION 9: PRICING — handled by GlobalPricing above (section 6.5) ─── */}
 
         {/* ─── SECTION 10: FINAL CTA ────────────────────────────────── */}
         <section className="py-16 px-4 max-w-6xl mx-auto pb-28">

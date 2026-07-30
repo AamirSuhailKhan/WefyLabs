@@ -189,8 +189,8 @@ button:active, a:active {
 /* Focus ring for accessibility */
 input:focus, textarea:focus, select:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
-  border-color: #0D9488;
+  box-shadow: 0 0 0 3px rgba(212, 245, 164, 0.5);
+  border-color: #d4f5a4;
 }
 
 /* Marquee animation */

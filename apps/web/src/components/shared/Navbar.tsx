@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowRight, Menu, X } from 'lucide-react';
 
 import { BeetleLabsLogo } from './BeetleLabsLogo';
+import RegionSwitcher from './RegionSwitcher';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -18,14 +19,6 @@ export default function Navbar() {
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50">
-      {/* Announcement Banner */}
-      <div className="bg-[#1A1A1A] text-white text-xs font-medium py-2 px-4 flex items-center justify-center gap-3">
-        <span>A letter to our users, customers and friends</span>
-        <button onClick={() => window.location.href = '#how-it-works'} className="bg-white text-[#1A1A1A] text-xs font-semibold px-3 py-1 rounded-full hover:bg-[#E8F5A8] transition-colors">
-          Read more →
-        </button>
-      </div>
-
       {/* Main Nav */}
       <nav
         className={`h-16 px-6 flex items-center justify-between transition-all duration-300 ${
@@ -52,6 +45,7 @@ export default function Navbar() {
 
         {/* Desktop CTAs */}
         <div className="hidden md:flex items-center gap-3">
+          <RegionSwitcher />
           <Link
             href="/login"
             className="btn-outline text-[11px]"
