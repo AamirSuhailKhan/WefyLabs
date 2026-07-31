@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import Lenis from 'lenis';
 
 import { RegionProvider } from '@/lib/i18n/region-context';
+import { GlobalAICopilot } from '@/components/copilot/GlobalAICopilot';
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <RegionProvider>
       <AnimatePresence mode="wait">{children}</AnimatePresence>
+      <GlobalAICopilot />
     </RegionProvider>
   );
 }

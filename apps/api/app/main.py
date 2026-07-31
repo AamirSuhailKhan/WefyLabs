@@ -53,12 +53,33 @@ app.add_middleware(
 # Register Global Exception Handlers
 register_exception_handlers(app)
 
+from app.presentation.api.v1.communication import router as communication_router
+from app.presentation.api.v1.properties import router as properties_router
+from app.presentation.api.v1.transactions import router as transactions_router
+from app.presentation.api.v1.copilot import router as copilot_router
+from app.presentation.api.v1.predictive import router as predictive_router
+from app.presentation.api.v1.workflows import router as workflows_router
+from app.presentation.api.v1.performance import router as performance_router
+from app.presentation.api.v1.portal import router as portal_router
+from app.presentation.api.v1.mobile import router as mobile_router
+from app.presentation.api.v1.bi import router as bi_router
+
 # Mount Routers under /api/v1
 app.include_router(health_router)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(brokers_router, prefix=settings.API_V1_STR)
 app.include_router(leads_router, prefix=settings.API_V1_STR)
 app.include_router(clean_leads_v1_router, prefix=settings.API_V1_STR)
+app.include_router(communication_router, prefix=settings.API_V1_STR)
+app.include_router(properties_router, prefix=settings.API_V1_STR)
+app.include_router(transactions_router, prefix=settings.API_V1_STR)
+app.include_router(copilot_router, prefix=settings.API_V1_STR)
+app.include_router(predictive_router, prefix=settings.API_V1_STR)
+app.include_router(workflows_router, prefix=settings.API_V1_STR)
+app.include_router(performance_router, prefix=settings.API_V1_STR)
+app.include_router(portal_router, prefix=settings.API_V1_STR)
+app.include_router(mobile_router, prefix=settings.API_V1_STR)
+app.include_router(bi_router, prefix=settings.API_V1_STR)
 app.include_router(conversations_router, prefix=settings.API_V1_STR)
 app.include_router(whatsapp_router, prefix=settings.API_V1_STR)
 app.include_router(scoring_router, prefix=settings.API_V1_STR)

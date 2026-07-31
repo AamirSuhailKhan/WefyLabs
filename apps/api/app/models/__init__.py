@@ -10,6 +10,10 @@ from app.models.crm_models import PipelineStage, LeadNote, LeadTag, LeadTagAssig
 from app.models.organization import Organization, OrganizationMember
 from app.models.audit_log import AuditLog
 from app.models.base_mixins import TimestampMixin, SoftDeleteMixin
+from app.models.communication_models import UnifiedConversation, UnifiedMessage, CallDetailRecord
+from app.models.property_models import PropertyListing, PropertyMedia, PropertyPriceHistory
+from app.models.transaction_models import DealTransaction, DealMilestone, DealPaymentSchedule
+from app.models.workflow_models import WorkflowDefinition, WorkflowExecution
 
 __all__ = [
     "Base",
@@ -29,4 +33,15 @@ __all__ = [
     "AuditLog",
     "TimestampMixin",
     "SoftDeleteMixin",
+    "UnifiedConversation",
+    "UnifiedMessage",
+    "CallDetailRecord",
+    "PropertyListing",
+    "PropertyMedia",
+    "PropertyPriceHistory",
+    "DealTransaction",
+    "DealMilestone",
+    "DealPaymentSchedule",
+    "WorkflowDefinition",
+    "WorkflowExecution",
 ]
