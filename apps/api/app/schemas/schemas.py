@@ -8,7 +8,7 @@ class BrokerCreate(BaseModel):
     email: EmailStr
     phone: str
     agency_name: Optional[str] = None
-    city: Optional[str] = "Bengaluru"
+    city: Optional[str] = None
     whatsapp_number: Optional[str] = None
 
 class BrokerLogin(BaseModel):

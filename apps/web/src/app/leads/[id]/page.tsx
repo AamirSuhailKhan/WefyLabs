@@ -7,6 +7,9 @@ import { api } from '@/lib/api-client';
 import { LeadDetail } from '@/types';
 import ConversationTimeline from '@/components/leads/ConversationTimeline';
 import ExtractedDataCard from '@/components/leads/ExtractedDataCard';
+import SalesActionCard from '@/components/leads/SalesActionCard';
+import ConversationIntelligencePanel from '@/components/leads/ConversationIntelligencePanel';
+import AutonomousSalesTimeline from '@/components/leads/AutonomousSalesTimeline';
 import ScoreBadge from '@/components/shared/ScoreBadge';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -142,8 +145,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <ConversationTimeline conversations={lead.conversations} />
         </div>
 
-        {/* Right: AI Scorecard & Extracted Data */}
-        <div className="lg:col-span-5">
+        {/* Right: AI Conversation Intelligence, Next Best Action & Extracted Data */}
+        <div className="lg:col-span-5 space-y-6">
+          <ConversationIntelligencePanel leadId={lead.id} leadName={lead.name || 'Valued Client'} />
+          <SalesActionCard leadId={lead.id} leadName={lead.name} />
+          {/* Part 21.8 — Autonomous Sales Loop Timeline & Broker Controls */}
+          <AutonomousSalesTimeline leadId={lead.id} leadName={lead.name} />
           <ExtractedDataCard lead={lead} />
         </div>
       </div>

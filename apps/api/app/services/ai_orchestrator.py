@@ -28,8 +28,8 @@ class EnterpriseAIOrchestrator:
     Hallucination Guardrails, and Observability Tracing.
     """
     PROMPT_VERSION = "v2.4.0-enterprise"
-    PRIMARY_MODEL = "gemini-1.5-pro"
-    FALLBACK_MODEL = "gemini-1.5-flash"
+    PRIMARY_MODEL = "gemini-3.7-flash"
+    FALLBACK_MODEL = "gemini-3.5-flash"
 
     @classmethod
     def verify_hallucination_guardrails(cls, parsed: AIQualificationSchema) -> AIQualificationSchema:

@@ -1,14 +1,97 @@
 import os
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue, Exchange
 from app.config import settings
 
 celery_app = Celery(
-    "leadscore_tasks",
+    "beetlelabs_enterprise_tasks",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.followup_tasks"]
+    include=[
+        "app.tasks.followup_tasks",
+        "app.tasks.queue_workers",
+        # Knowledge Intelligence Platform workers
+        "app.modules.knowledge.workers.knowledge_tasks",
+        # Calendar & Scheduling Intelligence Engine workers
+        "app.modules.calendar.workers.calendar_tasks",
+        # CRM Intelligence & Autonomous Sales Operations workers
+        "app.modules.crm_intelligence.workers.intelligence_tasks",
+        # Predictive Analytics & MLOps Engine workers
+        "app.modules.predictive.workers.predictive_tasks",
+        # Workflow Automation & Revenue Operations workers
+        "app.modules.workflow.workers.workflow_tasks",
+        # AI Memory & Customer Intelligence Engine workers
+        "app.modules.memory.workers.memory_tasks",
+        # Part 21.8 — AI Autonomous Sales Loop & Event-Driven Orchestration Engine workers
+        "app.modules.autonomous_loop.workers.loop_tasks",
+    ]
 )
+
+# Enterprise Queues Configuration
+default_exchange = Exchange("default", type="direct")
+dlq_exchange = Exchange("dlq", type="direct")
+
+task_queues = [
+    # ── Existing BeetleLabs Queues (unchanged) ────────────────────────────
+    Queue("lead_queue", default_exchange, routing_key="lead_queue"),
+    Queue("notification_queue", default_exchange, routing_key="notification_queue"),
+    Queue("email_queue", default_exchange, routing_key="email_queue"),
+    Queue("whatsapp_queue", default_exchange, routing_key="whatsapp_queue"),
+    Queue("analytics_queue", default_exchange, routing_key="analytics_queue"),
+    Queue("webhook_queue", default_exchange, routing_key="webhook_queue"),
+    Queue("export_queue", default_exchange, routing_key="export_queue"),
+    Queue("import_queue", default_exchange, routing_key="import_queue"),
+    Queue("ai_queue", default_exchange, routing_key="ai_queue"),
+    Queue("retry_queue", default_exchange, routing_key="retry_queue"),
+    Queue("dead_letter_queue", dlq_exchange, routing_key="dead_letter_queue"),
+    # ── Knowledge Intelligence Platform Queues ────────────────────────────
+    Queue("knowledge-ingestion", default_exchange, routing_key="knowledge-ingestion"),
+    Queue("knowledge-parser", default_exchange, routing_key="knowledge-parser"),
+    Queue("knowledge-ocr", default_exchange, routing_key="knowledge-ocr"),
+    Queue("knowledge-extraction", default_exchange, routing_key="knowledge-extraction"),
+    Queue("knowledge-chunking", default_exchange, routing_key="knowledge-chunking"),
+    Queue("knowledge-embedding", default_exchange, routing_key="knowledge-embedding"),
+    Queue("knowledge-indexing", default_exchange, routing_key="knowledge-indexing"),
+    Queue("knowledge-reindex", default_exchange, routing_key="knowledge-reindex"),
+    Queue("knowledge-deletion", default_exchange, routing_key="knowledge-deletion"),
+    Queue("knowledge-evaluation", default_exchange, routing_key="knowledge-evaluation"),
+    Queue("knowledge-retry", default_exchange, routing_key="knowledge-retry"),
+    Queue("knowledge-dead-letter", dlq_exchange, routing_key="knowledge-dead-letter"),
+    # ── Calendar & Scheduling Intelligence Platform Queues ────────────────
+    Queue("calendar-sync", default_exchange, routing_key="calendar-sync"),
+    Queue("reminders", default_exchange, routing_key="reminders"),
+    Queue("booking", default_exchange, routing_key="booking"),
+    Queue("calendar-conflict", default_exchange, routing_key="calendar-conflict"),
+    Queue("meeting-preparation", default_exchange, routing_key="meeting-preparation"),
+    Queue("no-show-prediction", default_exchange, routing_key="no-show-prediction"),
+    # ── CRM Intelligence & Sales Operations Queues ────────────────────────
+    Queue("crm-intelligence-processing", default_exchange, routing_key="crm-intelligence-processing"),
+    Queue("lead-health", default_exchange, routing_key="lead-health"),
+    Queue("sla-monitoring", default_exchange, routing_key="sla-monitoring"),
+    Queue("pipeline-analysis", default_exchange, routing_key="pipeline-analysis"),
+    Queue("agent-analysis", default_exchange, routing_key="agent-analysis"),
+    Queue("anomaly-detection", default_exchange, routing_key="anomaly-detection"),
+    Queue("daily-brief", default_exchange, routing_key="daily-brief"),
+    # ── Predictive Analytics & MLOps Engine Queues ────────────────────────
+    Queue("prediction", default_exchange, routing_key="prediction"),
+    Queue("forecast", default_exchange, routing_key="forecast"),
+    Queue("drift-monitoring", default_exchange, routing_key="drift-monitoring"),
+    Queue("batch-prediction", default_exchange, routing_key="batch-prediction"),
+    Queue("outcome-processing", default_exchange, routing_key="outcome-processing"),
+    # ── Workflow Automation Engine Queues ─────────────────────────────────
+    Queue("workflow-trigger", default_exchange, routing_key="workflow-trigger"),
+    Queue("workflow-execution", default_exchange, routing_key="workflow-execution"),
+    Queue("workflow-actions", default_exchange, routing_key="workflow-actions"),
+    Queue("workflow-timers", default_exchange, routing_key="workflow-timers"),
+    Queue("workflow-approvals", default_exchange, routing_key="workflow-approvals"),
+    # ── AI Memory & Customer Intelligence Queues ──────────────────────────
+    Queue("memory-decay", default_exchange, routing_key="memory-decay"),
+    Queue("memory-retention", default_exchange, routing_key="memory-retention"),
+    # ── Part 21.8 — Autonomous Sales Loop Queues ───────────────────────────
+    Queue("sales-loop-orchestration", default_exchange, routing_key="sales-loop-orchestration"),
+    Queue("sales-loop-retry", default_exchange, routing_key="sales-loop-retry"),
+]
 
 celery_app.conf.update(
     task_serializer="json",
@@ -17,11 +100,144 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=300,  # 5 minutes max per task execution
+    task_time_limit=600,       # 10 minutes max per heavy task execution
+    task_soft_time_limit=540,
+    task_default_queue="lead_queue",
+    task_queues=task_queues,
+    task_routes={
+        # ── Existing routes (unchanged) ───────────────────────────────────
+        "app.tasks.queue_workers.process_lead_event": {"queue": "lead_queue"},
+        "app.tasks.queue_workers.process_webhook_event": {"queue": "webhook_queue"},
+        "app.tasks.queue_workers.process_ai_qualification": {"queue": "ai_queue"},
+        "app.tasks.queue_workers.process_email_dispatch": {"queue": "email_queue"},
+        "app.tasks.queue_workers.process_whatsapp_dispatch": {"queue": "whatsapp_queue"},
+        "app.tasks.queue_workers.process_analytics_event": {"queue": "analytics_queue"},
+        # ── Knowledge pipeline routes ─────────────────────────────────────
+        "app.modules.knowledge.workers.knowledge_tasks.process_document": {"queue": "knowledge-parser"},
+        "app.modules.knowledge.workers.knowledge_tasks.run_ocr": {"queue": "knowledge-ocr"},
+        "app.modules.knowledge.workers.knowledge_tasks.extract_facts": {"queue": "knowledge-extraction"},
+        "app.modules.knowledge.workers.knowledge_tasks.chunk_document_task": {"queue": "knowledge-chunking"},
+        "app.modules.knowledge.workers.knowledge_tasks.generate_embeddings": {"queue": "knowledge-embedding"},
+        "app.modules.knowledge.workers.knowledge_tasks.index_document": {"queue": "knowledge-indexing"},
+        "app.modules.knowledge.workers.knowledge_tasks.reindex_document": {"queue": "knowledge-reindex"},
+        "app.modules.knowledge.workers.knowledge_tasks.delete_document_knowledge": {"queue": "knowledge-deletion"},
+        "app.modules.knowledge.workers.knowledge_tasks.run_evaluation": {"queue": "knowledge-evaluation"},
+        "app.modules.knowledge.workers.knowledge_tasks.expire_stale_knowledge": {"queue": "knowledge-indexing"},
+        # ── Calendar & Scheduling Intelligence routes ─────────────────────
+        "app.modules.calendar.workers.calendar_tasks.process_due_reminders_task": {"queue": "reminders"},
+        "app.modules.calendar.workers.calendar_tasks.cleanup_expired_holds_task": {"queue": "booking"},
+        "app.modules.calendar.workers.calendar_tasks.reconcile_calendar_conflicts_task": {"queue": "calendar-conflict"},
+        "app.modules.calendar.workers.calendar_tasks.generate_meeting_prep_brief_task": {"queue": "meeting-preparation"},
+        "app.modules.calendar.workers.calendar_tasks.evaluate_no_show_risk_task": {"queue": "no-show-prediction"},
+        # ── CRM Intelligence routes ───────────────────────────────────────
+        "app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_lead_health_and_decay_task": {"queue": "lead-health"},
+        "app.modules.crm_intelligence.workers.intelligence_tasks.monitor_sla_breaches_task": {"queue": "sla-monitoring"},
+        "app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_pipeline_stagnation_task": {"queue": "pipeline-analysis"},
+        "app.modules.crm_intelligence.workers.intelligence_tasks.calculate_agent_workload_task": {"queue": "agent-analysis"},
+        "app.modules.crm_intelligence.workers.intelligence_tasks.detect_crm_anomalies_task": {"queue": "anomaly-detection"},
+        "app.modules.crm_intelligence.workers.intelligence_tasks.generate_daily_briefs_task": {"queue": "daily-brief"},
+        # ── Predictive Analytics & MLOps routes ───────────────────────────
+        "app.modules.predictive.workers.predictive_tasks.refresh_active_lead_predictions": {"queue": "prediction"},
+        "app.modules.predictive.workers.predictive_tasks.recalculate_pipeline_revenue_forecasts": {"queue": "forecast"},
+        "app.modules.predictive.workers.predictive_tasks.monitor_prediction_drift": {"queue": "drift-monitoring"},
+        # ── Workflow Automation Engine routes ─────────────────────────────
+        "app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task": {"queue": "workflow-timers"},
+        "app.modules.workflow.workers.workflow_tasks.dispatch_workflow_trigger_task": {"queue": "workflow-trigger"},
+        # ── AI Memory Engine routes ───────────────────────────────────────
+        "app.modules.memory.workers.memory_tasks.evaluate_memory_decay_task": {"queue": "memory-decay"},
+    },
     beat_schedule={
+        # ── Existing schedules (unchanged) ────────────────────────────────
         "check-hourly-followups": {
             "task": "app.tasks.followup_tasks.check_and_schedule_followups",
-            "schedule": crontab(minute=0, hour="*"),  # Every hour at minute 0
+            "schedule": crontab(minute=0, hour="*"),
+        },
+        # ── Knowledge freshness expiration every 6 hours ──────────────────
+        "expire-stale-knowledge": {
+            "task": "app.modules.knowledge.workers.knowledge_tasks.expire_stale_knowledge",
+            "schedule": crontab(minute=0, hour="*/6"),
+        },
+        # ── Calendar reminder processing every 5 minutes ──────────────────
+        "dispatch-due-calendar-reminders": {
+            "task": "app.modules.calendar.workers.calendar_tasks.process_due_reminders_task",
+            "schedule": crontab(minute="*/5"),
+        },
+        # ── Release expired booking holds every 5 minutes ─────────────────
+        "cleanup-expired-booking-holds": {
+            "task": "app.modules.calendar.workers.calendar_tasks.cleanup_expired_holds_task",
+            "schedule": crontab(minute="*/5"),
+        },
+        # ── Reconcile external calendar conflicts every 15 minutes ────────
+        "reconcile-calendar-conflicts": {
+            "task": "app.modules.calendar.workers.calendar_tasks.reconcile_calendar_conflicts_task",
+            "schedule": crontab(minute="*/15"),
+        },
+        # ── CRM Intelligence: Monitor SLA breaches every 2 minutes ────────
+        "monitor-sla-breaches": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.monitor_sla_breaches_task",
+            "schedule": crontab(minute="*/2"),
+        },
+        # ── CRM Intelligence: Lead health & decay every 10 minutes ────────
+        "evaluate-lead-health-and-decay": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_lead_health_and_decay_task",
+            "schedule": crontab(minute="*/10"),
+        },
+        # ── CRM Intelligence: Agent workload every 15 minutes ─────────────
+        "calculate-agent-workload": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.calculate_agent_workload_task",
+            "schedule": crontab(minute="*/15"),
+        },
+        # ── CRM Intelligence: Pipeline stagnation every 30 minutes ────────
+        "evaluate-pipeline-stagnation": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_pipeline_stagnation_task",
+            "schedule": crontab(minute="*/30"),
+        },
+        # ── CRM Intelligence: Detect anomalies hourly ─────────────────────
+        "detect-crm-anomalies": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.detect_crm_anomalies_task",
+            "schedule": crontab(minute=0, hour="*"),
+        },
+        # ── CRM Intelligence: Daily operational briefs at 07:00 AM UTC ────
+        "generate-daily-briefs": {
+            "task": "app.modules.crm_intelligence.workers.intelligence_tasks.generate_daily_briefs_task",
+            "schedule": crontab(minute=0, hour=7),
+        },
+        # ── Predictive Analytics: Refresh active predictions every 15m ────
+        "refresh-active-lead-predictions": {
+            "task": "app.modules.predictive.workers.predictive_tasks.refresh_active_lead_predictions",
+            "schedule": crontab(minute="*/15"),
+        },
+        # ── Predictive Analytics: Recalculate revenue forecast every 30m ──
+        "recalculate-pipeline-revenue-forecasts": {
+            "task": "app.modules.predictive.workers.predictive_tasks.recalculate_pipeline_revenue_forecasts",
+            "schedule": crontab(minute="*/30"),
+        },
+        # ── Predictive Analytics: Monitor prediction drift hourly ─────────
+        "monitor-prediction-drift": {
+            "task": "app.modules.predictive.workers.predictive_tasks.monitor_prediction_drift",
+            "schedule": crontab(minute=0, hour="*"),
+        },
+        # ── Workflow Automation: Resume expired wait states every 1 min ───
+        "process-due-workflow-waits": {
+            "task": "app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task",
+            "schedule": crontab(minute="*"),
+        },
+        # ── AI Memory Engine: Evaluate memory decay daily at 03:00 UTC ────
+        "evaluate-memory-decay": {
+            "task": "app.modules.memory.workers.memory_tasks.evaluate_memory_decay_task",
+            "schedule": crontab(minute=0, hour=3),
+        },
+        # ── Part 21.8 — Autonomous Sales Loop: Evaluate inactive leads every 5 min ─
+        "autonomous-loop-inactive-lead-scan": {
+            "task": "autonomous_loop.evaluate_inactive_leads",
+            "schedule": crontab(minute="*/5"),
+            "kwargs": {"tenant_id": "__all__"},  # Per-tenant scan triggered by API/worker
+        },
+        # ── Part 21.8 — Autonomous Sales Loop: Retry failed events every 2 min ──────
+        "autonomous-loop-retry-failed": {
+            "task": "autonomous_loop.retry_failed_events",
+            "schedule": crontab(minute="*/2"),
+            "kwargs": {"tenant_id": "__all__"},
         },
     }
 )

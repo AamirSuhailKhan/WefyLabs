@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, CreditCard, MessageSquare, CheckCircle2, Copy } from 'lucide-react';
+import { Settings, CreditCard, MessageSquare, CheckCircle2, Copy, Calendar } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useBroker } from '@/lib/auth-context';
 import { Broker } from '@/types';
 import DashboardNav from '@/components/shared/DashboardNav';
+import RazorpayCheckoutModal from '@/components/billing/RazorpayCheckoutModal';
 
 export default function SettingsPage() {
-  const [broker, setBroker] = useState<Broker | null>(null);
+  const { broker, updateProfile } = useBroker();
   const [billingStatus, setBillingStatus] = useState<any>(null);
+  const [calendarStatus, setCalendarStatus] = useState<any>(null);
+  const [calendarConnecting, setCalendarConnecting] = useState(false);
   const [name, setName] = useState('');
   const [agencyName, setAgencyName] = useState('');
   const [city, setCity] = useState('');
@@ -18,32 +22,68 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [submittingPlan, setSubmittingPlan] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [checkoutPlanId, setCheckoutPlanId] = useState('pro_monthly');
+
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const b = await api.getBrokerProfile();
-        setBroker(b);
-        setName(b.name || '');
-        setAgencyName(b.agency_name || '');
-        setCity(b.city || 'Bengaluru');
-        setWhatsappNumber(b.whatsapp_number || b.phone || '');
+    if (broker) {
+      setName(broker.name || '');
+      setAgencyName(broker.agency_name || '');
+      setCity(broker.city || 'Bengaluru');
+      setWhatsappNumber(broker.whatsapp_number || broker.phone || '');
+    }
+  }, [broker]);
 
-        const statusRes = await api.billing.getStatus();
-        setBillingStatus(statusRes);
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const [statusRes, calRes] = await Promise.all([
+          api.billing.getStatus().catch(() => null),
+          api.calendar.getGoogleStatus().catch(() => null),
+        ]);
+        if (statusRes) setBillingStatus(statusRes);
+        if (calRes) setCalendarStatus(calRes);
       } catch (e) {
-        console.warn('Could not load profile or billing status', e);
+        console.warn('Could not load settings metadata', e);
       }
     }
-    loadData();
+    loadSettings();
   }, []);
+
+  const handleConnectCalendar = async () => {
+    setCalendarConnecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/auth/callback?type=calendar`;
+      const res = await api.calendar.getGoogleConnectUrl(redirectUri);
+      if (res && res.auth_url) {
+        window.location.href = res.auth_url;
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to initiate Google Calendar connection.');
+    } finally {
+      setCalendarConnecting(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    if (!confirm('Are you sure you want to disconnect Google Calendar?')) return;
+    setCalendarConnecting(true);
+    try {
+      await api.calendar.disconnectGoogle();
+      setCalendarStatus({ is_connected: false, account_email: null, status: 'NOT_CONNECTED' });
+    } catch (err: any) {
+      alert(err.message || 'Failed to disconnect Google Calendar.');
+    } finally {
+      setCalendarConnecting(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const updated = await api.updateBrokerProfile({ name, agency_name: agencyName, city, whatsapp_number: whatsappNumber });
-      setBroker(updated);
+      await updateProfile({ name, agency_name: agencyName, city, whatsapp_number: whatsappNumber });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
@@ -53,20 +93,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpgradePlan = async (planId: string) => {
-    setSubmittingPlan(true);
-    try {
-      const res = await api.billing.subscribe(planId);
-      if (res && res.short_url) {
-        window.location.href = res.short_url;
-      } else {
-        alert(`Subscription created for ${planId.toUpperCase()}. Check your account for activation.`);
-      }
-    } catch (err: any) {
-      alert(err.message || 'Subscription failed. Please try again.');
-    } finally {
-      setSubmittingPlan(false);
-    }
+  const handleUpgradePlan = (planId: string) => {
+    setCheckoutPlanId(planId);
+    setIsCheckoutOpen(true);
   };
 
   const handleCopyWebhook = () => {
@@ -190,8 +219,118 @@ export default function SettingsPage() {
               </form>
             </div>
 
-            {/* RIGHT: WhatsApp + Billing */}
+            {/* RIGHT: Calendar + WhatsApp + Billing */}
             <div className="space-y-6">
+
+              {/* Google Calendar Integration Card */}
+              <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-2xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-5 pb-4 border-b border-[#D4D0C8]">
+                  <div className="flex items-center gap-2.5">
+                    <Calendar className="w-5 h-5 text-[#1A1A1A]" />
+                    <span className="text-[16px] font-semibold text-[#1A1A1A]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      Google Calendar
+                    </span>
+                  </div>
+                  {calendarStatus?.is_connected ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0]">
+                      <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB]">
+                      <span className="w-2 h-2 rounded-full bg-[#9CA3AF]" />
+                      Not Connected
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[13px] text-[#6B6B6B] mb-5 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  Sync meeting schedules, check broker free/busy availability, and automatically generate Google Meet links for property viewings.
+                </p>
+
+                {calendarStatus?.is_connected ? (
+                  <div className="space-y-4">
+                    <div className="bg-white border border-[#D4D0C8] rounded-xl p-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B] block mb-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                          Connected Account
+                        </span>
+                        <span className="text-[14px] font-semibold text-[#1A1A1A]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                          {calendarStatus.account_email || 'broker@gmail.com'}
+                        </span>
+                      </div>
+                      <span className="text-[12px] text-[#10B981] font-medium">OAuth 2.0 Active</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleDisconnectCalendar}
+                        disabled={calendarConnecting}
+                        className="px-4 h-10 rounded-xl text-[12px] font-semibold text-[#EF4444] bg-white border border-[#FCA5A5] hover:bg-[#FEF2F2] transition-colors disabled:opacity-50"
+                        style={{ fontFamily: 'Inter, sans-serif' }}
+                      >
+                        Disconnect Calendar
+                      </motion.button>
+
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleConnectCalendar}
+                        disabled={calendarConnecting}
+                        className="px-4 h-10 rounded-xl text-[12px] font-semibold text-[#1A1A1A] bg-white border border-[#D4D0C8] hover:bg-[#F5F0EB] transition-colors disabled:opacity-50"
+                        style={{ fontFamily: 'Inter, sans-serif' }}
+                      >
+                        Reauthorize
+                      </motion.button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <motion.button
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleConnectCalendar}
+                      disabled={calendarConnecting}
+                      className="w-full bg-[#1A1A1A] hover:bg-[#333333] text-white h-11 rounded-xl text-[13px] font-semibold transition-colors disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
+                      style={{ fontFamily: 'Inter, sans-serif' }}
+                    >
+                      <Calendar className="w-4 h-4 text-[#E8F5A8]" />
+                      <span>{calendarConnecting ? 'Redirecting to Google...' : 'Connect Google Calendar'}</span>
+                    </motion.button>
+                    <p className="text-[11px] text-[#9CA3AF] text-center" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      Requires calendar.events &amp; calendar.readonly permissions.
+                    </p>
+                  </div>
+                )}
+
+                {/* Notion Calendar Client Guidance */}
+                <div className="mt-6 pt-5 border-t border-[#D4D0C8]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[12px] font-bold text-[#1A1A1A]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      NOTION CALENDAR USER EXPERIENCE
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#E8F5A8] text-[#1A1A1A]">
+                      Recommended Client
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-[#6B6B6B] mb-3 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    Your CRM uses Google Calendar for backend scheduling, Free/Busy availability, and Google Meet generation. You can view and manage all appointments in Notion Calendar.
+                  </p>
+                  <div className="bg-white/80 border border-[#D4D0C8] rounded-xl p-3.5 space-y-2 text-[12px] text-[#4A4A4A]">
+                    <div className="font-semibold text-[#1A1A1A] text-[11px] uppercase tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      Recommended Setup:
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1 text-[12px] text-[#555555]">
+                      <li>Connect your Google Calendar account above.</li>
+                      <li>Open <span className="font-semibold text-[#1A1A1A]">Notion Calendar</span> (web or desktop app).</li>
+                      <li>Connect the <span className="font-semibold text-[#1A1A1A]">same Google account</span> in Notion Calendar.</li>
+                      <li>All CRM site visits, viewings &amp; consultations will sync and display automatically.</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
 
               {/* WhatsApp Integration Card */}
               <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-2xl p-8 shadow-sm">
@@ -289,6 +428,16 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* In-App Razorpay Checkout Modal */}
+      <RazorpayCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        initialPlanId={checkoutPlanId}
+        onSuccess={() => {
+          api.billing.getStatus().then((st) => setBillingStatus(st));
+        }}
+      />
     </div>
   );
 }

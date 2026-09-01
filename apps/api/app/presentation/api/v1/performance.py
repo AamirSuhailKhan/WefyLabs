@@ -6,7 +6,7 @@ from app.dependencies import get_current_broker
 from app.models.broker import Broker
 from app.services.broker_performance_service import BrokerPerformanceService
 
-router = APIRouter(prefix="/v1/performance", tags=["Salesforce CRM Analytics Performance Dashboard"])
+router = APIRouter(prefix="/performance", tags=["Salesforce CRM Analytics Performance Dashboard"])
 
 @router.get("/broker")
 async def get_broker_performance_endpoint(

@@ -258,11 +258,11 @@ async def process_incoming_whatsapp_message(db: AsyncSession, payload: Dict[str,
             current_dict = {
                 "budget_min": lead.budget_min,
                 "budget_max": lead.budget_max,
-                "property_type": lead.property_type or "2bhk",
-                "transaction_type": lead.transaction_type or "buy",
-                "preferred_locations": lead.preferred_locations or ["Bengaluru Core"],
-                "timeline": lead.timeline or "1_month",
-                "loan_status": lead.loan_status or "in_process"
+                "property_type": lead.property_type,
+                "transaction_type": lead.transaction_type,
+                "preferred_locations": lead.preferred_locations or [],
+                "timeline": lead.timeline,
+                "loan_status": lead.loan_status
             }
             score_val, confidence_val, reasoning_val = calculate_lead_score(current_dict)
             lead.score = score_val
@@ -285,7 +285,7 @@ async def process_incoming_whatsapp_message(db: AsyncSession, payload: Dict[str,
 
             # Notify Broker
             if broker:
-                loc_str = ", ".join(lead.preferred_locations or ["Bengaluru Core"])
+                loc_str = ", ".join(lead.preferred_locations) if lead.preferred_locations else "Not specified"
                 b_min = f"₹{lead.budget_min/100000:.0f}L" if lead.budget_min else "N/A"
                 b_max = f"₹{lead.budget_max/100000:.0f}L" if lead.budget_max else "N/A"
                 broker_alert = (

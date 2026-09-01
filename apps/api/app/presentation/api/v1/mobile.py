@@ -7,7 +7,7 @@ from app.dependencies import get_current_broker
 from app.models.broker import Broker
 from app.services.mobile_sync_service import MobileSyncService
 
-router = APIRouter(prefix="/v1/mobile", tags=["Uber-Grade Mobile App Engine & Offline Sync"])
+router = APIRouter(prefix="/mobile", tags=["Uber-Grade Mobile App Engine & Offline Sync"])
 
 class DeltaSyncRequest(BaseModel):
     device_id: str

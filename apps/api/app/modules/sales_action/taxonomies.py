@@ -1,0 +1,87 @@
+"""
+Part 21.5 — AI Sales Action & Follow-Up Taxonomies
+===================================================
+Controlled enumerations for Sales Action types, lifecycle states,
+communication channels, consent statuses, and human handoff reasons.
+
+NON-NEGOTIABLE PRINCIPLE:
+Arbitrary AI-generated action types are strictly prohibited.
+Unknown actions fail safely to NO_ACTION or HUMAN_HANDOFF.
+"""
+from enum import Enum
+
+
+class SalesActionType(str, Enum):
+    """Controlled sales action types."""
+    NO_ACTION = "NO_ACTION"
+    ASK_QUALIFICATION = "ASK_QUALIFICATION"
+    SEND_PROPERTY_RECOMMENDATIONS = "SEND_PROPERTY_RECOMMENDATIONS"
+    SEND_PROPERTY_DETAILS = "SEND_PROPERTY_DETAILS"
+    OFFER_VIEWING = "OFFER_VIEWING"
+    BOOK_VIEWING = "BOOK_VIEWING"
+    CONFIRM_VIEWING = "CONFIRM_VIEWING"
+    VIEWING_REMINDER = "VIEWING_REMINDER"
+    POST_VIEWING_FOLLOW_UP = "POST_VIEWING_FOLLOW_UP"
+    FOLLOW_UP_NO_RESPONSE = "FOLLOW_UP_NO_RESPONSE"
+    FOLLOW_UP_PROPERTY_SENT = "FOLLOW_UP_PROPERTY_SENT"
+    FOLLOW_UP_AFTER_INQUIRY = "FOLLOW_UP_AFTER_INQUIRY"
+    FOLLOW_UP_AFTER_VIEWING = "FOLLOW_UP_AFTER_VIEWING"
+    REQUEST_FINANCING_DETAILS = "REQUEST_FINANCING_DETAILS"
+    REQUEST_MISSING_INFORMATION = "REQUEST_MISSING_INFORMATION"
+    HUMAN_HANDOFF = "HUMAN_HANDOFF"
+    PAUSE_OUTREACH = "PAUSE_OUTREACH"
+    RESUME_OUTREACH = "RESUME_OUTREACH"
+    MARK_DORMANT = "MARK_DORMANT"
+
+
+class SalesActionStatus(str, Enum):
+    """Lifecycle state machine for sales actions."""
+    PROPOSED = "PROPOSED"
+    ELIGIBILITY_CHECK = "ELIGIBILITY_CHECK"
+    APPROVED = "APPROVED"
+    BLOCKED = "BLOCKED"
+    QUEUED = "QUEUED"
+    EXECUTING = "EXECUTING"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    RESPONDED = "RESPONDED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+    HUMAN_REVIEW = "HUMAN_REVIEW"
+
+
+class CommunicationChannel(str, Enum):
+    """Permitted communication channels."""
+    WHATSAPP = "WHATSAPP"
+    EMAIL = "EMAIL"
+    SMS = "SMS"
+    IN_APP = "IN_APP"
+    HUMAN_CALL = "HUMAN_CALL"
+
+
+class ConsentStatus(str, Enum):
+    """Customer communication consent states."""
+    UNKNOWN = "UNKNOWN"
+    GRANTED = "GRANTED"
+    DENIED = "DENIED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+
+
+class HandoffReason(str, Enum):
+    """Controlled human handoff reasons."""
+    CUSTOMER_REQUESTED_AGENT = "CUSTOMER_REQUESTED_AGENT"
+    LOW_CONFIDENCE = "LOW_CONFIDENCE"
+    COMPLIANCE_RISK = "COMPLIANCE_RISK"
+    PRICE_NEGOTIATION = "PRICE_NEGOTIATION"
+    PROPERTY_CONFLICT = "PROPERTY_CONFLICT"
+    QUALIFICATION_CONFLICT = "QUALIFICATION_CONFLICT"
+    COMPLAINT = "COMPLAINT"
+    HIGH_VALUE_OPPORTUNITY = "HIGH_VALUE_OPPORTUNITY"
+    NO_AUTOMATION_CHANNEL = "NO_AUTOMATION_CHANNEL"
+    FAILED_AUTOMATION = "FAILED_AUTOMATION"
+    EXCESSIVE_FATIGUE = "EXCESSIVE_FATIGUE"
+    UNKNOWN_INTENT = "UNKNOWN_INTENT"

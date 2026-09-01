@@ -2,21 +2,23 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 
-from app.dependencies import get_current_broker
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.dependencies import get_db, get_current_broker
 from app.models.broker import Broker
 from app.services.tableau_bi_service import TableauBIService
 
-router = APIRouter(prefix="/v1/bi", tags=["Tableau & Salesforce Grade Executive Analytics"])
+router = APIRouter(prefix="/bi", tags=["Tableau & Salesforce Grade Executive Analytics"])
 
 class NLQueryRequest(BaseModel):
     query: str
 
 @router.get("/executive-summary")
 async def get_executive_summary_endpoint(
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db)
 ):
     """Returns high-level C-suite Tableau BI summary metrics and automated anomaly alerts."""
-    summary = TableauBIService.get_executive_summary()
+    summary = await TableauBIService.async_get_executive_summary(db=db, broker=current_broker)
     return {
         "revenue_ytd": summary.revenue_ytd,
         "pipeline_total_value": summary.pipeline_total_value,
@@ -38,10 +40,11 @@ async def get_executive_summary_endpoint(
 @router.post("/ask-nl-query")
 async def ask_natural_language_analytics_endpoint(
     req: NLQueryRequest,
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db)
 ):
     """Natural Language Analytics API enabling C-suite leaders to ask any business question."""
-    res = TableauBIService.process_nl_analytics_query(req.query)
+    res = await TableauBIService.async_process_nl_analytics_query(db=db, broker=current_broker, query=req.query)
     return {
         "query": res.query,
         "chart_type": res.chart_type,

@@ -4,12 +4,18 @@ import React, { useState } from 'react';
 import { CustomerTimelineTracker } from '@/components/portal/CustomerTimelineTracker';
 import { Home, Sparkles, MessageSquare, PhoneCall, Download, ShieldCheck, Heart, Calculator, Send } from 'lucide-react';
 import { useRegion } from '@/lib/i18n/region-context';
+import { useBroker, getInitials } from '@/lib/auth-context';
 import { formatCurrency } from '@/lib/i18n/currency';
 
 export default function CustomerPortalPage() {
   const { region } = useRegion();
+  const { broker } = useBroker();
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+
+  const buyerName = "Client Account";
+  const buyerInitials = getInitials(buyerName);
+  const agentName = broker?.name || "Senior Realty Consultant";
 
   const handleAskAI = () => {
     if (!aiQuestion.trim()) return;
@@ -24,10 +30,10 @@ export default function CustomerPortalPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-[#D4D0C8] p-6 rounded-3xl shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-[#1A1A1A] text-white flex items-center justify-center font-mono font-bold text-lg">
-            RS
+            {buyerInitials}
           </div>
           <div>
-            <h1 className="text-xl font-bold font-mono text-[#1A1A1A]">Welcome back, Rahul Sharma</h1>
+            <h1 className="text-xl font-bold font-mono text-[#1A1A1A]">Welcome to Customer Portal</h1>
             <p className="text-xs text-gray-500 font-sans">Customer Portal • Buyer Account (#22222222)</p>
           </div>
         </div>
@@ -36,7 +42,7 @@ export default function CustomerPortalPage() {
         <div className="flex items-center gap-3 bg-[#FAF7F2] border border-[#D4D0C8] p-3 rounded-2xl">
           <div className="text-right">
             <span className="text-[10px] font-mono text-gray-500 font-bold uppercase block">Your Assigned Agent</span>
-            <span className="text-xs font-bold font-mono text-[#1A1A1A]">Aamir Khan</span>
+            <span className="text-xs font-bold font-mono text-[#1A1A1A]">{agentName}</span>
           </div>
           <a href="tel:+971501234567" className="btn-lime p-2 rounded-xl">
             <PhoneCall className="w-4 h-4" />

@@ -8,7 +8,7 @@ from app.models.broker import Broker
 from app.core.domain.communication.entities import ChannelType
 from app.core.application.communication.use_cases import CommunicationUseCases, SendMessageCommand, AddInternalNoteCommand
 
-router = APIRouter(prefix="/v1/communication", tags=["Omnichannel Communication Hub"])
+router = APIRouter(prefix="/communication", tags=["Omnichannel Communication Hub"])
 
 @router.get("/inbox")
 async def list_inbox_conversations(

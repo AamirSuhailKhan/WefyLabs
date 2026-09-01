@@ -1,0 +1,1 @@
+from .identity_tasks import process_identity_resolution_queue

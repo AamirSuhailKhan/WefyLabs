@@ -23,15 +23,20 @@ class Broker(Base):
         default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     agency_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    city: Mapped[str] = mapped_column(String(100), default="Bengaluru", nullable=False)
-    whatsapp_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    whatsapp_number: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True, index=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     subscription_status: Mapped[str] = mapped_column(
         String(20),
         default="trial",
+        nullable=False
+    )
+    onboarding_status: Mapped[str] = mapped_column(
+        String(30),
+        default="AUTHENTICATED_NOT_ONBOARDED",
         nullable=False
     )
     trial_ends_at: Mapped[datetime] = mapped_column(
@@ -58,17 +63,26 @@ class Broker(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "subscription_status IN ('trial', 'active', 'cancelled', 'expired')",
+            "subscription_status IN ('trial', 'active', 'paused', 'past_due', 'cancelled', 'expired')",
             name="ck_brokers_subscription_status"
         ),
         CheckConstraint(
-            "subscription_plan IS NULL OR subscription_plan IN ('monthly', 'annual')",
+            "subscription_plan IS NULL OR subscription_plan IN ('monthly', 'annual', 'starter', 'professional', 'starter_monthly', 'starter_annual', 'pro_monthly', 'pro_annual', 'premium_custom')",
             name="ck_brokers_subscription_plan"
+        ),
+        CheckConstraint(
+            "onboarding_status IN ('AUTHENTICATED_NOT_ONBOARDED', 'ONBOARDING_IN_PROGRESS', 'ONBOARDED', 'SUSPENDED')",
+            name="ck_brokers_onboarding_status"
         ),
     )
 
     leads: Mapped[List["Lead"]] = relationship("Lead", back_populates="broker", cascade="all, delete-orphan")
     subscriptions: Mapped[List["Subscription"]] = relationship("Subscription", back_populates="broker", cascade="all, delete-orphan")
+
+    @property
+    def organization_id(self) -> str:
+        """Canonical multi-tenant organization ID associated with this broker."""
+        return str(self.id)
 
     @property
     def trial_days_remaining(self) -> int:

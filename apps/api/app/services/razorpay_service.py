@@ -1,34 +1,48 @@
+"""
+BeetleLabs Razorpay Service Compatibility Bridge
+================================================
+Re-exports the production Razorpay service, state machine, and plan catalog
+while preserving existing legacy function signatures for backward compatibility.
+"""
+from __future__ import annotations
+
 import hmac
 import hashlib
 import uuid
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
 import razorpay
 from app.config import settings
 
+# Re-export from the new production billing module
+from app.modules.billing.services.razorpay_service import (
+    PLANS,
+    RazorpayProductionService,
+)
+from app.modules.billing.services.payment_state_machine import (
+    PaymentStateMachine,
+    InvalidPaymentStateTransitionError,
+)
+
 logger = logging.getLogger(__name__)
 
-PLANS: Dict[str, Dict[str, Any]] = {
-    "starter_monthly": {"name": "Starter", "amount": 299900, "period": "monthly", "plan_type": "monthly"},
-    "starter_annual": {"name": "Starter Annual", "amount": 2999900, "period": "annual", "plan_type": "annual"},
-    "pro_monthly": {"name": "Pro", "amount": 499900, "period": "monthly", "plan_type": "monthly"},
-    "pro_annual": {"name": "Pro Annual", "amount": 4999900, "period": "annual", "plan_type": "annual"},
-}
 
 def get_razorpay_client() -> razorpay.Client:
-    return razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+    return RazorpayProductionService.get_client()
+
 
 def create_razorpay_customer(name: str, email: str, phone: str) -> str:
     """
     Creates a Razorpay customer record or returns a simulated customer ID if using placeholder test keys.
     """
-    if settings.RAZORPAY_KEY_ID == "rzp_test_placeholder" or settings.ENV == "testing":
+    if RazorpayProductionService.is_simulated_mode():
         sim_id = f"cust_sim_{uuid.uuid4().hex[:10]}"
         logger.info(f"[Razorpay Simulated] Created Customer {sim_id} for {email}")
         return sim_id
 
     client = get_razorpay_client()
-    digits_phone = "".join(c for c in phone if c.isdigit())
+    digits_phone = "".join(c for c in (phone or "") if c.isdigit())
     if len(digits_phone) == 10:
         digits_phone = f"91{digits_phone}"
 
@@ -40,6 +54,7 @@ def create_razorpay_customer(name: str, email: str, phone: str) -> str:
     })
     return res["id"]
 
+
 def create_razorpay_subscription(plan_id: str, customer_id: str) -> Dict[str, Any]:
     """
     Creates a Razorpay subscription for the given plan and customer.
@@ -49,7 +64,7 @@ def create_razorpay_subscription(plan_id: str, customer_id: str) -> Dict[str, An
 
     plan_info = PLANS[plan_id]
 
-    if settings.RAZORPAY_KEY_ID == "rzp_test_placeholder" or settings.ENV == "testing":
+    if RazorpayProductionService.is_simulated_mode():
         sub_id = f"sub_sim_{uuid.uuid4().hex[:10]}"
         short_url = f"https://rzp.io/i/{sub_id}"
         logger.info(f"[Razorpay Simulated] Created Subscription {sub_id} for Plan {plan_id}")
@@ -77,23 +92,16 @@ def create_razorpay_subscription(plan_id: str, customer_id: str) -> Dict[str, An
         "currency": "INR"
     }
 
-def verify_webhook_signature(body_bytes: bytes, signature_header: str, secret: str = None) -> bool:
+
+def verify_webhook_signature(body_bytes: bytes, signature_header: str, secret: Optional[str] = None) -> bool:
     """
     Verifies Razorpay HMAC SHA256 webhook signature.
     """
-    if not signature_header:
-        return False
+    return RazorpayProductionService.verify_webhook_signature(body_bytes, signature_header, secret)
 
-    secret_key = secret or settings.RAZORPAY_WEBHOOK_SECRET
 
-    # If in test/simulated mode and secret is placeholder, allow test signatures
-    if (settings.ENV == "testing" or secret_key == "whsec_placeholder") and signature_header == "valid_test_signature":
-        return True
-
-    expected = hmac.new(
-        secret_key.encode("utf-8"),
-        body_bytes,
-        hashlib.sha256
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, signature_header)
+def verify_payment_signature(order_id: str, payment_id: str, signature: str, secret: Optional[str] = None) -> bool:
+    """
+    Verifies Razorpay Checkout payment signature.
+    """
+    return RazorpayProductionService.verify_payment_signature(order_id, payment_id, signature, secret)

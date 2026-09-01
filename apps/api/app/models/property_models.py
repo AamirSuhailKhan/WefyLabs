@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Text, Boolean, Float
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Text, Boolean, Float, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -11,8 +11,11 @@ JSONBType = JSONB().with_variant(JSON(), "sqlite")
 
 class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     """
-    Enterprise Property Listing model supporting Zillow and Property Finder requirements:
-    Building/Tower/Unit hierarchy, Geo-spatial coordinates, price history, and AI Valuation.
+    Global Property Listing model.
+    Country-specific fields live in extended_fields JSON, driven by PropertySchemaRegistry.
+    Area is stored canonically in area_value (sqft internally) + area_unit (as-supplied).
+    Price uses Float for storage but must always accompany currency_code — never unitless.
+    NEVER store: price = 2000000 without currency.
     """
     __tablename__ = "property_listings"
 
@@ -22,13 +25,17 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     property_category: Mapped[str] = mapped_column(String(50), default="residential", nullable=False)
-    property_type: Mapped[str] = mapped_column(String(50), default="apartment", nullable=False, index=True)
+    # Validated by PropertySchemaRegistry — NOT hardcoded ('1bhk', '2bhk', 'villa', ...)
+    property_type: Mapped[str] = mapped_column(String(100), default="apartment", nullable=False, index=True)
     transaction_category: Mapped[str] = mapped_column(String(50), default="resale", nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="available", nullable=False, index=True)
 
+    # Price: ALWAYS store with explicit currency_code
     price: Mapped[float] = mapped_column(Float, nullable=False, index=True)
-    currency: Mapped[str] = mapped_column(String(10), default="AED", nullable=False)
-    built_up_area_sqft: Mapped[float] = mapped_column(Float, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String(3), nullable=False)  # "AED", "INR", "USD" — no default
+    # Area: canonical sqft value for internal computation + original supplied unit
+    area_value: Mapped[float] = mapped_column(Float, nullable=False)            # canonical area number
+    area_unit: Mapped[str] = mapped_column(String(20), default="sqft", nullable=False)  # sqft|sqm|sqyd|marla|kanal
     bedrooms: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     bathrooms: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     parking_spaces: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -39,11 +46,18 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     unit_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     floor_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # Geo Location
-    city: Mapped[str] = mapped_column(String(100), default="Dubai", nullable=False, index=True)
-    locality: Mapped[str] = mapped_column(String(100), default="Dubai Marina", nullable=False, index=True)
+    # Geo Location — no hardcoded city/locality defaults
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    locality: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # ── Global / Multi-Country Fields ────────────────────────────────────────
+    country_code: Mapped[Optional[str]] = mapped_column(String(2), nullable=True, index=True)  # "AE", "IN"
+    market_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    # Country-specific fields (RERA, DLD, MLS, tenure) stored as extensible JSON
+    # Validated at application layer by PropertySchemaRegistry, not at DB level
+    extended_fields: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)
 
     amenities: Mapped[Optional[list]] = mapped_column(JSONBType, default=list, nullable=True)
 
@@ -54,6 +68,29 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
 
     media: Mapped[List["PropertyMedia"]] = relationship("PropertyMedia", back_populates="property_listing", cascade="all, delete-orphan")
     price_history: Mapped[List["PropertyPriceHistory"]] = relationship("PropertyPriceHistory", back_populates="property_listing", cascade="all, delete-orphan")
+
+    def __init__(self, *args, **kwargs):
+        if "currency" in kwargs and "currency_code" not in kwargs:
+            kwargs["currency_code"] = kwargs.pop("currency")
+        if "built_up_area_sqft" in kwargs and "area_value" not in kwargs:
+            kwargs["area_value"] = kwargs.pop("built_up_area_sqft")
+        super().__init__(*args, **kwargs)
+
+    @property
+    def currency(self) -> str:
+        return self.currency_code
+
+    @currency.setter
+    def currency(self, val: str):
+        self.currency_code = val
+
+    @property
+    def built_up_area_sqft(self) -> float:
+        return self.area_value
+
+    @built_up_area_sqft.setter
+    def built_up_area_sqft(self, val: float):
+        self.area_value = val
 
 class PropertyMedia(Base, TimestampMixin):
     """Media assets: Floor plans, Photos, Virtual 360 Tours, Documents."""

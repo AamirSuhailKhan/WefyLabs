@@ -3,6 +3,7 @@ import re
 import logging
 import httpx
 from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.lead_scorer import calculate_lead_score
 
@@ -19,13 +20,13 @@ SCORING CRITERIA:
 - SPAM: Fake number, abusive, clearly not interested in real estate.
 
 EXTRACTION RULES:
-- budget_min / budget_max: Extract numeric values in INR. If range given (e.g. "40-50 lakhs"), min=4000000, max=5000000. If "around 1 crore", min=9000000, max=11000000.
-- property_type: Map to 1bhk, 2bhk, 3bhk, 4bhk_plus, villa, plot, commercial, or unknown.
-- transaction_type: buy, rent, lease, or unknown.
-- preferred_locations: Extract all mentioned areas/localities as a JSON array of strings.
-- timeline: immediate, 1_month, 3_months, 6_months, flexible, or unknown.
-- loan_status: pre_approved, in_process, not_started, not_needed, or unknown.
-- reasoning: 1-2 sentence explanation of the score.
+- budget_min / budget_max: Extract numeric values in INR. If range given (e.g. "40-50 lakhs"), min=4000000, max=5000000. If "around 1 crore", min=9000000, max=11000000. If not mentioned, set to null. NEVER fabricate a budget.
+- property_type: Map to 1bhk, 2bhk, 3bhk, 4bhk_plus, villa, plot, commercial, or null.
+- transaction_type: buy, rent, lease, or null.
+- preferred_locations: Extract all mentioned areas/localities as a JSON array of strings. If none mentioned, return [].
+- timeline: immediate, 1_month, 3_months, 6_months, flexible, or null.
+- loan_status: pre_approved, in_process, not_started, not_needed, or null.
+- reasoning: 1-2 sentence explanation of the score based strictly on actual conversation evidence.
 
 RESPONSE FORMAT (strict JSON):
 {
@@ -35,11 +36,11 @@ RESPONSE FORMAT (strict JSON):
   "extracted_data": {
     "budget_min": integer or null,
     "budget_max": integer or null,
-    "property_type": "string",
-    "transaction_type": "string",
+    "property_type": "string" or null,
+    "transaction_type": "string" or null,
     "preferred_locations": ["string"],
-    "timeline": "string",
-    "loan_status": "string"
+    "timeline": "string" or null,
+    "loan_status": "string" or null
   },
   "recommended_action": "string",
   "follow_up_needed": true|false
@@ -55,6 +56,7 @@ Your goals:
 3. Speak in English only (for MVP)
 4. Never be pushy. If lead says "not interested", thank them and end.
 5. After gathering sufficient info, say: "Thanks! {broker_name} will call you shortly."
+6. NEVER fabricate property details or budgets. If the user did not specify a value, leave it null.
 
 Current extracted data: {current_extracted_data}
 Conversation history: {last_5_messages}
@@ -76,7 +78,6 @@ Respond ONLY with a valid JSON object:
   "end_conversation": boolean
 }}"""
 
-from pydantic import BaseModel, Field
 
 class ExtractedLeadData(BaseModel):
     budget_min: Optional[int] = None
@@ -87,20 +88,22 @@ class ExtractedLeadData(BaseModel):
     timeline: Optional[str] = None
     loan_status: Optional[str] = None
 
+
 class AIQualificationResponseModel(BaseModel):
     response_message: str
     extracted_data: ExtractedLeadData
     qualification_complete: bool = False
     end_conversation: bool = False
 
+
 def sanitize_user_input(text: str) -> str:
     """Sanitizes user input messages to prevent prompt injection and control character issues."""
     if not text:
         return ""
-    # Strip dangerous formatting or system instruction overrides
     clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
     clean = clean.replace("```", "").strip()
     return clean[:1000]
+
 
 async def generate_ai_qualification_response(
     broker_name: str,
@@ -111,23 +114,25 @@ async def generate_ai_qualification_response(
     latest_message: str
 ) -> Dict[str, Any]:
     """
-    Generates conversational qualification response using Google Gemini 1.5 Flash (Free 1,500 calls/day),
-    OpenAI GPT-4o, or rule fallback with strict Pydantic output validation.
+    Generates conversational qualification response using Google Gemini API.
+    If Gemini is unconfigured or encounters an error, falls back to a clean deterministic rule engine
+    without fabricating any user information.
     """
     safe_latest_message = sanitize_user_input(latest_message)
     formatted_prompt = QUALIFICATION_SYSTEM_PROMPT_TEMPLATE.format(
         broker_name=broker_name or "our team",
         agency_name=agency_name or "Premier Realty",
         city=city or "Bengaluru",
-        current_extracted_data=json.dumps(current_extracted_data),
+        current_extracted_data=json.dumps(current_extracted_data or {}),
         last_5_messages=json.dumps(history[-5:] if history else []),
         latest_message=safe_latest_message
     )
 
-    # 1. Prefer Google Gemini 1.5 Flash API (Free 1,500 req/day)
-    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy_placeholder"):
+    # 1. Primary: Google Gemini API (Configurable model, e.g. gemini-3.5-flash)
+    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy_placeholder") and not settings.GEMINI_API_KEY.startswith("placeholder"):
+        model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash")
         try:
-            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
             payload = {
                 "contents": [
                     {
@@ -151,38 +156,16 @@ async def generate_ai_qualification_response(
                             raw_text = raw_text.split("```json")[1].split("```")[0]
                         parsed = json.loads(raw_text.strip())
                         if "response_message" in parsed:
-                            logger.info("[Gemini 1.5 Flash AI Success] Extracted & Qualified")
+                            logger.info(f"[Gemini AI Success: {model_name}] Extracted & Qualified")
                             return parsed
+                elif res.status_code == 429:
+                    logger.warning("[Gemini AI Rate Limit / Quota Exceeded (429)] Using clean deterministic fallback.")
+                else:
+                    logger.warning(f"[Gemini AI API Error: {res.status_code}] {res.text}")
         except Exception as e:
-            logger.warning(f"[Gemini AI Service Error] {e}. Falling back to OpenAI / Heuristic.")
+            logger.warning(f"[Gemini AI Service Error] {e}. Falling back to clean deterministic rule engine.")
 
-    # 2. OpenAI GPT-4o / GPT-4o-mini
-    if settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("sk-placeholder"):
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            for model_name in ["gpt-4o", "gpt-4o-mini"]:
-                try:
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": formatted_prompt},
-                            {"role": "user", "content": latest_message}
-                        ],
-                        response_format={"type": "json_object"},
-                        temperature=0.3
-                    )
-                    content = response.choices[0].message.content
-                    parsed = json.loads(content)
-                    if "response_message" in parsed:
-                        return parsed
-                except Exception as inner_e:
-                    logger.warning(f"[OpenAI Service] Model {model_name} failed: {inner_e}")
-        except Exception as e:
-            logger.error(f"[OpenAI Service] Client initialization failed: {e}")
-
-    # 3. Rule Heuristic Fallback
+    # 2. Clean Deterministic Fallback (Never fabricates data)
     return fallback_qualification_response(broker_name, latest_message, current_extracted_data)
 
 
@@ -191,30 +174,24 @@ def fallback_qualification_response(
     latest_message: str,
     current_extracted: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Fallback rule engine for AI qualification response."""
+    """
+    Deterministic rule engine for lead qualification when AI is unavailable.
+    Strictly extracts ONLY what is present in the message. Never fabricates missing values.
+    """
     msg = latest_message.lower()
     updated = dict(current_extracted or {})
 
-    # Simple heuristic extraction
-    if any(term in msg for term in ["not interested", "stop", "no thanks", "don't call"]):
+    # Check for opt-out / not interested
+    if any(term in msg for term in ["not interested", "stop", "no thanks", "don't call", "unsubscribe"]):
         return {
-            "response_message": f"Thank you for letting us know! Have a great day.",
+            "response_message": "Thank you for letting us know! Have a great day.",
             "extracted_data": updated,
             "qualification_complete": False,
             "end_conversation": True
         }
 
-    # Extract budget
-    if "lakh" in msg or "crore" in msg or "cr" in msg or "40" in msg or "50" in msg:
-        if "lakh" in msg:
-            updated["budget_min"] = 4000000
-            updated["budget_max"] = 6000000
-        elif "crore" in msg or "cr" in msg:
-            updated["budget_min"] = 10000000
-            updated["budget_max"] = 15000000
-
-    # Extract property type
-    for ptype in ["1bhk", "2bhk", "3bhk", "villa", "plot"]:
+    # Extract property type if explicitly mentioned
+    for ptype in ["1bhk", "2bhk", "3bhk", "4bhk", "villa", "plot", "commercial"]:
         if ptype in msg:
             updated["property_type"] = ptype
             break
@@ -222,29 +199,27 @@ def fallback_qualification_response(
     # Extract transaction type
     if "buy" in msg or "purchase" in msg:
         updated["transaction_type"] = "buy"
-    elif "rent" in msg:
+    elif "rent" in msg or "lease" in msg:
         updated["transaction_type"] = "rent"
 
-    # Check missing fields to determine next question
+    # Guide next question based on missing fields without fabricating data
     if not updated.get("property_type"):
-        resp_msg = f"Hi! Thanks for reaching out. What configuration are you looking for (1BHK, 2BHK, 3BHK, Villa, Plot)?"
+        resp_msg = "Hi! Thanks for reaching out. What property configuration are you looking for (1BHK, 2BHK, 3BHK, Villa, Plot)?"
         complete = False
     elif not updated.get("transaction_type"):
-        resp_msg = f"Got it! Are you looking to buy or rent?"
+        resp_msg = "Got it! Are you looking to buy or rent?"
         complete = False
     elif not updated.get("budget_max") and not updated.get("budget_min"):
-        resp_msg = f"Great! What is your approximate budget range?"
+        resp_msg = "Great! What is your approximate budget range?"
         complete = False
     elif not updated.get("preferred_locations"):
-        updated["preferred_locations"] = ["Bengaluru Core"]
-        resp_msg = f"Which localities or areas do you prefer?"
+        resp_msg = "Which localities or areas do you prefer?"
         complete = False
     elif not updated.get("timeline"):
-        updated["timeline"] = "1_month"
-        resp_msg = f"When are you planning to move or buy?"
+        resp_msg = "When are you planning to move or finalize the purchase?"
         complete = False
     else:
-        resp_msg = f"Thanks! {broker_name} will call you shortly."
+        resp_msg = f"Thanks! {broker_name} will call you shortly with matching options."
         complete = True
 
     return {
@@ -254,46 +229,66 @@ def fallback_qualification_response(
         "end_conversation": complete
     }
 
+
 async def analyze_lead_conversation(messages: List[Dict[str, str]]) -> Dict[str, Any]:
-    """Analyzes full conversation transcript for final scoring."""
-    if settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("sk-placeholder"):
+    """
+    Analyzes full conversation transcript for final scoring using Google Gemini.
+    If Gemini is unavailable, returns an honest error without fabricating lead data.
+    """
+    transcript_text = "\n".join([f"{msg.get('sender', 'USER').upper()}: {msg.get('text', '')}" for msg in messages])
+
+    # Primary: Google Gemini API
+    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy_placeholder") and not settings.GEMINI_API_KEY.startswith("placeholder"):
+        model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash")
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            transcript_text = "\n".join([f"{msg['sender'].upper()}: {msg['text']}" for msg in messages])
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": LEAD_QUALIFICATION_PROMPT},
-                    {"role": "user", "content": f"Transcript:\n{transcript_text}"}
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": f"{LEAD_QUALIFICATION_PROMPT}\n\nTranscript:\n{transcript_text}"}
+                        ]
+                    }
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.2
-            )
-            content = response.choices[0].message.content
-            return json.loads(content)
+                "generationConfig": {
+                    "response_mime_type": "application/json"
+                }
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(gemini_url, json=payload)
+                if res.status_code == 200:
+                    res_json = res.json()
+                    candidates = res_json.get("candidates", [])
+                    if candidates:
+                        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if "```json" in raw_text:
+                            raw_text = raw_text.split("```json")[1].split("```")[0]
+                        parsed = json.loads(raw_text.strip())
+                        if "score" in parsed:
+                            logger.info(f"[Gemini AI Lead Analysis Success: {model_name}]")
+                            return parsed
+                elif res.status_code == 429:
+                    logger.warning("[Gemini AI Rate Limit / Quota Exceeded (429)] during conversation analysis.")
+                else:
+                    logger.warning(f"[Gemini AI Analysis Error: {res.status_code}] {res.text}")
         except Exception as e:
-            logger.warning(f"[AI Service] OpenAI Call failed: {e}. Falling back to rule engine.")
+            logger.warning(f"[Gemini AI Analysis Error] {e}.")
 
-    return fallback_nlp_extraction(messages)
-
-def fallback_nlp_extraction(messages: List[Dict[str, str]]) -> Dict[str, Any]:
-    extracted = {
-        "budget_min": 4000000,
-        "budget_max": 6000000,
-        "property_type": "2bhk",
-        "transaction_type": "buy",
-        "preferred_locations": ["Indiranagar"],
-        "timeline": "1_month",
-        "loan_status": "in_process"
-    }
-    score, confidence, reasoning = calculate_lead_score(extracted)
+    # Honest error return when AI is unavailable — NEVER fabricate CRM information
+    logger.warning("[AI Service] Gemini unavailable for transcript analysis. Returning honest unanalyzed status.")
     return {
-        "score": score,
-        "confidence": confidence,
-        "reasoning": reasoning,
-        "extracted_data": extracted,
-        "recommended_action": "Call lead immediately within 30 minutes.",
-        "follow_up_needed": True
+        "score": "cold",
+        "confidence": 0.0,
+        "reasoning": "AI analysis service is currently unavailable. No lead facts fabricated.",
+        "extracted_data": {
+            "budget_min": None,
+            "budget_max": None,
+            "property_type": None,
+            "transaction_type": None,
+            "preferred_locations": [],
+            "timeline": None,
+            "loan_status": None
+        },
+        "recommended_action": "Review conversation transcript manually.",
+        "follow_up_needed": False
     }

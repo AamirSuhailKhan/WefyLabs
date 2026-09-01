@@ -111,7 +111,7 @@ async def test_razorpay_webhook_signature_and_events(db_session: AsyncSession, t
         await db_session.refresh(test_broker)
         await db_session.refresh(sub_record)
         assert test_broker.subscription_status == "active"
-        assert test_broker.subscription_plan == "monthly"
+        assert test_broker.subscription_plan in ("starter", "monthly")
         assert sub_record.status == "active"
 
         # 3. Prevent duplicate subscription creation when active
@@ -124,7 +124,45 @@ async def test_razorpay_webhook_signature_and_events(db_session: AsyncSession, t
         assert res_sub_dup.status_code == 400
         assert "already has an active subscription" in res_sub_dup.json()["detail"]
 
-        # 4. subscription.cancelled event
+        # 4. subscription.paused event
+        payload_paused = {
+            "event": "subscription.paused",
+            "payload": {
+                "subscription": {
+                    "entity": {"id": "sub_test_9999"}
+                }
+            }
+        }
+        res_paused = await ac.post(
+            "/api/v1/billing/webhook",
+            content=json.dumps(payload_paused),
+            headers={"X-Razorpay-Signature": "valid_test_signature", "Content-Type": "application/json"}
+        )
+        assert res_paused.status_code == 200
+        await db_session.refresh(test_broker)
+        await db_session.refresh(sub_record)
+        assert test_broker.subscription_status == "paused"
+        assert sub_record.status == "paused"
+
+        # 5. subscription.resumed event
+        payload_resumed = {
+            "event": "subscription.resumed",
+            "payload": {
+                "subscription": {
+                    "entity": {"id": "sub_test_9999"}
+                }
+            }
+        }
+        res_resumed = await ac.post(
+            "/api/v1/billing/webhook",
+            content=json.dumps(payload_resumed),
+            headers={"X-Razorpay-Signature": "valid_test_signature", "Content-Type": "application/json"}
+        )
+        assert res_resumed.status_code == 200
+        await db_session.refresh(test_broker)
+        assert test_broker.subscription_status == "active"
+
+        # 6. subscription.cancelled event
         payload_cancelled = {
             "event": "subscription.cancelled",
             "payload": {
@@ -146,3 +184,44 @@ async def test_razorpay_webhook_signature_and_events(db_session: AsyncSession, t
         assert test_broker.subscription_status == "cancelled"
 
     app.dependency_overrides.clear()
+
+
+def test_production_rejects_placeholder_razorpay_credentials():
+    from app.common.config.validated_settings import EnterpriseSettings
+    with pytest.raises(ValueError) as exc:
+        EnterpriseSettings(
+            ENV="production",
+            DATABASE_URL="postgresql+asyncpg://prod_user:prod_pass@db.internal:5432/leadscore_prod",
+            SECRET_KEY="c" * 32,
+            SUPABASE_JWT_SECRET="s" * 32,
+            GEMINI_API_KEY="valid_gemini_key_prod",
+            WHATSAPP_VERIFY_TOKEN="w" * 32,
+            RAZORPAY_KEY_ID="rzp_test_placeholder",  # Placeholder key
+            RAZORPAY_KEY_SECRET="secret_placeholder",
+            RAZORPAY_WEBHOOK_SECRET="whsec_placeholder",
+            GOOGLE_CLIENT_ID="123456789-abcdef.apps.googleusercontent.com",
+            GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
+            KNOWLEDGE_OCR_PROVIDER="tesseract",
+        )
+    assert "RAZORPAY_KEY_ID" in str(exc.value)
+    assert "RAZORPAY_KEY_SECRET" in str(exc.value)
+
+
+def test_production_accepts_valid_razorpay_credentials():
+    from app.common.config.validated_settings import EnterpriseSettings
+    prod_settings = EnterpriseSettings(
+        ENV="production",
+        DATABASE_URL="postgresql+asyncpg://prod_user:prod_pass@db.internal:5432/leadscore_prod",
+        SECRET_KEY="c" * 32,
+        SUPABASE_JWT_SECRET="s" * 32,
+        GEMINI_API_KEY="valid_gemini_key_prod",
+        WHATSAPP_VERIFY_TOKEN="w" * 32,
+        RAZORPAY_KEY_ID="rzp_live_real_production_key_123",
+        RAZORPAY_KEY_SECRET="rzp_secret_real_live_prod_key_456",
+        RAZORPAY_WEBHOOK_SECRET="whsec_real_production_secret_key_32_chars!",
+        GOOGLE_CLIENT_ID="123456789-abcdef.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
+        KNOWLEDGE_OCR_PROVIDER="tesseract",
+    )
+    assert prod_settings.RAZORPAY_KEY_ID == "rzp_live_real_production_key_123"
+

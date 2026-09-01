@@ -21,6 +21,10 @@ async def send_message(to_phone: str, message: str, message_type: str = "text") 
     """
     recipient_digits = normalize_to_digits_only(to_phone)
     
+    if settings.ENV in ("testing", "test"):
+        logger.info(f"[Test Mode WhatsApp Dispatch] To: {recipient_digits} | Message: {message[:30]}...")
+        return True
+
     # 1. Prefer Meta Cloud API Direct (Free 1,000 convos/mo) if credentials configured
     if settings.WHATSAPP_ACCESS_TOKEN and settings.PHONE_NUMBER_ID:
         url = f"https://graph.facebook.com/v25.0/{settings.PHONE_NUMBER_ID}/messages"

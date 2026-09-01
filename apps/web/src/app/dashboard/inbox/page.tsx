@@ -1,58 +1,48 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UnifiedTimeline, TimelineMessage } from '@/components/communication/UnifiedTimeline';
 import { AICopilotBar } from '@/components/communication/AICopilotBar';
 import { MessageSquare, Mail, PhoneCall, Filter, Search, UserCheck, Clock, Tag } from 'lucide-react';
+import { api } from '@/lib/api-client';
 
 export default function InboxPage() {
   const [selectedChannel, setSelectedChannel] = useState<string>('all');
-  const [activeLeadId, setActiveLeadId] = useState<string>('22222222-2222-2222-2222-222222222222');
+  const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<TimelineMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [messages, setMessages] = useState<TimelineMessage[]>([
-    {
-      id: '1',
-      channel: 'whatsapp',
-      direction: 'inbound',
-      sender_name: 'Rahul Sharma',
-      content: 'Hi, I am interested in DLF Phase 5 3BHK. What is the ready possession price?',
-      created_at: '2026-07-30T15:00:00Z'
-    },
-    {
-      id: '2',
-      channel: 'internal_note',
-      direction: 'outbound',
-      sender_name: 'Agent Aamir',
-      content: '@Team High budget customer (2.5 Cr+). Interested in cash payment.',
-      mentions: ['Team'],
-      created_at: '2026-07-30T15:05:00Z'
-    },
-    {
-      id: '3',
-      channel: 'call',
-      direction: 'outbound',
-      sender_name: 'Agent Aamir',
-      content: 'Outbound Call Completed (3m 45s)',
-      call_record: {
-        recording_url: 'https://cdn.beetlelabs.ai/sample.mp3',
-        duration_seconds: 225,
-        transcript: 'Confirmed ready to move 3BHK unit. Customer requested viewing appointment.',
-        ai_summary: 'Confirmed site viewing for tomorrow at 4 PM.'
-      },
-      created_at: '2026-07-30T15:20:00Z'
-    }
-  ]);
+  useEffect(() => {
+    if (!activeLeadId) return;
+    const fetchMessages = async () => {
+      setIsLoading(true);
+      try {
+        const data = await api.inbox.getConversations(activeLeadId);
+        setMessages(data.items || data || []);
+      } catch {
+        setMessages([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchMessages();
+  }, [activeLeadId]);
 
-  const handleSendMessage = (channel: string, content: string) => {
+  const handleSendMessage = async (channel: string, content: string) => {
     const newMsg: TimelineMessage = {
       id: String(Date.now()),
       channel: channel as any,
       direction: 'outbound',
-      sender_name: 'Agent Aamir',
+      sender_name: 'Agent',
       content: content,
       created_at: new Date().toISOString()
     };
-    setMessages([...messages, newMsg]);
+    setMessages(prev => [...prev, newMsg]);
+    if (activeLeadId) {
+      try {
+        await api.inbox.sendMessage({ lead_id: activeLeadId, channel, content });
+      } catch { /* message already optimistically added */ }
+    }
   };
 
   const handleSelectReply = (reply: string) => {

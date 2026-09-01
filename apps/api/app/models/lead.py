@@ -66,10 +66,23 @@ class Lead(Base):
         nullable=False
     )
     pipeline_stage: Mapped[str] = mapped_column(
-        String(30),
+        String(100),  # No DB CheckConstraint — validated by RegionalPipelineService
         default="new",
         nullable=False
     )
+    # ── Global / Multi-Country Fields ──────────────────────────────────────────
+    # Resolved from phone, form, declared location, property location — NOT just IP
+    country_code: Mapped[Optional[str]] = mapped_column(String(2), nullable=True, index=True)  # "AE", "IN"
+    market_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )  # FK to markets.id (nullable — no FK enforced here to avoid circular dep in test isolation)
+    locale: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)          # "en-AE", "ar-AE"
+    # Confidence of country inference (0.0 - 1.0)
+    country_confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # phone | form | declared | property_location | crm_data | ip (lowest confidence)
+    country_inference_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    # Budget with explicit currency — never store budget without currency
+    budget_currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)  # "AED", "INR"
     notes: Mapped[List[Dict[str, Any]]] = mapped_column(
         JSONBType,
         default=list,
@@ -93,17 +106,18 @@ class Lead(Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "source IN ('whatsapp_forward', 'facebook', 'google', 'manual')",
-            name="ck_leads_source"
-        ),
+        # REMOVED: property_type CheckConstraint — hardcoded India BHK enum.
+        # Property types are now validated by PropertySchemaRegistry per market.
+        # Historical values are preserved as-is.
         CheckConstraint(
             "score IN ('hot', 'warm', 'cold', 'unqualified', 'pending')",
             name="ck_leads_score"
         ),
+        # REMOVED: pipeline_stage CheckConstraint — fixed stages replaced by RegionalPipeline.
+        # Stage transitions are now validated by RegionalPipelineService per org+market.
         CheckConstraint(
-            "property_type IS NULL OR property_type IN ('1bhk', '2bhk', '3bhk', 'villa', 'plot')",
-            name="ck_leads_property_type"
+            "status IN ('pending', 'active', 'qualified', 'converted', 'lost')",
+            name="ck_leads_status"
         ),
         CheckConstraint(
             "transaction_type IS NULL OR transaction_type IN ('buy', 'rent', 'lease')",
@@ -117,17 +131,10 @@ class Lead(Base):
             "loan_status IS NULL OR loan_status IN ('pre_approved', 'in_process', 'not_started')",
             name="ck_leads_loan_status"
         ),
-        CheckConstraint(
-            "status IN ('pending', 'active', 'qualified', 'converted', 'lost')",
-            name="ck_leads_status"
-        ),
-        CheckConstraint(
-            "pipeline_stage IN ('new', 'contacted', 'viewing', 'negotiating', 'closed_won', 'closed_lost')",
-            name="ck_leads_pipeline_stage"
-        ),
         Index("ix_leads_broker_id_score", "broker_id", "score"),
         Index("ix_leads_broker_id_pipeline_stage", "broker_id", "pipeline_stage"),
         Index("ix_leads_broker_deleted_created", "broker_id", "deleted_at", "created_at"),
+        Index("ix_leads_country_market", "country_code", "market_id"),
     )
 
     broker: Mapped["Broker"] = relationship("Broker", back_populates="leads")

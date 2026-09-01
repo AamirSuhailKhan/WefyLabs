@@ -14,16 +14,12 @@ interface Props {
 }
 
 export function AICopilotBar({
-  aiSummary = 'Lead is inquiring for 3BHK ready to move villa in Dubai Marina.',
-  aiSentiment = 'highly_urgent',
-  aiUrgencyScore = 0.92,
-  aiObjections = ['Possession timeline negotiation', 'Price breakdown requested'],
-  aiNextBestAction = 'Schedule physical viewing & share Golden Visa brochure.',
-  smartReplies = [
-    "Hi, I've attached the complete 3BHK brochure and pricing breakdown.",
-    "Would you be available for a quick viewing tomorrow at 4 PM?",
-    "Our team can schedule a video walkthrough if you're currently overseas."
-  ],
+  aiSummary = 'AI Copilot analyzing conversation signals...',
+  aiSentiment = 'neutral',
+  aiUrgencyScore = 0.5,
+  aiObjections = [],
+  aiNextBestAction = 'Review lead requirements & respond.',
+  smartReplies = [],
   onSelectReply
 }: Props) {
   return (

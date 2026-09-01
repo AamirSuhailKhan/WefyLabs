@@ -26,3 +26,13 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(AsyncAttrs, DeclarativeBase):
     """Base model class for SQLAlchemy 2.0 declarative models."""
     pass
+
+
+async def get_db():
+    """Async dependency yielding a database session."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+

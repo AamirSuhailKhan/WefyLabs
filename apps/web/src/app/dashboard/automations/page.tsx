@@ -1,41 +1,42 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VisualWorkflowCanvas } from '@/components/automation/VisualWorkflowCanvas';
 import { Zap, Sparkles, Plus, Play, CheckCircle2, RefreshCw, Layers } from 'lucide-react';
+
+import { api } from '@/lib/api-client';
 
 export default function AutomationsPage() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const workflows = [
-    {
-      id: '1',
-      name: 'High Budget Lead Auto-Assignment & Brochure Dispatch',
-      description: 'Triggers when a new lead arrives on WhatsApp with budget > $1M.',
-      is_active: true,
-      trigger_type: 'whatsapp_received',
-      nodes_count: 4,
-      last_executed_at: '2 min ago'
-    },
-    {
-      id: '2',
-      name: 'Stalled Deal Escalate to Manager',
-      description: "Triggers when a deal remains in 'Booking' stage for over 5 days.",
-      is_active: true,
-      trigger_type: 'deal_moved',
-      nodes_count: 3,
-      last_executed_at: '1 hour ago'
-    }
-  ];
+  useEffect(() => {
+    const fetchWorkflows = async () => {
+      try {
+        const data = await api.workflows.list();
+        setWorkflows(data.items || data.workflows || data || []);
+      } catch {
+        setWorkflows([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWorkflows();
+  }, []);
 
-  const handleGenerateAI = () => {
+  const handleGenerateAI = async () => {
     if (!aiPrompt.trim()) return;
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    try {
+      await api.workflows.generateAI(aiPrompt);
       setAiPrompt('');
-    }, 800);
+    } catch {
+      // silent — user-facing message not needed for generation attempt
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (

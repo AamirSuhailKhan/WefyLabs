@@ -15,46 +15,66 @@ export default function StatsCards({ leads }: StatsCardsProps) {
   const hotLeads = leads.filter((l) => l.score === 'hot').length;
   const warmLeads = leads.filter((l) => l.score === 'warm').length;
   const qualifiedCount = leads.filter((l) => l.status === 'qualified' || l.status === 'converted').length;
-  const qualRate = totalLeads > 0 ? Math.round((qualifiedCount / totalLeads) * 100) : 94;
+  const qualRate = totalLeads > 0 ? Math.round((qualifiedCount / totalLeads) * 100) : 0;
 
   const totalPipelineValue = leads
     .filter((l) => l.score === 'hot' || l.score === 'warm')
     .reduce((acc, l) => acc + (l.budget_max || l.budget_min || 0), 0);
 
+  // Compute trend from real timestamps
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  const leadsThisWeek = leads.filter((l) => l.created_at && new Date(l.created_at) >= sevenDaysAgo).length;
+  const leadsLastWeek = leads.filter(
+    (l) => l.created_at && new Date(l.created_at) >= fourteenDaysAgo && new Date(l.created_at) < sevenDaysAgo
+  ).length;
+
+  let trendSub = '--';
+  if (totalLeads > 0 && (leadsThisWeek > 0 || leadsLastWeek > 0)) {
+    if (leadsLastWeek === 0) {
+      trendSub = `+${leadsThisWeek} new this week`;
+    } else {
+      const diffPct = Math.round(((leadsThisWeek - leadsLastWeek) / leadsLastWeek) * 100);
+      trendSub = `${diffPct >= 0 ? '+' : ''}${diffPct}% this week`;
+    }
+  }
+
   const stats = [
     {
       label: 'TOTAL FORWARDED LEADS',
-      rawNum: totalLeads > 0 ? totalLeads : 47,
+      rawNum: totalLeads,
       suffix: '',
       prefix: '',
-      sub: '+14% this week',
+      sub: trendSub,
       icon: Users,
       iconBg: '#CCFBF1',
       iconColor: '#0D9488',
     },
     {
       label: 'HOT LEADS (READY NOW)',
-      rawNum: hotLeads > 0 ? hotLeads : 3,
+      rawNum: hotLeads,
       suffix: '',
       prefix: '',
-      sub: `${warmLeads || 1} warm leads in pipeline`,
+      sub: `${warmLeads} warm leads in pipeline`,
       icon: Flame,
       iconBg: '#FEF3C7',
       iconColor: '#B45309',
     },
     {
       label: 'AI QUALIFICATION RATE',
-      rawNum: qualRate || 94,
+      rawNum: qualRate,
       suffix: '%',
       prefix: '',
-      sub: 'Auto-qualified via WhatsApp',
+      sub: totalLeads > 0 ? `${qualifiedCount} of ${totalLeads} auto-qualified` : 'No leads to qualify',
       icon: CheckCircle2,
       iconBg: '#CCFBF1',
       iconColor: '#0D9488',
     },
     {
       label: 'QUALIFIED PIPELINE BUDGET',
-      displayVal: totalPipelineValue > 0 ? formatCurrencyINR(totalPipelineValue) : '₹1.40 Cr',
+      displayVal: totalPipelineValue > 0 ? formatCurrencyINR(totalPipelineValue) : '₹0',
       sub: 'Combined hot/warm budget',
       icon: TrendingUp,
       iconBg: '#DCFCE7',

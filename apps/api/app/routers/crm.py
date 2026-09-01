@@ -78,27 +78,6 @@ class TagResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class TaskCreate(BaseModel):
-    lead_id: Optional[str] = None
-    title: str
-    due_at: datetime
-
-class TaskStatusUpdate(BaseModel):
-    status: str # pending | completed | cancelled
-
-class TaskResponse(BaseModel):
-    id: str
-    broker_id: str
-    lead_id: Optional[str] = None
-    title: str
-    due_at: datetime
-    status: str
-    reminder_sent: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 # --- Endpoints: Pipeline Stages ---
 @router.get("/stages", response_model=List[StageResponse])
@@ -237,51 +216,3 @@ def remove_tag_from_lead(
         db.delete(assignment)
         db.commit()
     return {"message": "Tag removed from lead"}
-
-
-# --- Endpoints: Tasks / Reminders ---
-@router.get("/tasks", response_model=List[TaskResponse])
-def get_tasks(
-    lead_id: Optional[str] = None,
-    broker: Broker = Depends(get_current_broker),
-    db: Session = Depends(get_db)
-):
-    query = db.query(Task).filter(Task.broker_id == broker.id)
-    if lead_id:
-        query = query.filter(Task.lead_id == lead_id)
-    tasks = query.order_by(Task.due_at.asc()).all()
-    return tasks
-
-@router.post("/tasks", response_model=TaskResponse)
-def create_task(
-    payload: TaskCreate,
-    broker: Broker = Depends(get_current_broker),
-    db: Session = Depends(get_db)
-):
-    task = Task(
-        broker_id=broker.id,
-        lead_id=payload.lead_id,
-        title=payload.title,
-        due_at=payload.due_at,
-        status="pending"
-    )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task
-
-@router.patch("/tasks/{task_id}", response_model=TaskResponse)
-def update_task_status(
-    task_id: str,
-    payload: TaskStatusUpdate,
-    broker: Broker = Depends(get_current_broker),
-    db: Session = Depends(get_db)
-):
-    task = db.query(Task).filter(Task.id == task_id, Task.broker_id == broker.id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task.status = payload.status
-    db.commit()
-    db.refresh(task)
-    return task

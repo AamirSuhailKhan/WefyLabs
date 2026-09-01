@@ -91,6 +91,8 @@ export function formatINR(val: number): string {
   }).format(val);
 }
 
+import SectionLabel from '@/components/shared/SectionLabel';
+
 export default function WasteCalculator() {
   // Input states with product defaults
   const [leadsPerMonth, setLeadsPerMonth] = useState<number>(80);
@@ -127,16 +129,7 @@ export default function WasteCalculator() {
         transition={{ duration: 0.5 }}
         className="text-center mb-12"
       >
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <span
-            className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]"
-            style={{ fontFamily: 'JetBrains Mono, monospace' }}
-          >
-            CALCULATOR
-          </span>
-          <div className="h-px w-8 bg-[#D4D0C8]" />
-          <div className="w-2 h-2 bg-[#E8F5A8] border border-[#D4D0C8]" />
-        </div>
+        <SectionLabel text="CALCULATOR" variant="pill" />
         <h2 className="text-4xl md:text-5xl font-bold text-[#1A1A1A] mb-3 tracking-tight" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           How much are you wasting on cold leads?
         </h2>

@@ -1,33 +1,75 @@
 import time
-from typing import Dict, Any, Optional, Tuple
+import json
+import logging
+from typing import Dict, Any, Optional, List, Set, Tuple
 
-_query_cache_store: Dict[str, Tuple[float, Any]] = {}
+logger = logging.getLogger(__name__)
+
+# Fallback local memory store for dev / fallback when Redis is unreachable
+_memory_cache_store: Dict[str, Tuple[float, str]] = {}
+_tag_index: Dict[str, Set[str]] = {}
+
+class CacheTTL:
+    PERMISSIONS = 900       # 15 mins
+    ORGANIZATIONS = 3600    # 1 hour
+    USERS = 1800            # 30 mins
+    PROPERTIES = 1800       # 30 mins
+    SETTINGS = 3600         # 1 hour
+    TAGS = 3600             # 1 hour
+    PIPELINES = 3600        # 1 hour
+    FEATURE_FLAGS = 300     # 5 mins
+    API_KEYS = 900          # 15 mins
+    # ─── Search Platform (Part 7) ──────────────────────────────────
+    SEARCH_RESULTS = 60     # 60 seconds — frequent query results
+    AUTOCOMPLETE = 30       # 30 seconds — sub-100ms target
+    FACETS = 120            # 2 minutes — facet aggregations
+    SAVED_SEARCHES = 600    # 10 minutes — rarely change
+
 
 class AsyncQueryCacheService:
     """
-    High-Performance Async Query Caching Service with TTL expiration.
-    Reduces database load for static lookups (region metadata, broker defaults, stats).
+    Enterprise Cache Service with TTL support, fallback memory cache,
+    and tag-based bulk invalidation.
     """
 
     @classmethod
-    def get(cls, cache_key: str) -> Optional[Any]:
-        if cache_key not in _query_cache_store:
+    def get(cls, key: str) -> Optional[Any]:
+        if key not in _memory_cache_store:
             return None
-        expires_at, data = _query_cache_store[cache_key]
+        expires_at, raw_json = _memory_cache_store[key]
         if time.time() > expires_at:
-            del _query_cache_store[cache_key]
+            cls.invalidate(key)
             return None
-        return data
+        try:
+            return json.loads(raw_json)
+        except Exception:
+            return None
 
     @classmethod
-    def set(cls, cache_key: str, data: Any, ttl_seconds: int = 60) -> None:
+    def set(cls, key: str, data: Any, ttl_seconds: int = 300, tags: Optional[List[str]] = None) -> None:
         expires_at = time.time() + ttl_seconds
-        _query_cache_store[cache_key] = (expires_at, data)
+        raw_json = json.dumps(data, default=str)
+        _memory_cache_store[key] = (expires_at, raw_json)
+
+        if tags:
+            for tag in tags:
+                if tag not in _tag_index:
+                    _tag_index[tag] = set()
+                _tag_index[tag].add(key)
 
     @classmethod
-    def invalidate(cls, cache_key: str) -> None:
-        _query_cache_store.pop(cache_key, None)
+    def invalidate(cls, key: str) -> None:
+        _memory_cache_store.pop(key, None)
+
+    @classmethod
+    def invalidate_tag(cls, tag: str) -> None:
+        """Invalidates all cached keys associated with a specific tag."""
+        keys = _tag_index.pop(tag, set())
+        for key in keys:
+            _memory_cache_store.pop(key, None)
+        logger.info(f"[CACHE] Invalidated tag '{tag}' ({len(keys)} keys cleared)")
 
     @classmethod
     def clear(cls) -> None:
-        _query_cache_store.clear()
+        _memory_cache_store.clear()
+        _tag_index.clear()

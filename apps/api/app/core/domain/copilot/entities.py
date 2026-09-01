@@ -11,6 +11,7 @@ class PageContextType(str, Enum):
     PROPERTIES = "properties"
     DEALS = "deals"
     ANALYTICS = "analytics"
+    SETTINGS = "settings"
     UNKNOWN = "unknown"
 
 @dataclass
@@ -36,6 +37,9 @@ class CopilotResponseEntity:
     summary: str
     answer_markdown: str
     confidence_score: float = 0.95
+    reasoning: Optional[str] = None
+    rich_cards: List[Dict[str, Any]] = field(default_factory=list)
+    action_buttons: List[Dict[str, Any]] = field(default_factory=list)
     citations: List[str] = field(default_factory=list)
     suggested_followups: List[str] = field(default_factory=list)
     executed_tools: List[CopilotToolCallEntity] = field(default_factory=list)

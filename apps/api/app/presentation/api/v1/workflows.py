@@ -8,7 +8,7 @@ from app.models.broker import Broker
 from app.services.workflow_execution_engine import WorkflowExecutionEngine
 from app.services.workflow_ai_generator import WorkflowAIGeneratorService
 
-router = APIRouter(prefix="/v1/workflows", tags=["No-Code Visual Workflow Builder"])
+router = APIRouter(prefix="/workflows", tags=["No-Code Visual Workflow Builder"])
 
 class AIGenerateWorkflowRequest(BaseModel):
     prompt: str

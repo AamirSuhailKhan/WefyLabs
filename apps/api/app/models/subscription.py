@@ -48,7 +48,7 @@ class Subscription(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('created', 'active', 'cancelled', 'completed')",
+            "status IN ('created', 'active', 'paused', 'past_due', 'cancelled', 'completed', 'expired')",
             name="ck_subscriptions_status"
         ),
     )

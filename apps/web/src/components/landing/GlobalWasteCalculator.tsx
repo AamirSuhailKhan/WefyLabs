@@ -15,6 +15,8 @@ import Link from 'next/link';
 import { useRegion } from '@/lib/i18n/region-context';
 import { formatCurrency } from '@/lib/i18n/currency';
 
+import SectionLabel from '@/components/shared/SectionLabel';
+
 export default function GlobalWasteCalculator() {
   const { region } = useRegion();
 
@@ -122,13 +124,7 @@ export default function GlobalWasteCalculator() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="text-center mb-12"
       >
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <span className="bg-gray-100 text-gray-600 rounded-full text-xs uppercase tracking-wider px-3 py-1 font-sans">
-            CALCULATOR
-          </span>
-          <div className="h-px w-8 bg-gray-300" />
-          <div className="w-2 h-2 bg-[#d4f5a4] rounded-sm" />
-        </div>
+        <SectionLabel text="CALCULATOR" variant="pill" />
 
         <h2 className="text-3xl md:text-5xl font-mono text-gray-900 font-bold tracking-tight mb-4">
           How much are you wasting on cold leads?

@@ -3,6 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Code2, Sparkles, Play, CheckCircle2, Check } from 'lucide-react';
+import SectionLabel from '@/components/shared/SectionLabel';
 
 const cards = [
   {
@@ -80,18 +81,7 @@ export default function FeaturesGrid() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] as any }}
         className="text-center mb-14"
       >
-        <div className="inline-flex items-center gap-3 mb-4">
-          <span
-            className="text-xs font-mono uppercase tracking-[0.2em] text-[#6B6B6B]"
-          >
-            HOW IT WORKS
-          </span>
-          <motion.span
-            className="w-1.5 h-1.5 bg-[#E8F5A8] border border-[#D4D0C8] rounded-sm block"
-            animate={{ scale: [1, 1.35, 1], opacity: [1, 0.6, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-          />
-        </div>
+        <SectionLabel text="HOW IT WORKS" />
         <h2
           className="text-4xl md:text-5xl font-bold text-[#1A1A1A] mb-4"
           style={{ fontFamily: 'JetBrains Mono, Geist Mono, Courier New, monospace' }}

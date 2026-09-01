@@ -135,16 +135,16 @@ export default function LeadsPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
               {/* Search */}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B6B6B]" />
                 <input
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search name, phone..."
-                  className="pl-9 pr-4 py-2.5 bg-[#FAF7F2] border border-[#D4D0C8] rounded-lg text-[13px] text-[#1A1A1A] placeholder:text-[#A0A0A0] focus:outline-none focus:border-[#1A1A1A] w-64"
+                  className="pl-9 pr-4 py-2.5 bg-[#FAF7F2] border border-[#D4D0C8] rounded-lg text-[13px] text-[#1A1A1A] placeholder:text-[#A0A0A0] focus:outline-none focus:border-[#1A1A1A] w-full sm:w-64"
                   style={{ fontFamily: 'Inter, sans-serif' }}
                 />
               </div>

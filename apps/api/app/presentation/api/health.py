@@ -7,6 +7,12 @@ from app.config import settings
 
 health_router = APIRouter(prefix="/health", tags=["Health & Monitoring"])
 
+@health_router.get("", status_code=status.HTTP_200_OK)
+@health_router.get("/", status_code=status.HTTP_200_OK)
+async def health_check():
+    """General health check endpoint."""
+    return {"status": "ok", "service": settings.PROJECT_NAME, "version": settings.VERSION}
+
 @health_router.get("/liveness", status_code=status.HTTP_200_OK)
 async def liveness_check():
     """Kubernetes / Load Balancer Liveness Probe."""

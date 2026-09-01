@@ -1,0 +1,91 @@
+# ==============================================================================
+# BeetleLabs Enterprise Kubernetes Production Manifests
+# Features: RollingUpdate, HPA (3-20 pods), PodDisruptionBudget, Resource Quotas.
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beetlelabs-api
+  namespace: production
+  labels:
+    app: beetlelabs-api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: beetlelabs-api
+  template:
+    metadata:
+      labels:
+        app: beetlelabs-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: api
+          image: beetlelabs/api:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2048Mi"
+          livenessProbe:
+            httpGet:
+              path: /v1/health-diag/liveness
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /v1/health-diag/readiness
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          envFrom:
+            - configMapRef:
+                name: beetlelabs-config
+            - secretRef:
+                name: beetlelabs-secrets
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: beetlelabs-api-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: beetlelabs-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: beetlelabs-api-pdb
+  namespace: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: beetlelabs-api

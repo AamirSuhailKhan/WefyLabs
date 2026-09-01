@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { UserPlus, Menu, X, LogOut, Settings, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useBroker } from '@/lib/auth-context';
 import { BeetleLabsLogo } from './BeetleLabsLogo';
 
 const NAV_LINKS = [
@@ -13,6 +14,7 @@ const NAV_LINKS = [
   { label: 'Leads', href: '/dashboard/leads' },
   { label: 'Pipeline', href: '/dashboard/pipeline' },
   { label: 'Tasks', href: '/dashboard/tasks' },
+  { label: 'Knowledge', href: '/knowledge' },
   { label: 'Settings', href: '/dashboard/settings' },
 ];
 
@@ -21,7 +23,9 @@ interface DashboardNavProps {
 }
 
 export default function DashboardNav({ onAddLead }: DashboardNavProps) {
+  const { broker, firstName, logout } = useBroker();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [trialDays, setTrialDays] = useState<number | null>(7);
   const [subStatus, setSubStatus] = useState<string>('trial');
@@ -143,28 +147,58 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
               </button>
             )}
 
-            <div className="relative group">
-              <button className="w-8 h-8 rounded-full bg-[#E8F5A8] border border-[#D4D0C8] flex items-center justify-center text-[#1A1A1A] text-[11px] font-extrabold shrink-0 hover:ring-2 hover:ring-[#D4D0C8] transition-all">
-                RS
+            <div
+              className="relative group"
+              onMouseLeave={() => setProfileOpen(false)}
+            >
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                className="h-8 px-3 rounded-full bg-[#E8F5A8] border border-[#D4D0C8] flex items-center gap-1.5 text-[#1A1A1A] text-[12px] font-bold shrink-0 hover:ring-2 hover:ring-[#1A1A1A] transition-all cursor-pointer select-none shadow-2xs max-w-[140px]"
+                title={broker?.name ? `Signed in as ${broker.name}` : `Signed in as ${firstName}`}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0" />
+                <span className="truncate">{firstName}</span>
               </button>
-              <div className="absolute right-0 top-10 hidden group-hover:block w-44 bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl py-1 z-50 shadow-sm">
-                <Link
-                  href="/dashboard/settings"
-                  className="flex items-center gap-2.5 px-3 py-2 text-xs text-[#4A4A4A] hover:bg-[#F0EDE8] hover:text-[#1A1A1A] transition-colors"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Settings
-                </Link>
-                <button
-                  onClick={() => {
-                    api.auth.logout();
-                    window.location.href = '/login';
-                  }}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs text-[#B45309] hover:bg-[#FEF3C7] transition-colors"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Sign out
-                </button>
+
+              <div
+                className={`absolute right-0 top-full pt-1.5 z-50 ${
+                  profileOpen ? 'block' : 'hidden group-hover:block'
+                }`}
+              >
+                <div className="w-56 bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl py-1.5 shadow-lg">
+                  <div className="px-3 py-2 border-b border-[#EAE6DF] mb-1">
+                    <p className="text-[12px] font-bold text-[#1A1A1A] truncate">
+                      {broker?.name || 'Real Estate Broker'}
+                    </p>
+                    <p className="text-[10px] text-[#6B6B6B] font-mono truncate">
+                      {broker?.email || 'broker@beetlelabs.ai'}
+                    </p>
+                    {broker?.agency_name && (
+                      <p className="text-[10px] text-[#0F766E] font-medium truncate mt-0.5">
+                        {broker.agency_name}
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href="/dashboard/settings"
+                    onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#4A4A4A] hover:bg-[#F0EDE8] hover:text-[#1A1A1A] transition-colors"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    Settings
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setProfileOpen(false);
+                      logout();
+                      window.location.href = '/login';
+                    }}
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[#B45309] hover:bg-[#FEF3C7] transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign out
+                  </button>
+                </div>
               </div>
             </div>
 

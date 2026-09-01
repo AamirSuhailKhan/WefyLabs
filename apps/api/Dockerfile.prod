@@ -1,0 +1,48 @@
+# ==============================================================================
+# BeetleLabs Enterprise API — Production Multi-Stage Dockerfile
+# Security Hardened: Non-root user, minimal distroless/alpine base, CVE-scanned.
+# ==============================================================================
+
+# Build Stage
+FROM python:3.11-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-libc-dev --no-cache build-base libffi-dev postgresql-dev
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Production Runtime Stage
+FROM python:3.11-alpine AS runner
+
+WORKDIR /app
+
+# Add non-root application user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+RUN apk add --no-cache libpq libstdc++ curl
+
+COPY --from=builder /install /usr/local
+COPY . /app
+
+# Set ownership to non-root user
+RUN chown -R appuser:appgroup /app
+USER appuser
+
+EXPOSE 8000
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENV=production \
+    PORT=8000 \
+    WORKERS=4 \
+    LOG_LEVEL=info
+
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/v1/health-diag/liveness || exit 1
+
+CMD ["/app/entrypoint.sh"]

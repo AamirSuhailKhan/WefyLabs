@@ -7,7 +7,7 @@ from app.dependencies import get_current_broker
 from app.models.broker import Broker
 from app.services.customer_portal_service import CustomerPortalService
 
-router = APIRouter(prefix="/v1/portal", tags=["Zillow & Airbnb Grade Customer Self-Service Portal"])
+router = APIRouter(prefix="/portal", tags=["Zillow & Airbnb Grade Customer Self-Service Portal"])
 
 class AskAIPropertyRequest(BaseModel):
     question: str

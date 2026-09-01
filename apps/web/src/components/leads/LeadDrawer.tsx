@@ -8,6 +8,7 @@ import {
 import { api } from '@/lib/api-client';
 import { LeadDetail, LeadNote, LeadTag, Task, Conversation } from '@/types';
 import ScoreBadge from '@/components/shared/ScoreBadge';
+import LeadSchedulingTab from './LeadSchedulingTab';
 
 interface LeadDrawerProps {
   leadId: string | null;
@@ -23,7 +24,7 @@ export default function LeadDrawer({ leadId, isOpen, onClose, onLeadUpdated }: L
   const [allTags, setAllTags] = useState<LeadTag[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'tasks' | 'chat'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'schedule' | 'notes' | 'tasks' | 'chat'>('overview');
 
   // Form states
   const [newNote, setNewNote] = useState('');
@@ -267,6 +268,16 @@ export default function LeadDrawer({ leadId, isOpen, onClose, onLeadUpdated }: L
             </button>
 
             <button
+              onClick={() => setActiveTab('schedule')}
+              className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'schedule' ? 'border-[#0D9488] text-[#0D9488]' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Schedule & Viewings</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('notes')}
               className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 ${
                 activeTab === 'notes' ? 'border-[#0D9488] text-[#0D9488]' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
@@ -432,7 +443,12 @@ export default function LeadDrawer({ leadId, isOpen, onClose, onLeadUpdated }: L
               </div>
             )}
 
-            {/* TAB 2: NOTES */}
+            {/* TAB 2: SCHEDULE & VIEWINGS */}
+            {activeTab === 'schedule' && lead && (
+              <LeadSchedulingTab lead={lead} onLeadUpdated={onLeadUpdated} />
+            )}
+
+            {/* TAB 3: NOTES */}
             {activeTab === 'notes' && (
               <div className="space-y-4">
                 <form onSubmit={handleAddNote} className="space-y-2">

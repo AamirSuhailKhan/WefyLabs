@@ -9,25 +9,37 @@ INDIAN_PHONE_REGEX = re.compile(r"^(\+91)?([6-9]\d{9})$")
 def validate_and_normalize_indian_phone(v: Optional[str]) -> Optional[str]:
     if v is None:
         return None
-    cleaned = v.strip()
+    if not isinstance(v, str):
+        raise ValueError("Phone number must be a valid text string.")
+    
+    # Strip spaces, hyphens, parentheses, dots
+    cleaned = re.sub(r"[\s\-\(\)\.]+", "", v.strip())
+    if not cleaned:
+        return None
+    
+    # Handle leading 0 (e.g. 09876543210 -> 9876543210)
+    if cleaned.startswith("0") and len(cleaned) == 11 and cleaned[1] in "6789":
+        cleaned = cleaned[1:]
+        
     match = INDIAN_PHONE_REGEX.match(cleaned)
     if not match:
-        raise ValueError("Invalid Indian phone number format. Must be +91XXXXXXXXXX or 10-digit number starting with 6-9.")
+        raise ValueError("Invalid phone number format. Please enter a valid 10-digit Indian phone number (e.g. +91 98765 43210 or 9876543210).")
     ten_digit = match.group(2)
     return f"+91{ten_digit}"
 
 class BrokerBase(BaseModel):
     email: EmailStr
-    phone: str = Field(..., max_length=20)
+    phone: Optional[str] = Field(None, max_length=20)
     name: str = Field(..., max_length=255)
     agency_name: Optional[str] = Field(None, max_length=255)
-    city: str = Field("Bengaluru", max_length=100)
-    whatsapp_number: str = Field(..., max_length=20)
+    city: Optional[str] = Field("Bengaluru", max_length=100)
+    whatsapp_number: Optional[str] = Field(None, max_length=20)
 
     @field_validator("phone", "whatsapp_number", mode="before")
-    def validate_phone_numbers(cls, v: str) -> str:
+    def validate_phone_numbers(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         res = validate_and_normalize_indian_phone(v)
-        assert res is not None
         return res
 
 class BrokerCreate(BrokerBase):
@@ -48,6 +60,7 @@ class BrokerUpdate(BaseModel):
 class BrokerResponse(BrokerBase):
     id: uuid.UUID
     subscription_status: str
+    onboarding_status: str
     trial_ends_at: datetime
     subscription_plan: Optional[str] = None
     razorpay_customer_id: Optional[str] = None

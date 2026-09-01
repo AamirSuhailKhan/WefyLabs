@@ -11,6 +11,7 @@ import MarketSelector from '@/components/landing/MarketSelector';
 import GlobalWasteCalculator from '@/components/landing/GlobalWasteCalculator';
 import GlobalPricing from '@/components/landing/GlobalPricing';
 import HeroRobot from '@/components/shared/HeroRobot';
+import SectionLabel from '@/components/shared/SectionLabel';
 import { motion, AnimatePresence } from 'framer-motion';
 import ScrollReveal from '@/components/shared/ScrollReveal';
 import { useReducedMotion } from '@/lib/animations';
@@ -454,13 +455,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6, ease: EXPO }}
             className="text-center mb-10"
           >
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                HOW IT WORKS
-              </span>
-              <div className="h-px w-8 bg-[#D4D0C8]" />
-              <div className="w-2 h-2 bg-[#E8F5A8] border border-[#D4D0C8]" />
-            </div>
+            <SectionLabel text="HOW IT WORKS" />
             <h2 className="text-4xl md:text-5xl font-bold mono-headline mb-3">
               From WhatsApp to qualified lead in 3 steps
             </h2>
@@ -533,12 +528,8 @@ export default function LandingPage() {
               whileInView={reduced ? {} : 'visible'}
               viewport={{ once: true }}
             >
-              <motion.div variants={reduced ? undefined : textItem} className="flex items-center justify-center gap-3 mb-4">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  EARLY ACCESS
-                </span>
-                <div className="h-px w-8 bg-[#D4D0C8]" />
-                <div className="w-2 h-2 bg-[#E8F5A8] border border-[#D4D0C8]" />
+              <motion.div variants={reduced ? undefined : textItem}>
+                <SectionLabel text="EARLY ACCESS" />
               </motion.div>
 
               <motion.h2 variants={reduced ? undefined : textItem} className="text-3xl md:text-4xl font-bold mono-headline mb-3">
@@ -613,13 +604,7 @@ export default function LandingPage() {
                 transition={{ duration: 0.7, ease: EXPO }}
                 className="md:col-span-2 p-8 md:p-10 border-b md:border-b-0 md:border-r border-[#D4D0C8]"
               >
-                <div className="flex items-center gap-3 mb-6">
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    SECURITY
-                  </span>
-                  <div className="h-px w-8 bg-[#D4D0C8]" />
-                  <div className="w-2 h-2 bg-[#E8F5A8] border border-[#D4D0C8]" />
-                </div>
+                <SectionLabel text="SECURITY" className="justify-start" />
                 <h2 className="text-3xl font-bold mono-headline mb-4">Your data, handled with care</h2>
                 <p className="text-[16px] text-[#4A4A4A] leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
                   No shortcuts, no excuses. Your lead data is protected by design, not by afterthought.
@@ -676,13 +661,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6, ease: EXPO }}
             className="text-center mb-12"
           >
-            <div className="flex items-center justify-center gap-3 mb-5">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                FAQ
-              </span>
-              <div className="h-px w-8 bg-[#D4D0C8]" />
-              <div className="w-2 h-2 bg-[#E8F5A8] border border-[#D4D0C8]" />
-            </div>
+            <SectionLabel text="FAQ" />
             <h2 className="text-4xl font-bold text-[#1A1A1A] tracking-tight" style={{ fontFamily: 'JetBrains Mono, Geist Mono, Courier New, monospace' }}>
               Have Questions?{' '}
               <span className="font-extrabold">We've Answers!</span>

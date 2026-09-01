@@ -16,8 +16,11 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', 'framer-motion', 'recharts'],
   },
   async rewrites() {
-    const backendUrl = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
-    const cleanBackendUrl = backendUrl.replace(/\/$/, '');
+    const rawBackendUrl = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    let cleanBackendUrl = rawBackendUrl.replace(/\/$/, '');
+    if (!cleanBackendUrl.endsWith('/api/v1')) {
+      cleanBackendUrl = `${cleanBackendUrl}/api/v1`;
+    }
     return [
       {
         source: '/api/v1/:path*',

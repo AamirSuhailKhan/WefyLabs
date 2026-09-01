@@ -9,7 +9,7 @@ from app.infrastructure.persistence.sqlalchemy_lead_repository import SQLAlchemy
 from app.core.application.leads.use_cases import LeadUseCases, CreateLeadCommand, QualifyLeadCommand
 from app.core.domain.leads.entities import PipelineStageEnum, LeadScoreCategory
 
-router = APIRouter(prefix="/v1/leads", tags=["Clean Architecture Leads V1"])
+router = APIRouter(prefix="/clean-leads", tags=["Clean Architecture Leads V1"])
 
 def get_lead_use_cases(db: AsyncSession = Depends(get_db)) -> LeadUseCases:
     repo = SQLAlchemyLeadRepository(db)
