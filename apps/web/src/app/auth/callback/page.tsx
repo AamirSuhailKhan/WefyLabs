@@ -80,30 +80,37 @@ function AuthCallbackContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="min-h-screen bg-[#0A0D14] text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-tr from-blue-600/20 to-purple-600/20 rounded-full blur-[140px] pointer-events-none" />
+    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Ambient background matching login */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden flex items-center justify-center">
+        <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] max-w-[800px] max-h-[800px] bg-[#E8F5A8] opacity-20 blur-[120px] rounded-full mix-blend-multiply" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] bg-[#d4f5a4] opacity-20 blur-[100px] rounded-full mix-blend-multiply" />
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMCIvPgo8cGF0aCBkPSJNMCAwTDRgME0wIDRMNCw0TTAgMEw0LDRNMCA0TDQsMCIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjAuMDUiIHN0cm9rZS1vcGFjaXR5PSIwLjAyIi8+Cjwvc3ZnPg==')] opacity-50 mix-blend-multiply" />
+      </div>
 
-      <div className="relative z-10 flex flex-col items-center text-center max-w-md bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl">
+      <div className="relative z-10 flex flex-col items-center text-center w-full max-w-md bg-white border border-[#D4D0C8] rounded-3xl p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <div className="mb-6">
-          <WefyLabsLogo dark href="/" iconSize={36} textSize="text-2xl" />
+          <WefyLabsLogo dark={false} href="/" iconSize={36} textSize="text-2xl" />
         </div>
 
         {errorMessage ? (
           <div className="space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
+            <div className="w-12 h-12 rounded-full bg-[#FEE2E2] border border-[#FCA5A5] flex items-center justify-center mx-auto text-[#DC2626]">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <h2 className="text-lg font-bold text-red-400">Authentication Failed</h2>
-            <p className="text-sm text-gray-400">{errorMessage}</p>
-            <p className="text-xs text-gray-500">Redirecting you back to login...</p>
+            <h2 className="text-lg font-bold mono-headline text-[#DC2626]">Authentication Failed</h2>
+            <p className="text-sm text-[#6B6B6B]">{errorMessage}</p>
+            <p className="text-xs text-[#A0A0A0] font-mono">Redirecting you back to login...</p>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-2 border-blue-500 border-t-transparent mx-auto" />
-            <h2 className="text-lg font-bold text-white">Authenticating with Google...</h2>
-            <p className="text-sm text-gray-400">Verifying credentials and securely preparing your workspace.</p>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
+            <h2 className="text-lg font-bold mono-headline text-[#1A1A1A]">Authenticating with Google...</h2>
+            <p className="text-sm text-[#6B6B6B]" style={{ fontFamily: 'Inter, sans-serif' }}>
+              Verifying credentials and securely preparing your workspace.
+            </p>
           </div>
         )}
       </div>
@@ -115,8 +122,8 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0A0D14] flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+        <div className="min-h-screen bg-[#F0EDE8] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#1A1A1A] border-t-transparent" />
         </div>
       }
     >

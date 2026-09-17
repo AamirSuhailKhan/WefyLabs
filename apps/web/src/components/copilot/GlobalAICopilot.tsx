@@ -411,7 +411,7 @@ export function GlobalAICopilot() {
         >
           <WefyLabsIcon size={14} theme="dark" />
           <span>AI Copilot</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span className="w-2 h-2 rounded-full bg-[#E8F5A8] border border-[#1A1A1A]/30" />
         </button>
       )}
 
