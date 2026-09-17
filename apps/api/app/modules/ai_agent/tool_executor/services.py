@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
-logger = logging.getLogger("beetlelabs.ai_agent.services")
+logger = logging.getLogger("wefylabs.ai_agent.services")
 
 
 import uuid

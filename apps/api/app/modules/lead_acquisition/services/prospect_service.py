@@ -16,18 +16,19 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 
 from app.models.acquisition_models import (
-    LeadProspect, LeadAcquisitionEvent, SourceAttribution,
+    LeadProspect, LeadAcquisitionEvent, SourceAttribution, LeadSource,
     ProspectStatus, DuplicateMatchStatus, ConsentStatus
 )
 from app.models.lead import Lead
+from app.models.crm_models import Task, Notification, Activity
 from app.modules.lead_acquisition.services.normalization_service import (
     normalize_phone, normalize_email, normalize_name,
     normalize_budget, normalize_currency, normalize_country_code
@@ -187,24 +188,54 @@ class ProspectService:
         self,
         organization_id: str,
         prospect: LeadProspect,
-        broker_uuid: uuid.UUID,
+        broker_uuid: Optional[uuid.UUID] = None,
         override_name: Optional[str] = None,
+        utm_params: Optional[Dict[str, Any]] = None,
     ) -> Lead:
         """
-        Import a READY prospect as a canonical CRM Lead.
+        Import a READY or DUPLICATE prospect as a canonical CRM Lead.
 
         Preserves source attribution. Uses existing Lead model.
         NEVER creates duplicate if exact match found.
         """
-        if prospect.status == ProspectStatus.DUPLICATE and prospect.matched_lead_id:
-            # Update existing lead with new attribution, don't create duplicate
+        # If duplicate: link to existing lead, add activity, do not create duplicate lead
+        if (prospect.status == ProspectStatus.DUPLICATE or prospect.duplicate_status in (
+            DuplicateMatchStatus.EXACT_MATCH, DuplicateMatchStatus.HIGH_CONFIDENCE_MATCH
+        )) and prospect.matched_lead_id:
             existing_lead = await self._get_lead(prospect.matched_lead_id)
             if existing_lead:
-                await self._create_attribution(organization_id, existing_lead.id, prospect)
+                await self._create_attribution(organization_id, str(existing_lead.id), prospect, utm_params=utm_params)
                 prospect.canonical_lead_id = str(existing_lead.id)
                 prospect.status = ProspectStatus.IMPORTED
+
+                # Log re-engagement activity on existing lead
+                try:
+                    reengage_act = Activity(
+                        actor_id=existing_lead.broker_id,
+                        lead_id=existing_lead.id,
+                        organization_id=organization_id,
+                        activity_type="lead_reengaged",
+                        title="Lead Re-engaged",
+                        description=f"Prospect resubmitted via source {prospect.source_id or 'unknown'}",
+                        activity_data={"source_id": prospect.source_id, "prospect_id": prospect.id}
+                    )
+                    self.db.add(reengage_act)
+                except Exception as act_err:
+                    logger.debug(f"[PROSPECT] Failed to record re-engagement activity: {act_err}")
+
                 await self.db.commit()
                 return existing_lead
+
+        # Determine assigned broker if not provided
+        if not broker_uuid:
+            from app.modules.lead_acquisition.services.assignment_service import LeadAssignmentService
+            assignment_svc = LeadAssignmentService(self.db)
+            broker_uuid = await assignment_svc.assign_lead(
+                organization_id=organization_id,
+                source_id=prospect.source_id,
+                property_type=prospect.property_type,
+                location=prospect.city,
+            )
 
         # Create new CRM Lead
         final_name = override_name or prospect.name
@@ -214,15 +245,31 @@ class ProspectService:
 
         source_value = "manual"
         if prospect.source_id:
-            source_value = "manual"  # Map from source channel in production
+            src_stmt = select(LeadSource.channel).where(LeadSource.id == prospect.source_id)
+            src_channel = (await self.db.execute(src_stmt)).scalar()
+            if src_channel:
+                source_value = str(src_channel).lower()
 
-        import uuid as uuid_module
+        # Score determination
+        initial_score = "pending"
+        score_conf = 0.0
+        if prospect.acquisition_quality_score is not None:
+            q_score = float(prospect.acquisition_quality_score)
+            score_conf = round(q_score, 2)
+            if q_score >= 0.75:
+                initial_score = "hot"
+            elif q_score >= 0.5:
+                initial_score = "warm"
+            else:
+                initial_score = "cold"
+
         lead = Lead(
             broker_id=broker_uuid,
             phone=phone,
             name=final_name,
             source=source_value,
-            score="pending",
+            score=initial_score,
+            score_confidence=score_conf,
             property_type=prospect.property_type,
             preferred_locations=[prospect.city] if prospect.city else [],
             budget_min=int(prospect.budget_min) if prospect.budget_min else None,
@@ -237,7 +284,52 @@ class ProspectService:
         await self.db.flush()
 
         # Record attribution
-        await self._create_attribution(organization_id, str(lead.id), prospect)
+        await self._create_attribution(organization_id, str(lead.id), prospect, utm_params=utm_params)
+
+        # Create Follow-up Task for Assigned Broker
+        try:
+            task = Task(
+                broker_id=broker_uuid,
+                lead_id=lead.id,
+                organization_id=organization_id,
+                title=f"Contact new lead: {lead.name or lead.phone}",
+                description=f"Captured via {source_value}. Requirement: {prospect.message or prospect.property_type or 'General Inquiry'}",
+                due_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+                priority="high",
+                status="pending",
+            )
+            self.db.add(task)
+        except Exception as task_err:
+            logger.debug(f"[PROSPECT] Task creation skipped: {task_err}")
+
+        # Create In-App Notification for Assigned Broker
+        try:
+            notif = Notification(
+                broker_id=broker_uuid,
+                organization_id=organization_id,
+                category="lead",
+                title="New Lead Captured",
+                body=f"{lead.name or lead.phone} arrived from {source_value}. Contact immediately.",
+                action_url=f"/dashboard/leads",
+            )
+            self.db.add(notif)
+        except Exception as notif_err:
+            logger.debug(f"[PROSPECT] Notification creation skipped: {notif_err}")
+
+        # Create Activity Entry
+        try:
+            act = Activity(
+                actor_id=broker_uuid,
+                lead_id=lead.id,
+                organization_id=organization_id,
+                activity_type="lead_created",
+                title="Lead Ingested",
+                description=f"Lead captured via {source_value}",
+                activity_data={"source": source_value, "prospect_id": prospect.id}
+            )
+            self.db.add(act)
+        except Exception as act_err:
+            logger.debug(f"[PROSPECT] Activity creation skipped: {act_err}")
 
         # Update prospect
         prospect.canonical_lead_id = str(lead.id)
@@ -286,7 +378,6 @@ class ProspectService:
 
     def _resolve_consent_status(self, any_consent: bool) -> str:
         """UNKNOWN must never automatically become GRANTED."""
-        # Only GRANTED if the prospect explicitly checked a consent box
         return ConsentStatus.GRANTED if any_consent else ConsentStatus.UNKNOWN
 
     async def _find_existing_prospect(
@@ -306,16 +397,60 @@ class ProspectService:
 
     async def _find_lead_by_phone(self, organization_id: str, phone_e164: str) -> Optional[Lead]:
         """Find existing CRM Lead by phone within the organization scope."""
-        # Lead uses broker_id (not organization_id directly); we search across org's brokers
-        # For now, search all leads with matching phone (org isolation via broker is enforced at API layer)
-        stmt = select(Lead).where(
-            and_(Lead.phone == phone_e164, Lead.deleted_at.is_(None))
+        # 1. Check if another prospect in this org was already imported with this phone
+        stmt_prospect = select(LeadProspect.canonical_lead_id).where(
+            and_(
+                LeadProspect.organization_id == organization_id,
+                LeadProspect.phone_e164 == phone_e164,
+                LeadProspect.canonical_lead_id.isnot(None),
+            )
         ).limit(1)
-        return (await self.db.execute(stmt)).scalars().first()
+        canonical_id = (await self.db.execute(stmt_prospect)).scalar()
+        if canonical_id:
+            lead = await self._get_lead(canonical_id)
+            if lead and not lead.deleted_at:
+                return lead
+
+        # 2. Check leads belonging to brokers in this organization
+        try:
+            from app.modules.lead_acquisition.services.assignment_service import LeadAssignmentService
+            assignment_svc = LeadAssignmentService(self.db)
+            brokers = await assignment_svc.get_eligible_brokers(organization_id)
+            if brokers:
+                broker_ids = [b.id for b in brokers]
+                stmt = select(Lead).where(
+                    and_(
+                        Lead.phone == phone_e164,
+                        Lead.broker_id.in_(broker_ids),
+                        Lead.deleted_at.is_(None),
+                    )
+                ).limit(1)
+                lead = (await self.db.execute(stmt)).scalars().first()
+                if lead:
+                    return lead
+        except Exception as e:
+            logger.debug(f"[PROSPECT] Scoped phone search fallback: {e}")
+
+        return None
 
     async def _find_lead_by_email(self, organization_id: str, email: str) -> Optional[Lead]:
-        """Lead model doesn't have email — skip email-based lead lookup for now."""
-        # The Lead model doesn't store email directly; identity resolution handles this
+        """Find existing CRM Lead by email within the organization scope."""
+        _, email_fingerprint = normalize_email(email)
+        if not email_fingerprint:
+            return None
+
+        stmt_prospect = select(LeadProspect.canonical_lead_id).where(
+            and_(
+                LeadProspect.organization_id == organization_id,
+                LeadProspect.email_fingerprint == email_fingerprint,
+                LeadProspect.canonical_lead_id.isnot(None),
+            )
+        ).limit(1)
+        canonical_id = (await self.db.execute(stmt_prospect)).scalar()
+        if canonical_id:
+            lead = await self._get_lead(canonical_id)
+            if lead and not lead.deleted_at:
+                return lead
         return None
 
     async def _get_lead(self, lead_id: str) -> Optional[Lead]:
@@ -327,9 +462,14 @@ class ProspectService:
         return (await self.db.execute(stmt)).scalars().first()
 
     async def _create_attribution(
-        self, organization_id: str, lead_id: str, prospect: LeadProspect
+        self,
+        organization_id: str,
+        lead_id: str,
+        prospect: LeadProspect,
+        utm_params: Optional[Dict[str, Any]] = None,
     ) -> SourceAttribution:
         """Create a SourceAttribution record linking lead to its acquisition provenance."""
+        params = utm_params or {}
         attribution = SourceAttribution(
             organization_id=organization_id,
             lead_id=lead_id,
@@ -337,6 +477,13 @@ class ProspectService:
             campaign_id=prospect.campaign_id,
             acquisition_event_id=prospect.acquisition_event_id,
             prospect_id=prospect.id,
+            utm_source=params.get("utm_source"),
+            utm_medium=params.get("utm_medium"),
+            utm_campaign=params.get("utm_campaign"),
+            utm_term=params.get("utm_term"),
+            utm_content=params.get("utm_content"),
+            landing_page=params.get("landing_page"),
+            referrer=params.get("referrer"),
             first_touch_at=prospect.created_at,
             last_touch_at=datetime.now(timezone.utc),
         )

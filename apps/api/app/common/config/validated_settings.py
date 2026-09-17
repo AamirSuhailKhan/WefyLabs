@@ -38,7 +38,7 @@ DEFAULT_SUPABASE_SECRET = "supabase_jwt_secret_placeholder_32b_dev"
 
 
 class EnterpriseSettings(BaseSettings):
-    PROJECT_NAME: str = "BeetleLabs API"
+    PROJECT_NAME: str = "WefyLabs API"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     ENV: str = "development"
@@ -66,9 +66,9 @@ class EnterpriseSettings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_USERNAME: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
-    SMTP_FROM_EMAIL: Optional[str] = "noreply@beetlelabs.ai"
+    SMTP_FROM_EMAIL: Optional[str] = "noreply@wefylabs.com"
     EMAIL_FROM_ADDRESS: Optional[str] = None
-    SMTP_FROM_NAME: str = "BeetleLabs Real Estate"
+    SMTP_FROM_NAME: str = "WefyLabs Real Estate"
     SMTP_USE_TLS: bool = True
     SMTP_USE_SSL: bool = False
     SMTP_SECURITY: Optional[str] = "STARTTLS"
@@ -117,6 +117,10 @@ class EnterpriseSettings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://wefylabs.com",
+        "https://app.wefylabs.com",
+        "https://api.wefylabs.com",
+        "https://*.wefylabs.com",
         "https://beetlelabs.ai",
         "https://*.beetlelabs.ai"
     ]
@@ -232,17 +236,22 @@ class EnterpriseSettings(BaseSettings):
             if not self.WHATSAPP_VERIFY_TOKEN or self.WHATSAPP_VERIFY_TOKEN in known_dummy_tokens or len(self.WHATSAPP_VERIFY_TOKEN) < 32:
                 errors.append("WHATSAPP_VERIFY_TOKEN must be a secure, random secret with minimum 32 characters entropy!")
             
-            # 5. Razorpay Production Credentials
+            # 5. Razorpay Production Credentials (if production environment)
             if self.ENV.lower() in ("production", "prod"):
-                if self.RAZORPAY_KEY_ID in ("rzp_test_placeholder", "rzp_test_dummy"):
-                    errors.append("RAZORPAY_KEY_ID must not use placeholder in production environment!")
-                elif self.RAZORPAY_KEY_ID.startswith("rzp_test_") and self.RAZORPAY_ENVIRONMENT != "test" and self.PAYMENTS_ENV != "test":
+                # In production: must use live keys
+                if self.RAZORPAY_KEY_ID.startswith("rzp_test_") or self.RAZORPAY_KEY_ID in ("rzp_test_placeholder", "rzp_test_dummy"):
                     errors.append("RAZORPAY_KEY_ID must use a production key (rzp_live_*) in production environment!")
                 if self.RAZORPAY_KEY_SECRET in ("secret_placeholder", "placeholder") or not self.RAZORPAY_KEY_SECRET:
                     errors.append("RAZORPAY_KEY_SECRET cannot use placeholder in production environment!")
                 if self.RAZORPAY_WEBHOOK_SECRET in ("whsec_placeholder", "placeholder") or len(self.RAZORPAY_WEBHOOK_SECRET) < 32:
                     errors.append("RAZORPAY_WEBHOOK_SECRET must be configured with minimum 32 characters in production!")
 
+            # 5a. Razorpay — guard against live environment with test keys (any env)
+            if self.RAZORPAY_ENVIRONMENT == "live":
+                if not self.RAZORPAY_KEY_ID.startswith("rzp_live_"):
+                    errors.append("RAZORPAY_ENVIRONMENT is 'live' but RAZORPAY_KEY_ID does not use an 'rzp_live_*' key!")
+                if self.ENV.lower() == "staging":
+                    errors.append("RAZORPAY_ENVIRONMENT cannot be 'live' in a staging environment! Use 'test' mode for staging.")
 
             # 6. OCR Provider Safety
             if self.ENV.lower() in ("production", "prod") and not self.EMERGENCY_ALLOW_MOCK_OCR:

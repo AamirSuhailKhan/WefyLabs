@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import DashboardLayoutClient from '@/components/dashboard/DashboardLayoutClient';
 
 export const metadata: Metadata = {
-  title: 'Broker Dashboard — BeetleLabs',
-  description: 'Visual pipeline stages, task reminders, AI lead scoring and CRM-Lite for real estate brokers.',
+  title: 'Broker Dashboard — WefyLabs',
+  description: 'Visual pipeline stages, task reminders, AI lead scoring and CRM for real estate brokers.',
 };
 
 export default function DashboardLayout({

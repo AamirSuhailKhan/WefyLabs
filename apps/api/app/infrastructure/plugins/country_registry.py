@@ -19,7 +19,7 @@ class IndiaCountryPlugin(ICountryPlugin):
         return f"₹{amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in {city}, India. Qualify budget in Lakhs/Crores (₹ INR), configuration (1BHK/2BHK/3BHK), and ready vs under-construction."
+        return f"You are WefyLabs AI assistant for {broker_name} in {city}, India. Qualify budget in Lakhs/Crores (₹ INR), configuration (1BHK/2BHK/3BHK), and ready vs under-construction."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         msg = text.lower()
@@ -44,7 +44,7 @@ class UAECountryPlugin(ICountryPlugin):
         return f"AED {amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in Dubai/UAE. Qualify budget in AED, off-plan vs secondary market, and Golden Visa interest."
+        return f"You are WefyLabs AI assistant for {broker_name} in Dubai/UAE. Qualify budget in AED, off-plan vs secondary market, and Golden Visa interest."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 1000000, "budget_max": 2500000}
@@ -64,7 +64,7 @@ class SingaporeCountryPlugin(ICountryPlugin):
         return f"S${amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in Singapore. Qualify HDB vs Private Condos, citizenship/ABSD status, and budget in SGD."
+        return f"You are WefyLabs AI assistant for {broker_name} in Singapore. Qualify HDB vs Private Condos, citizenship/ABSD status, and budget in SGD."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 800000, "budget_max": 1800000}
@@ -84,7 +84,7 @@ class USCountryPlugin(ICountryPlugin):
         return f"${amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in the US. Qualify mortgage pre-approval status, desired neighborhood, and budget in USD."
+        return f"You are WefyLabs AI assistant for {broker_name} in the US. Qualify mortgage pre-approval status, desired neighborhood, and budget in USD."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 350000, "budget_max": 750000}
@@ -104,7 +104,7 @@ class UKCountryPlugin(ICountryPlugin):
         return f"£{amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in the UK. Qualify buyer chain status, mortgage in principle, and budget in GBP (£)."
+        return f"You are WefyLabs AI assistant for {broker_name} in the UK. Qualify buyer chain status, mortgage in principle, and budget in GBP (£)."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 250000, "budget_max": 500000}
@@ -124,7 +124,7 @@ class AustraliaCountryPlugin(ICountryPlugin):
         return f"A${amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in Australia. Qualify finance approval, auction readiness, and budget in AUD."
+        return f"You are WefyLabs AI assistant for {broker_name} in Australia. Qualify finance approval, auction readiness, and budget in AUD."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 600000, "budget_max": 1200000}
@@ -144,7 +144,7 @@ class CanadaCountryPlugin(ICountryPlugin):
         return f"C${amount:,}"
 
     def get_qualification_system_prompt(self, broker_name: str, city: str) -> str:
-        return f"You are BeetleLabs AI assistant for {broker_name} in Canada. Qualify mortgage pre-approval, first-time buyer status, and budget in CAD."
+        return f"You are WefyLabs AI assistant for {broker_name} in Canada. Qualify mortgage pre-approval, first-time buyer status, and budget in CAD."
 
     def parse_budget_input(self, text: str) -> Dict[str, Any]:
         return {"budget_min": 500000, "budget_max": 950000}

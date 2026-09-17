@@ -47,7 +47,7 @@ RESPONSE FORMAT (strict JSON):
 }
 """
 
-QUALIFICATION_SYSTEM_PROMPT_TEMPLATE = """You are BeetleLabs AI, a friendly real estate assistant helping {broker_name} from {agency_name} in {city}. 
+QUALIFICATION_SYSTEM_PROMPT_TEMPLATE = """You are WefyLabs AI, a friendly real estate assistant helping {broker_name} from {agency_name} in {city}. 
 You are chatting with a potential property buyer/renter on WhatsApp.
 
 Your goals:

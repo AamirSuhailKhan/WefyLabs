@@ -17,8 +17,10 @@ from app.models.broker import Broker
 from app.models.follow_up_models import (
     FollowUpPolicy, FollowUpSequence, FollowUpSequenceStep, FollowUpEnrollment,
     FollowUpExecution, FollowUpDecision, CommunicationConsent, ContactFatigue,
-    NextBestAction
+    NextBestAction, FollowUpRule, FollowUpAutomationEvent
 )
+from app.models.crm_models import Task, Notification, Activity, Meeting
+from app.models.crm_intelligence_models import SlaInstance, SlaBreach
 from app.modules.follow_up.lifecycle.lifecycle_manager import LeadLifecycleManager
 from app.modules.follow_up.consent.consent_manager import ConsentManager
 from app.modules.follow_up.suppression.suppression_engine import SuppressionEngine
@@ -29,6 +31,12 @@ from app.modules.follow_up.message_generation.grounded_generator import Grounded
 from app.modules.follow_up.fatigue.fatigue_detector import FatigueDetector
 from app.modules.follow_up.next_best_action.nba_calculator import NextBestActionEngine
 from app.modules.follow_up.sequence.sequence_engine import SequenceEngine
+from app.modules.follow_up.sla.sla_service import SlaService
+from app.modules.follow_up.rules.rule_engine import RuleEngine
+from app.modules.follow_up.escalation.escalation_service import EscalationService
+from app.modules.follow_up.briefing.briefing_service import BriefingService
+from app.modules.follow_up.ai_reengagement.reengagement_service import ReengagementService
+from app.modules.follow_up.idempotency.idempotency_service import IdempotencyService
 from app.modules.follow_up.dto.follow_up_schemas import (
     FollowUpPolicyDTO, UpdatePolicyDTO, NextBestActionDTO, FollowUpExecutionDTO,
     FollowUpEvaluationResponseDTO, LeadFollowUpStatusDTO
@@ -53,6 +61,11 @@ class FollowUpOrchestratorService:
         self.fatigue_detector = FatigueDetector(db)
         self.nba_engine = NextBestActionEngine(db)
         self.sequence_engine = SequenceEngine(db)
+        self.sla_service = SlaService(db)
+        self.rule_engine = RuleEngine(db)
+        self.escalation_service = EscalationService(db)
+        self.briefing_service = BriefingService(db)
+        self.reengagement_service = ReengagementService()
 
     async def get_or_create_policy(self, organization_id: str) -> FollowUpPolicy:
         """Loads organization follow-up policy or creates default."""
@@ -252,3 +265,336 @@ class FollowUpOrchestratorService:
         lead = res.scalar_one_or_none()
         if lead:
             await self.lifecycle_manager.transition_lead(lead, "DO_NOT_CONTACT", reason="Customer Opt-Out")
+
+    # ── Rule Management ───────────────────────────────────────────────────────
+    async def create_rule(
+        self,
+        organization_id: str,
+        name: str,
+        trigger: str,
+        action: str,
+        delay_minutes: int = 0,
+        conditions: Optional[Dict[str, Any]] = None,
+        priority: str = "normal",
+        max_runs: int = 1,
+        cooldown_hours: int = 24,
+        action_config: Optional[Dict[str, Any]] = None,
+        created_by: Optional[str] = None
+    ) -> FollowUpRule:
+        """Creates a tenant-scoped follow-up automation rule."""
+        rule = FollowUpRule(
+            id=str(uuid.uuid4()),
+            organization_id=organization_id,
+            name=name,
+            enabled=True,
+            trigger=trigger,
+            delay_minutes=delay_minutes,
+            action=action,
+            conditions=conditions or {},
+            priority=priority,
+            max_runs=max_runs,
+            cooldown_hours=cooldown_hours,
+            action_config=action_config or {},
+            created_by=created_by
+        )
+        self.db.add(rule)
+        await self.db.commit()
+        await self.db.refresh(rule)
+        logger.info(f"[FollowUpService] Created rule '{name}' ({rule.id}) for Org {organization_id}.")
+        return rule
+
+    async def list_rules(self, organization_id: str) -> List[FollowUpRule]:
+        """Lists all automation rules for an organization."""
+        stmt = select(FollowUpRule).where(FollowUpRule.organization_id == organization_id).order_by(FollowUpRule.created_at.desc())
+        res = await self.db.execute(stmt)
+        return list(res.scalars().all())
+
+    async def get_rule(self, organization_id: str, rule_id: str) -> Optional[FollowUpRule]:
+        """Retrieves a single rule ensuring tenant isolation."""
+        stmt = select(FollowUpRule).where(
+            FollowUpRule.id == rule_id,
+            FollowUpRule.organization_id == organization_id
+        )
+        res = await self.db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def update_rule(self, organization_id: str, rule_id: str, updates: Dict[str, Any]) -> Optional[FollowUpRule]:
+        """Updates rule configuration attributes."""
+        rule = await self.get_rule(organization_id, rule_id)
+        if not rule:
+            return None
+
+        allowed_fields = {"name", "enabled", "trigger", "delay_minutes", "action", "action_config", "conditions", "priority", "max_runs", "cooldown_hours"}
+        for k, v in updates.items():
+            if k in allowed_fields and v is not None:
+                setattr(rule, k, v)
+
+        await self.db.commit()
+        await self.db.refresh(rule)
+        return rule
+
+    async def delete_rule(self, organization_id: str, rule_id: str) -> bool:
+        """Deletes a rule ensuring tenant isolation."""
+        rule = await self.get_rule(organization_id, rule_id)
+        if not rule:
+            return False
+        await self.db.delete(rule)
+        await self.db.commit()
+        return True
+
+    # ── Task Snooze & Reschedule (Human Override) ─────────────────────────────
+    async def snooze_task(
+        self,
+        broker_id: uuid.UUID,
+        task_id: str,
+        snooze_until: datetime,
+        reason: str = "Snoozed by Broker"
+    ) -> Optional[Task]:
+        """
+        Snoozes a task to a later time. Preserves task history and records activity.
+        Ensures automation does not overwrite manual agent adjustments.
+        """
+        stmt = select(Task).where(Task.id == task_id)
+        res = await self.db.execute(stmt)
+        task = res.scalar_one_or_none()
+        if not task:
+            return None
+
+        old_due = task.due_at
+        task.due_at = snooze_until
+        await self.db.commit()
+        await self.db.refresh(task)
+
+        # Record activity
+        if task.lead_id:
+            act = Activity(
+                organization_id=task.organization_id,
+                actor_id=broker_id,
+                lead_id=task.lead_id,
+                activity_type="task_snoozed",
+                title="Task Snoozed",
+                description=f"Task '{task.title}' snoozed to {snooze_until.isoformat()}. Reason: {reason}",
+                activity_data={"task_id": task.id, "previous_due_at": old_due.isoformat() if old_due else None, "new_due_at": snooze_until.isoformat()}
+            )
+            self.db.add(act)
+            await self.db.commit()
+
+        logger.info(f"[FollowUpService] Snoozed task {task_id} to {snooze_until.isoformat()}.")
+        return task
+
+    async def reschedule_task(
+        self,
+        broker_id: uuid.UUID,
+        task_id: str,
+        new_due_at: datetime,
+        reason: str = "Rescheduled by Broker"
+    ) -> Optional[Task]:
+        """Reschedules a task ensuring human override is respected."""
+        return await self.snooze_task(broker_id, task_id, new_due_at, reason=reason)
+
+    # ── Follow-Up Dashboard Summary ───────────────────────────────────────────
+    async def get_dashboard_summary(
+        self,
+        broker_id: uuid.UUID,
+        organization_id: str
+    ) -> Dict[str, Any]:
+        """
+        Returns full CRM Follow-Up Dashboard metrics:
+        - Today's tasks (due today, overdue, SLA breaches, high priority)
+        - Upcoming tasks (tomorrow, next 7 days)
+        - Pipeline counts (new leads awaiting contact, active follow-ups, re-engagement candidates)
+        """
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        tomorrow_end = today_end + timedelta(days=1)
+        next_7_days_end = today_end + timedelta(days=7)
+
+        # 1. Due Today Tasks
+        stmt_due_today = select(Task).where(
+            Task.broker_id == broker_id,
+            Task.status.in_(["pending", "in_progress"]),
+            Task.due_at >= today_start,
+            Task.due_at <= today_end
+        ).order_by(Task.due_at.asc())
+        res_dt = await self.db.execute(stmt_due_today)
+        due_today_tasks = list(res_dt.scalars().all())
+
+        # 2. Overdue Tasks
+        stmt_overdue = select(Task).where(
+            Task.broker_id == broker_id,
+            Task.status.in_(["pending", "in_progress"]),
+            Task.due_at < now
+        ).order_by(Task.due_at.asc())
+        res_ov = await self.db.execute(stmt_overdue)
+        overdue_tasks = list(res_ov.scalars().all())
+
+        # 3. Upcoming Tasks (Tomorrow to next 7 days)
+        stmt_upcoming = select(Task).where(
+            Task.broker_id == broker_id,
+            Task.status.in_(["pending", "in_progress"]),
+            Task.due_at > today_end,
+            Task.due_at <= next_7_days_end
+        ).order_by(Task.due_at.asc())
+        res_up = await self.db.execute(stmt_upcoming)
+        upcoming_tasks = list(res_up.scalars().all())
+
+        # 4. Active SLA Breaches
+        stmt_breaches = select(SlaBreach).where(
+            SlaBreach.organization_id == organization_id
+        ).order_by(SlaBreach.breached_at_utc.desc()).limit(20)
+        res_br = await self.db.execute(stmt_breaches)
+        sla_breaches = list(res_br.scalars().all())
+
+        # 5. Pipeline Counts
+        stmt_awaiting_contact = select(func.count(Lead.id)).where(
+            Lead.broker_id == broker_id,
+            Lead.pipeline_stage.in_(["new", "lead_captured"]),
+            Lead.status.in_(["pending", "active"]),
+            Lead.deleted_at.is_(None)
+        )
+        res_aw = await self.db.execute(stmt_awaiting_contact)
+        awaiting_contact_count = res_aw.scalar() or 0
+
+        # Helper serialize
+        def _fmt_task(t: Task) -> Dict[str, Any]:
+            return {
+                "id": str(t.id),
+                "title": t.title,
+                "description": t.description,
+                "due_at": t.due_at.isoformat() if t.due_at else None,
+                "priority": t.priority,
+                "status": t.status,
+                "lead_id": str(t.lead_id) if t.lead_id else None
+            }
+
+        return {
+            "counts": {
+                "due_today": len(due_today_tasks),
+                "overdue": len(overdue_tasks),
+                "upcoming": len(upcoming_tasks),
+                "sla_breaches": len(sla_breaches),
+                "awaiting_first_contact": awaiting_contact_count
+            },
+            "tasks_due_today": [_fmt_task(t) for t in due_today_tasks],
+            "tasks_overdue": [_fmt_task(t) for t in overdue_tasks],
+            "tasks_upcoming": [_fmt_task(t) for t in upcoming_tasks],
+            "sla_breaches": [
+                {
+                    "id": str(b.id),
+                    "lead_id": b.lead_id,
+                    "sla_type": b.sla_type,
+                    "overdue_minutes": b.overdue_minutes,
+                    "breached_at": b.breached_at_utc.isoformat() if b.breached_at_utc else None
+                }
+                for b in sla_breaches
+            ]
+        }
+
+    # ── Performance Analytics ─────────────────────────────────────────────────
+    async def get_performance_analytics(self, organization_id: str) -> Dict[str, Any]:
+        """
+        Calculates aggregate follow-up performance metrics:
+        - Tasks created, completed, overdue, skipped
+        - SLA compliance rate
+        - Average time to first contact
+        """
+        # Tasks metrics
+        stmt_total_tasks = select(func.count(Task.id)).where(Task.organization_id == organization_id)
+        total_tasks = (await self.db.execute(stmt_total_tasks)).scalar() or 0
+
+        stmt_completed = select(func.count(Task.id)).where(
+            Task.organization_id == organization_id,
+            Task.status == "completed"
+        )
+        completed_tasks = (await self.db.execute(stmt_completed)).scalar() or 0
+
+        now = datetime.now(timezone.utc)
+        stmt_overdue = select(func.count(Task.id)).where(
+            Task.organization_id == organization_id,
+            Task.status.in_(["pending", "in_progress"]),
+            Task.due_at < now
+        )
+        overdue_tasks = (await self.db.execute(stmt_overdue)).scalar() or 0
+
+        # SLA metrics
+        stmt_total_sla = select(func.count(SlaInstance.id)).where(SlaInstance.organization_id == organization_id)
+        total_slas = (await self.db.execute(stmt_total_sla)).scalar() or 0
+
+        stmt_met_sla = select(func.count(SlaInstance.id)).where(
+            SlaInstance.organization_id == organization_id,
+            SlaInstance.status == "MET"
+        )
+        met_slas = (await self.db.execute(stmt_met_sla)).scalar() or 0
+
+        sla_compliance_rate = round((met_slas / total_slas * 100.0), 1) if total_slas > 0 else 100.0
+        completion_rate = round((completed_tasks / total_tasks * 100.0), 1) if total_tasks > 0 else 100.0
+
+        # Automation events count
+        stmt_auto_events = select(func.count(FollowUpAutomationEvent.id)).where(
+            FollowUpAutomationEvent.organization_id == organization_id,
+            FollowUpAutomationEvent.status == "COMPLETED"
+        )
+        automated_actions = (await self.db.execute(stmt_auto_events)).scalar() or 0
+
+        return {
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "overdue_tasks": overdue_tasks,
+            "completion_rate_pct": completion_rate,
+            "total_slas": total_slas,
+            "met_slas": met_slas,
+            "sla_compliance_rate_pct": sla_compliance_rate,
+            "automated_actions_executed": automated_actions,
+            "generated_at": now.isoformat()
+        }
+
+    # ── Batch Lead Evaluation for Celery ───────────────────────────────────────
+    async def process_active_leads_batch(self, batch_size: int = 250, offset: int = 0) -> int:
+        """
+        Batch-processes active leads for SLA timers, overdue follow-ups, and rule triggers.
+        Bounded memory usage: operates in chunks without loading all leads at once.
+        """
+        stmt = (
+            select(Lead)
+            .where(
+                Lead.status.in_(["pending", "active", "qualified"]),
+                Lead.deleted_at.is_(None)
+            )
+            .order_by(Lead.created_at.desc())
+            .offset(offset)
+            .limit(batch_size)
+        )
+        res = await self.db.execute(stmt)
+        leads = res.scalars().all()
+
+        processed_count = 0
+        now = datetime.now(timezone.utc)
+
+        for lead in leads:
+            org_id = str(lead.broker_id)
+            policy = await self.get_or_create_policy(org_id)
+
+            # 1. Check if first-contact SLA needs to be created
+            lead_created = lead.created_at if lead.created_at.tzinfo else lead.created_at.replace(tzinfo=timezone.utc)
+            lead_age_mins = (now - lead_created).total_seconds() / 60.0
+
+            if lead_age_mins <= 60: # Fresh lead in first hour
+                await self.sla_service.create_first_contact_sla(lead, policy)
+
+            # 2. Check and evaluate organization rules matching lead state
+            rules = await self.list_rules(org_id)
+            for rule in rules:
+                if not rule.enabled:
+                    continue
+
+                hours_since_contact = (now - lead_created).total_seconds() / 3600.0
+                ctx = {
+                    "hours_since_contact": hours_since_contact,
+                    "no_response_count": 0
+                }
+                await self.rule_engine.execute_rule(rule, lead, trigger_event=rule.trigger, policy=policy, context=ctx)
+
+            processed_count += 1
+
+        return processed_count

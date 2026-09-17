@@ -5,11 +5,12 @@ import { useRegion } from '@/lib/i18n/region-context';
 import Link from 'next/link';
 import type { Variants, Easing } from 'framer-motion';
 import Navbar from '@/components/shared/Navbar';
-import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
+import { WefyLabsLogo } from '@/components/shared/WefyLabsLogo';
 import FeaturesGrid from '@/components/shared/FeaturesGrid';
 import MarketSelector from '@/components/landing/MarketSelector';
 import GlobalWasteCalculator from '@/components/landing/GlobalWasteCalculator';
 import GlobalPricing from '@/components/landing/GlobalPricing';
+import HowItWorksSection from '@/components/landing/HowItWorksSection';
 import HeroRobot from '@/components/shared/HeroRobot';
 import SectionLabel from '@/components/shared/SectionLabel';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,16 +25,6 @@ import {
 
 // ─── Global easing & animation variants ───────────────────────────────────────
 const EXPO: Easing = [0.22, 1, 0.36, 1];
-
-// How It Works — card stagger
-const howItWorksContainer: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.15, delayChildren: 0.2 } },
-};
-const howItWorksCard: Variants = {
-  hidden: { opacity: 0, y: 40, scale: 0.96 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.6, ease: EXPO } },
-};
 
 // Early Access — text stagger
 const textContainer: Variants = {
@@ -137,8 +128,8 @@ export default function LandingPage() {
 
   const faqs = [
     {
-      q: 'Do I need to know how to code to use BeetleLabs?',
-      a: 'No coding required. BeetleLabs works entirely over WhatsApp. Just forward a lead\'s phone number and our AI handles the rest.',
+      q: 'Do I need to know how to code to use WefyLabs?',
+      a: 'No coding required. WefyLabs works entirely over WhatsApp. Just forward a lead\'s phone number and our AI handles the rest.',
     },
     {
       q: "What happens when a lead doesn't reply?",
@@ -149,12 +140,12 @@ export default function LandingPage() {
       a: 'Under 2 minutes. Sign up, connect your WhatsApp, and start forwarding leads immediately.',
     },
     {
-      q: 'Can I integrate BeetleLabs with my existing CRM?',
+      q: 'Can I integrate WefyLabs with my existing CRM?',
       a: 'You can export all leads to Excel anytime. Native integrations with Sell.Do and Zoho are on our roadmap.',
     },
     {
       q: 'Why not just use a VA or assistant?',
-      a: 'A VA costs ₹15,000+/month and works 9-5. BeetleLabs costs ₹2,999, works 24/7, and never forgets to follow up.',
+      a: 'A VA costs ₹15,000+/month and works 9-5. WefyLabs costs ₹2,999, works 24/7, and never forgets to follow up.',
     },
     {
       q: 'Can I use this for rental leads too?',
@@ -353,7 +344,7 @@ export default function LandingPage() {
                         <div className="w-3 h-3 rounded-full bg-[#28C840]" />
                       </div>
                       <div className="flex-1 bg-[#F0EDE8] border border-[#D4D0C8] rounded-md px-3 py-1 text-[11px] text-[#6B6B6B] font-mono">
-                        https://wa.me/beetlelabs-bot
+                        https://wa.me/wefylabs-bot
                       </div>
                       <span className="text-[10px] font-bold flex items-center gap-1 text-[#DC2626]">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626] animate-pulse" />
@@ -433,7 +424,7 @@ export default function LandingPage() {
                 Stop chasing. Start closing deals at scale.
               </h2>
               <p className="text-[17px] text-[#4A4A4A] max-w-2xl mx-auto leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
-                BeetleLabs multiplies your output without multiplying your hours. Use WhatsApp to engage leads, and let AI agents qualify and score them automatically.
+                WefyLabs multiplies your output without multiplying your hours. Use WhatsApp to engage leads, and let AI agents qualify and score them automatically.
               </p>
             </div>
           </ScrollReveal>
@@ -445,72 +436,8 @@ export default function LandingPage() {
         {/* ─── SECTION 4: WORKFLOW (NEW INDEPENDENT 4-CARD FEATURES GRID) ─ */}
         <FeaturesGrid />
 
-        {/* ─── SECTION 5: HOW IT WORKS (3 STEPS) ───────────────────── */}
-        <section className="py-16 px-4 max-w-6xl mx-auto">
-          {/* Section Header */}
-          <motion.div
-            initial={reduced ? false : { opacity: 0, y: 30 }}
-            whileInView={reduced ? {} : { opacity: 1, y: 0 }}
-            viewport={VP}
-            transition={{ duration: 0.6, ease: EXPO }}
-            className="text-center mb-10"
-          >
-            <SectionLabel text="HOW IT WORKS" />
-            <h2 className="text-4xl md:text-5xl font-bold mono-headline mb-3">
-              From WhatsApp to qualified lead in 3 steps
-            </h2>
-            <p className="text-[17px] text-[#4A4A4A] max-w-xl mx-auto" style={{ fontFamily: 'Inter, sans-serif' }}>
-              No apps to install. No complex setup. Just forward a number and let AI do the rest.
-            </p>
-          </motion.div>
-
-          <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-3xl p-8 md:p-12 shadow-sm">
-            {/* Cards stagger container */}
-            <motion.div
-              variants={reduced ? undefined : howItWorksContainer}
-              initial={reduced ? false : 'hidden'}
-              whileInView={reduced ? {} : 'visible'}
-              viewport={VP60}
-              className="grid md:grid-cols-3 gap-8"
-            >
-              {[
-                {
-                  num: '01',
-                  title: "Forward the lead's number",
-                  desc: "Send any lead's phone number to your dedicated BeetleLabs WhatsApp bot. That's it.",
-                },
-                {
-                  num: '02',
-                  title: 'AI chats & qualifies',
-                  desc: 'Our bot asks about budget, location, timeline, and property type — just like you would. Takes 2 minutes.',
-                },
-                {
-                  num: '03',
-                  title: 'Get your score instantly',
-                  desc: 'Hot 🔥, Warm 🟡, or Cold 🔵 — with confidence % and full conversation history in your dashboard.',
-                },
-              ].map((step, i) => (
-                <motion.div
-                  key={i}
-                  variants={reduced ? undefined : howItWorksCard}
-                  className="space-y-4"
-                >
-                  <motion.span
-                    className="inline-block bg-[#E8F5A8] border border-[#D4D0C8] text-[#1A1A1A] font-mono text-xs font-bold px-3 py-1 rounded-full cursor-default"
-                    whileHover={reduced ? {} : { scale: 1.1, rotate: 5 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 10 }}
-                  >
-                    {step.num}
-                  </motion.span>
-                  <h3 className="text-xl font-bold mono-headline">{step.title}</h3>
-                  <p className="text-sm text-[#4A4A4A] leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    {step.desc}
-                  </p>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
+        {/* ─── SECTION 5: HOW IT WORKS (FROM LEAD TO DEAL) ─────────── */}
+        <HowItWorksSection />
 
         {/* ─── SECTION 6: EARLY ACCESS WAITLIST ────────────────────── */}
         <section className="py-16 px-4 max-w-4xl mx-auto text-center">
@@ -816,7 +743,7 @@ export default function LandingPage() {
         >
           <div className="grid md:grid-cols-3 gap-8 mb-10">
             <div>
-              <BeetleLabsLogo href="/" iconSize={24} textSize="text-xl" />
+              <WefyLabsLogo href="/" iconSize={24} textSize="text-xl" />
               <p className="text-sm text-[#6B6B6B] mt-2 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
                 Qualify real estate leads smarter with AI.
               </p>
@@ -832,7 +759,7 @@ export default function LandingPage() {
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B] mb-4">Contact</p>
               <div className="space-y-2.5 text-sm text-[#4A4A4A]">
-                <a href="mailto:support@beetlelabs.ai" className="block hover:text-[#1A1A1A] transition-colors">Contact Us</a>
+                <a href="mailto:support@wefylabs.com" className="block hover:text-[#1A1A1A] transition-colors">Contact Us</a>
                 <span className="block hover:text-[#1A1A1A] cursor-pointer transition-colors">Privacy Policy</span>
                 <span className="block hover:text-[#1A1A1A] cursor-pointer transition-colors">Terms of Service</span>
               </div>
@@ -840,7 +767,7 @@ export default function LandingPage() {
           </div>
 
           <div className="border-t border-[#D4D0C8] pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-[#6B6B6B]">
-            <span>© 2026 BeetleLabs. All rights reserved.</span>
+            <span>© 2026 WefyLabs. All rights reserved.</span>
             <div className="flex gap-6">
               <span className="hover:text-[#1A1A1A] cursor-pointer transition-colors">Privacy Policy</span>
               <span className="hover:text-[#1A1A1A] cursor-pointer transition-colors">Terms of Service</span>

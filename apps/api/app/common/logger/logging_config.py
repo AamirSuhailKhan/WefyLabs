@@ -55,7 +55,7 @@ class JsonFormatter(logging.Formatter):
     Compatible with Datadog, Grafana Loki, AWS CloudWatch, GCP Logging.
     """
 
-    def __init__(self, service_name: str = "beetlelabs-api", env: str = "development"):
+    def __init__(self, service_name: str = "wefylabs-api", env: str = "development"):
         super().__init__()
         self._service = service_name
         self._env = env
@@ -116,7 +116,7 @@ class JsonFormatter(logging.Formatter):
 
 def configure_logging(
     level: str = "INFO",
-    service_name: str = "beetlelabs-api",
+    service_name: str = "wefylabs-api",
     env: str = "development",
     json_output: bool = True
 ) -> None:

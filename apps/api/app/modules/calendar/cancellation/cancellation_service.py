@@ -39,7 +39,7 @@ class CancellationService:
 
         # Cancel external event
         if meeting.external_event_id:
-            account_email = "broker@beetlelabs.com"
+            account_email = "broker@wefylabs.com"
             access_token = None
             try:
                 from app.models.calendar_models import CalendarAccount

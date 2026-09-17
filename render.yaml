@@ -1,0 +1,120 @@
+services:
+  # ── 1. WefyLabs FastAPI REST API ──────────────────────────────────────────
+  - type: web
+    name: wefylabs-api
+    env: python
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./entrypoint.sh
+    healthCheckPath: /health/readiness
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: RAZORPAY_ENVIRONMENT
+        value: test
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      # Render's internal proxy IPs — allows correct X-Forwarded-For resolution
+      - key: TRUSTED_PROXY_IPS
+        value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      - key: WORKERS
+        value: "4"
+
+
+  # ── 2. WefyLabs Celery Worker ──────────────────────────────────────────────
+  - type: worker
+    name: wefylabs-celery-worker
+    env: python
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=4
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: wefylabs-api
+          envVarKey: SECRET_KEY
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+
+
+  # ── 3. WefyLabs Celery Beat Scheduler ──────────────────────────────────────
+  # CRITICAL: Without this service, ALL scheduled tasks never fire on Render.
+  # This includes: follow-up evaluation, SLA monitoring, daily briefings,
+  # prediction refresh, memory decay, workflow timers, and all cron-based automations.
+  - type: worker
+    name: wefylabs-celery-beat
+    env: python
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: >
+      celery -A app.celery_app.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+      --pidfile=/tmp/celerybeat.pid
+      --schedule=/tmp/celerybeat-schedule
+    autoDeploy: true
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: wefylabs-api
+          envVarKey: SECRET_KEY
+      - key: GEMINI_API_KEY
+        sync: false

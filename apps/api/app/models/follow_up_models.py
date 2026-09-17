@@ -44,6 +44,19 @@ class FollowUpPolicy(Base, TimestampMixin):
     require_approval_high_value: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     high_value_threshold_aed: Mapped[float] = mapped_column(Float, default=5000000.0, nullable=False)
 
+    # Part 27 — Organization Follow-Up Automation Configuration
+    first_contact_sla_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    stale_lead_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    reengagement_days: Mapped[int] = mapped_column(Integer, default=14, nullable=False)
+    escalation_delay_hours: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    manager_escalation_hours: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
+    hot_lead_sla_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    working_hours_start: Mapped[str] = mapped_column(String(10), default="09:00", nullable=False)
+    working_hours_end: Mapped[str] = mapped_column(String(10), default="18:00", nullable=False)
+    timezone: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    auto_send_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    automation_settings: Mapped[Dict[str, Any]] = mapped_column(JSONBType, default=dict, nullable=False)
+
 
 class FollowUpSequence(Base, TimestampMixin):
     """
@@ -226,3 +239,59 @@ class FollowUpAttribution(Base, TimestampMixin):
     attributed_revenue_aed: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     attribution_weight: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class FollowUpRule(Base, TimestampMixin):
+    """
+    Organization-specific follow-up automation rule.
+    Maps lifecycle triggers to deterministic CRM actions.
+    """
+    __tablename__ = "follow_up_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    trigger: Mapped[str] = mapped_column(String(50), nullable=False, index=True) # lead_created, lead_assigned, first_contact_sla_breach, lead_no_response, followup_overdue, meeting_scheduled, meeting_missed, pipeline_stage_changed, lead_stale, lead_reengagement, manual
+    delay_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False) # create_task, send_notification, escalate, create_reengagement_task, suggest_next_action, send_email
+    action_config: Mapped[Dict[str, Any]] = mapped_column(JSONBType, default=dict, nullable=False)
+    conditions: Mapped[Dict[str, Any]] = mapped_column(JSONBType, default=dict, nullable=False)
+    priority: Mapped[str] = mapped_column(String(20), default="normal", nullable=False) # low, normal, high, urgent
+    max_runs: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    cooldown_hours: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
+    created_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_fu_rules_org_trigger", "organization_id", "trigger", "enabled"),
+    )
+
+
+class FollowUpAutomationEvent(Base, TimestampMixin):
+    """
+    Deterministic Idempotency Ledger for follow-up automation.
+    Guarantees that a periodic worker or retry cannot create duplicate tasks/notifications
+    for the same lead, rule, and evaluation target window.
+    """
+    __tablename__ = "follow_up_automation_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    lead_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    rule_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("follow_up_rules.id", ondelete="SET NULL"), nullable=True, index=True)
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    notification_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="COMPLETED", nullable=False) # PENDING | COMPLETED | SKIPPED | FAILED
+    execution_details: Mapped[Dict[str, Any]] = mapped_column(JSONBType, default=dict, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    rule: Mapped[Optional["FollowUpRule"]] = relationship("FollowUpRule")
+
+    __table_args__ = (
+        Index("ix_fu_auto_lead_created", "lead_id", "created_at"),
+        Index("ix_fu_auto_org_status", "organization_id", "status"),
+    )

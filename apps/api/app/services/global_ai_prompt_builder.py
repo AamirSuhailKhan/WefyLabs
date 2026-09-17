@@ -45,7 +45,7 @@ class GlobalAIPromptBuilder:
         flags_text = " ".join(flags_instructions)
 
         return (
-            f"You are BeetleLabs AI assistant for {broker_name} operating in {city}, {config.name}. "
+            f"You are WefyLabs AI assistant for {broker_name} operating in {city}, {config.name}. "
             f"Your job is to chat on WhatsApp and qualify leads arriving from {portals_str}. "
             f"Focus on gathering the following qualification metrics: {metrics_str}. "
             f"All financial calculations must use currency {config.currency} ({config.currency_symbol.strip()}). "
@@ -77,7 +77,7 @@ class GlobalAIPromptBuilder:
                 )
                 if context:
                     base = (
-                        f"You are BeetleLabs AI assistant for {broker_name}. "
+                        f"You are WefyLabs AI assistant for {broker_name}. "
                         f"{context.ai_persona_hint} "
                         f"Always respond in {context.language_code}. "
                         f"Format all monetary values in {context.display_price_in}. "
@@ -90,4 +90,4 @@ class GlobalAIPromptBuilder:
         # Fallback to V1 if no DB or context
         if country_code:
             return cls.build_system_prompt(country_code, broker_name, "")
-        return f"You are BeetleLabs AI assistant for {broker_name}. Qualify leads professionally."
+        return f"You are WefyLabs AI assistant for {broker_name}. Qualify leads professionally."

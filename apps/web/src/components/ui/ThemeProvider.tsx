@@ -18,7 +18,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('beetlelabs-theme') as Theme;
+      const saved = (localStorage.getItem('wefylabs-theme') || localStorage.getItem('beetlelabs-theme')) as Theme;
       if (saved) {
         setThemeState(saved);
       }
@@ -45,6 +45,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      localStorage.setItem('wefylabs-theme', theme);
       localStorage.setItem('beetlelabs-theme', theme);
     } catch (e) {
       // ignore

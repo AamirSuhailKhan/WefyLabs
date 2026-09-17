@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-IDENTITY_EVENTS_CHANNEL = "beetlelabs:identity_resolution:events"
+IDENTITY_EVENTS_CHANNEL = "wefylabs:identity_resolution:events"
+LEGACY_IDENTITY_EVENTS_CHANNEL = "beetlelabs:identity_resolution:events"
 
 
 class IdentityEventPublisher:
@@ -22,7 +23,9 @@ class IdentityEventPublisher:
             return False
         try:
             payload = event.model_dump(mode="json")
-            await self.redis.publish(IDENTITY_EVENTS_CHANNEL, json.dumps(payload))
+            raw_payload = json.dumps(payload)
+            await self.redis.publish(IDENTITY_EVENTS_CHANNEL, raw_payload)
+            await self.redis.publish(LEGACY_IDENTITY_EVENTS_CHANNEL, raw_payload)
             logger.info(f"[IDENTITY_EVENTS] Published: {event.event_type}")
             return True
         except Exception as e:

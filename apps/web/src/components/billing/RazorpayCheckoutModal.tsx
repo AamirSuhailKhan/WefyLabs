@@ -127,7 +127,7 @@ export default function RazorpayCheckoutModal({
         key: order.key_id,
         amount: order.amount,
         currency: order.currency,
-        name: 'BeetleLabs AI',
+        name: 'WefyLabs AI',
         description: `Upgrade to ${order.plan_name}`,
         order_id: order.razorpay_order_id,
         image: '/icon.svg',

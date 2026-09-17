@@ -298,5 +298,5 @@ async def process_incoming_whatsapp_message(db: AsyncSession, payload: Dict[str,
         return {"status": "success", "action": "lead_responded", "lead_id": str(lead.id)}
 
     # 4. Unknown Sender
-    await send_message(normalized_from, "Please sign up at beetlelabs.ai first.")
+    await send_message(normalized_from, "Please sign up at wefylabs.com first.")
     return {"status": "success", "action": "unknown_sender_notified"}

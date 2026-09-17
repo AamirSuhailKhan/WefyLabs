@@ -60,7 +60,7 @@ export default function MarketSelector() {
                 Select Your Market / Country
               </h2>
               <p className="text-xs sm:text-sm text-gray-600 font-sans leading-relaxed">
-                Choose your operating country below. BeetleLabs will automatically adapt lead qualification metrics, currencies, pricing plans, and ad platform defaults specifically for your region.
+                Choose your operating country below. WefyLabs will automatically adapt lead qualification metrics, currencies, pricing plans, and ad platform defaults specifically for your region.
               </p>
             </div>
 

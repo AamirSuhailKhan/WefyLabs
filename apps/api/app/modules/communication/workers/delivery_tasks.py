@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("beetlelabs.communication.tasks")
+logger = logging.getLogger("wefylabs.communication.tasks")
 
 try:
     from app.celery_app import celery_app

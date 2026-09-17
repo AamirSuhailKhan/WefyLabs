@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, get_db
 from app.models.broker import Broker
 
 security = HTTPBearer()
@@ -46,13 +46,6 @@ async def check_auth_rate_limit(request: Request) -> None:
             headers={"Retry-After": "60"},
         )
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Async dependency yielding a database session."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 async def get_current_broker(
     credentials: HTTPAuthorizationCredentials = Depends(security),

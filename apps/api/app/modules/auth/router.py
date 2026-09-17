@@ -185,3 +185,96 @@ async def get_me(current_broker: Broker = Depends(get_current_broker)):
             detail="This broker account has been suspended."
         )
     return BrokerResponse.model_validate(current_broker)
+
+
+# ─── PART 24.1 — Self-Service Password Reset Endpoints ─────────────────────────
+from pydantic import BaseModel, EmailStr, Field
+from app.modules.auth.password_reset_service import PasswordResetService, GENERIC_RESET_RESPONSE
+from app.modules.auth.account_deletion_service import AccountDeletionService
+from fastapi import Request
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=8)
+
+
+@router.post(
+    "/forgot-password",
+    dependencies=[Depends(check_auth_rate_limit)],
+    summary="Request password reset instructions (Self-Service)"
+)
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Public self-service forgot password initiation.
+    Returns identical generic response regardless of account existence to prevent enumeration.
+    """
+    base_url = str(request.base_url).rstrip("/")
+    return await PasswordResetService.request_password_reset(
+        email=req.email,
+        db=db,
+        frontend_base_url=base_url
+    )
+
+
+@router.get(
+    "/verify-reset-token",
+    summary="Verify reset token validity prior to password submission"
+)
+async def verify_reset_token(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verifies that a reset token is valid, unexpired, and not yet used."""
+    is_valid, err_msg, _ = await PasswordResetService.verify_reset_token(token, db)
+    if not is_valid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+    return {"valid": True, "message": "Token is valid."}
+
+
+@router.post(
+    "/reset-password",
+    dependencies=[Depends(check_auth_rate_limit)],
+    summary="Execute password reset with secure token"
+)
+async def reset_password(
+    req: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Validates token and updates user password.
+    Enforces password security standards and single-use token consumption.
+    """
+    return await PasswordResetService.execute_password_reset(
+        token=req.token,
+        new_password=req.new_password,
+        db=db
+    )
+
+
+# ─── PART 24.1 — Google OAuth Revocation & Account Deletion ───────────────────
+@router.delete(
+    "/me",
+    summary="Delete broker account and revoke external OAuth connections"
+)
+async def delete_account_me(
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Deletes the authenticated broker account, clears associated entities,
+    and safely revokes external Google OAuth connections without blocking local cleanup.
+    """
+    return await AccountDeletionService.delete_broker_account(
+        db=db,
+        broker_id=current_broker.id
+    )
+

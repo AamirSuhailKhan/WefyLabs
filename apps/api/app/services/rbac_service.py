@@ -22,9 +22,11 @@ class RBACPermissionEvaluator:
     ) -> List[str]:
         """Retrieves list of active permission codes for a broker within an organization."""
         # 1. Query member role
-        stmt = select(OrganizationMember).where(OrganizationMember.broker_id == broker_id)
+        b_id = uuid.UUID(str(broker_id)) if not isinstance(broker_id, uuid.UUID) else broker_id
+        stmt = select(OrganizationMember).where(OrganizationMember.broker_id == b_id)
         if organization_id:
-            stmt = stmt.where(OrganizationMember.organization_id == organization_id)
+            org_id = uuid.UUID(str(organization_id)) if not isinstance(organization_id, uuid.UUID) else organization_id
+            stmt = stmt.where(OrganizationMember.organization_id == org_id)
 
         res = await db.execute(stmt)
         member = res.scalars().first()

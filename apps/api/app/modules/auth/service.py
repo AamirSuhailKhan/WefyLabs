@@ -28,8 +28,11 @@ def verify_password(password: str, hashed: str) -> bool:
     new_key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
     return new_key.hex() == key_hex
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    to_encode = data.copy()
+def create_access_token(data: dict | str | uuid.UUID, expires_delta: timedelta | None = None) -> str:
+    if isinstance(data, (str, uuid.UUID)):
+        to_encode = {"sub": str(data)}
+    else:
+        to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "iat": now})

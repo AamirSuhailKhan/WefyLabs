@@ -7,11 +7,12 @@ import { motion } from 'framer-motion';
 import { UserPlus, Menu, X, LogOut, Settings, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useBroker } from '@/lib/auth-context';
-import { BeetleLabsLogo } from './BeetleLabsLogo';
+import { WefyLabsLogo } from './WefyLabsLogo';
 
 const NAV_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Leads', href: '/dashboard/leads' },
+  { label: 'Lead Capture', href: '/dashboard/lead-capture' },
   { label: 'Pipeline', href: '/dashboard/pipeline' },
   { label: 'Tasks', href: '/dashboard/tasks' },
   { label: 'Knowledge', href: '/knowledge' },
@@ -80,7 +81,7 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
 
           {/* Left: Logo & Context */}
           <div className="flex items-center gap-4 shrink-0">
-            <BeetleLabsLogo href="/" iconSize={24} textSize="text-lg" />
+            <WefyLabsLogo href="/" iconSize={24} textSize="text-lg" />
 
             <div className="hidden sm:block h-5 w-px bg-[#D4D0C8]" />
 
@@ -171,7 +172,7 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
                       {broker?.name || 'Real Estate Broker'}
                     </p>
                     <p className="text-[10px] text-[#6B6B6B] font-mono truncate">
-                      {broker?.email || 'broker@beetlelabs.ai'}
+                      {broker?.email || 'broker@wefylabs.com'}
                     </p>
                     {broker?.agency_name && (
                       <p className="text-[10px] text-[#0F766E] font-medium truncate mt-0.5">

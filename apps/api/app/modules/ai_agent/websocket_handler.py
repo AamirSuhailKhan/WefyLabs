@@ -23,7 +23,7 @@ from typing import Dict
 
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException, status
 
-logger = logging.getLogger("beetlelabs.ai_agent.ws")
+logger = logging.getLogger("wefylabs.ai_agent.ws")
 
 # ─── Per-organization rate limiter (in-memory, Redis in production) ──────────
 

@@ -3,7 +3,7 @@
 /**
  * Knowledge Intelligence Platform — Broker & Admin Page
  * ======================================================
- * Full knowledge management workflow matching the BeetleLabs Broker Dashboard design system:
+ * Full knowledge management workflow matching the WefyLabs Broker Dashboard design system:
  * Ingest → Process → Review → Verify → Publish → Monitor
  */
 

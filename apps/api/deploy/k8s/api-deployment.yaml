@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: beetlelabs-api
+  name: wefylabs-api
   namespace: production
   labels:
-    app: beetlelabs-api
+    app: wefylabs-api
     tier: backend
 spec:
   replicas: 5
@@ -16,15 +16,15 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: beetlelabs-api
+      app: wefylabs-api
   template:
     metadata:
       labels:
-        app: beetlelabs-api
+        app: wefylabs-api
     spec:
       containers:
         - name: api
-          image: registry.beetlelabs.ai/beetlelabs-api:latest
+          image: registry.wefylabs.com/wefylabs-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -49,20 +49,20 @@ spec:
             periodSeconds: 5
           envFrom:
             - configMapRef:
-                name: beetlelabs-config
+                name: wefylabs-config
             - secretRef:
-                name: beetlelabs-secrets
+                name: wefylabs-secrets
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: beetlelabs-api-hpa
+  name: wefylabs-api-hpa
   namespace: production
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: beetlelabs-api
+    name: wefylabs-api
   minReplicas: 5
   maxReplicas: 50
   metrics:
@@ -76,10 +76,10 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: beetlelabs-api-pdb
+  name: wefylabs-api-pdb
   namespace: production
 spec:
   minAvailable: 80%
   selector:
     matchLabels:
-      app: beetlelabs-api
+      app: wefylabs-api

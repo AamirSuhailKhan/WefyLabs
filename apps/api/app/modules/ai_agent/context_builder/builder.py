@@ -123,7 +123,7 @@ class ContextBuilder:
             )
         )
         config = config_result.scalar_one_or_none()
-        agent_name = config.agent_name if config else "BeetleLabs AI"
+        agent_name = config.agent_name if config else "WefyLabs AI"
         require_grounding = config.require_tool_grounding if config else True
         max_turns = config.max_turns if config else 30
         esc_conf = config.escalation_confidence_threshold if config else 0.3

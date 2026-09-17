@@ -16,7 +16,7 @@ from app.modules.sales_action.taxonomies import SalesActionType, CommunicationCh
 
 logger = logging.getLogger(__name__)
 
-SALES_ACTION_SYSTEM_PROMPT = """You are an elite, highly professional Real Estate Assistant at BeetleLabs.
+SALES_ACTION_SYSTEM_PROMPT = """You are an elite, highly professional Real Estate Assistant at WefyLabs.
 Your task is to phrase a polite, helpful, natural message to a prospective client based STRICTLY on the verified facts provided.
 
 STRICT INVARIANTS:
@@ -249,10 +249,10 @@ Missing Field to Ask: {missing_field_name or 'None'}
 
         # Default Generic Safe Greeting
         if lang == "ar":
-            body = f"مرحباً {name}، شكراً لتواصلك مع BeetleLabs بخصوص العقارات في {loc}. كيف يمكننا مساعدتك اليوم؟"
+            body = f"مرحباً {name}، شكراً لتواصلك مع WefyLabs بخصوص العقارات في {loc}. كيف يمكننا مساعدتك اليوم؟"
         elif lang == "hi":
-            body = f"नमस्ते {name}, BeetleLabs में संपर्क करने के लिए धन्यवाद। हम आपकी किस प्रकार सहायता कर सकते हैं?"
+            body = f"नमस्ते {name}, WefyLabs में संपर्क करने के लिए धन्यवाद। हम आपकी किस प्रकार सहायता कर सकते हैं?"
         else:
-            body = f"Hi {name}, thank you for contacting BeetleLabs regarding properties in {loc}. How can we best assist with your search today?"
+            body = f"Hi {name}, thank you for contacting WefyLabs regarding properties in {loc}. How can we best assist with your search today?"
 
         return body, subject

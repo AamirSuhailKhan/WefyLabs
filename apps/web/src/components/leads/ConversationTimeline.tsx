@@ -17,7 +17,7 @@ export default function ConversationTimeline({ conversations }: ConversationTime
             <Bot className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-extrabold text-white text-sm">BeetleLabs AI WhatsApp Assistant</h3>
+            <h3 className="font-extrabold text-white text-sm">WefyLabs AI WhatsApp Assistant</h3>
             <p className="text-[11px] text-emerald-300 font-medium">WhatsApp Qualification Chat</p>
           </div>
         </div>
@@ -52,7 +52,7 @@ export default function ConversationTimeline({ conversations }: ConversationTime
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1 opacity-75 text-[10px] font-bold uppercase tracking-wider">
-                    <span>{isLead ? 'Lead' : isBot ? 'BeetleLabs Bot' : 'Broker Note'}</span>
+                    <span>{isLead ? 'Lead' : isBot ? 'WefyLabs Bot' : 'Broker Note'}</span>
                     <span className="font-mono" suppressHydrationWarning>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

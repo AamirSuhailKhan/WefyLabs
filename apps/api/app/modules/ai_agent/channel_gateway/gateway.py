@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 import logging
 
-logger = logging.getLogger("beetlelabs.ai_agent.channel_gateway")
+logger = logging.getLogger("wefylabs.ai_agent.channel_gateway")
 
 
 # ─── Raw Channel Payloads (typed) ─────────────────────────────────────────────

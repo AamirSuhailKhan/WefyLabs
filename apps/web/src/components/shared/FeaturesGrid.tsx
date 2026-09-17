@@ -81,7 +81,7 @@ export default function FeaturesGrid() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] as any }}
         className="text-center mb-14"
       >
-        <SectionLabel text="HOW IT WORKS" />
+        <SectionLabel text="FEATURES" />
         <h2
           className="text-4xl md:text-5xl font-bold text-[#1A1A1A] mb-4"
           style={{ fontFamily: 'JetBrains Mono, Geist Mono, Courier New, monospace' }}
@@ -92,7 +92,7 @@ export default function FeaturesGrid() {
           className="text-base sm:text-lg text-[#4A4A4A] max-w-2xl mx-auto leading-relaxed"
           style={{ fontFamily: 'Inter, sans-serif' }}
         >
-          Whether you work from your phone or laptop, BeetleLabs meets you where you are.
+          Whether you work from your phone or laptop, WefyLabs meets you where you are.
         </p>
       </motion.div>
 

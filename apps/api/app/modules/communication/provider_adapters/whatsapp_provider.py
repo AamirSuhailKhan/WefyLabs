@@ -33,7 +33,7 @@ from app.modules.communication.provider_adapters.base_provider import (
     ProviderStatusEnum,
 )
 
-logger = logging.getLogger("beetlelabs.communication.whatsapp")
+logger = logging.getLogger("wefylabs.communication.whatsapp")
 
 _DEFAULT_GRAPH_VERSION = "v18.0"
 _GRAPH_BASE_URL = "https://graph.facebook.com"

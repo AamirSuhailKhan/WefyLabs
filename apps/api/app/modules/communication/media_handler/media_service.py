@@ -129,9 +129,9 @@ class MediaHandler:
     async def get_public_url(self, storage_key: str, expires_seconds: int = 3600) -> str:
         """Generate a (optionally pre-signed) URL for a stored file."""
         if self._storage_backend == "mock":
-            return f"https://mock-cdn.beetlelabs.ai/{storage_key}"
+            return f"https://mock-cdn.wefylabs.com/{storage_key}"
         # Production: generate pre-signed URL from S3
-        return f"https://cdn.beetlelabs.ai/{storage_key}"
+        return f"https://cdn.wefylabs.com/{storage_key}"
 
     # ─── Internal ─────────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ class MediaHandler:
         storage_key = f"{organization_id}/media/{file_hash}{ext}"
 
         if self._storage_backend == "mock":
-            public_url = f"https://mock-cdn.beetlelabs.ai/{storage_key}"
+            public_url = f"https://mock-cdn.wefylabs.com/{storage_key}"
             return storage_key, public_url
 
         # Production (S3-compatible):
@@ -192,5 +192,5 @@ class MediaHandler:
         #     pass
         # public_url = f"https://{settings.CDN_DOMAIN}/{storage_key}"
 
-        public_url = f"https://cdn.beetlelabs.ai/{storage_key}"
+        public_url = f"https://cdn.wefylabs.com/{storage_key}"
         return storage_key, public_url

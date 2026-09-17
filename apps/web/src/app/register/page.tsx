@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Phone, User, Building, MapPin, ArrowRight, MessageSquare } from 'lucide-react';
 import { api } from '@/lib/api-client';
-import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
+import { WefyLabsLogo } from '@/components/shared/WefyLabsLogo';
 
 const EXPO = [0.22, 1, 0.36, 1] as const;
 
@@ -112,7 +112,7 @@ function RegisterContent() {
         transition={{ duration: 0.5, ease: EXPO }}
         className="relative z-10 mb-8"
       >
-        <BeetleLabsLogo dark={false} href="/" iconSize={36} textSize="text-3xl" />
+        <WefyLabsLogo dark={false} href="/" iconSize={36} textSize="text-3xl" />
       </motion.div>
 
       <motion.div

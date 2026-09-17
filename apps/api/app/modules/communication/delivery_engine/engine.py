@@ -83,7 +83,7 @@ class DeliveryEngine:
             content=content,
             content_structured=content_structured,
             sender_identifier="system",
-            sender_name="BeetleLabs AI" if sent_by_ai else "Agent",
+            sender_name="WefyLabs AI" if sent_by_ai else "Agent",
             sent_by_ai=sent_by_ai,
             sent_by_agent_id=sent_by_agent_id,
             template_id=template_id,

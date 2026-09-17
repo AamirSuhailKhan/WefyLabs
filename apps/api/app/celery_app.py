@@ -1,11 +1,12 @@
 import os
+import ssl
 from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue, Exchange
 from app.config import settings
 
 celery_app = Celery(
-    "beetlelabs_enterprise_tasks",
+    "wefylabs_enterprise_tasks",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
     include=[
@@ -25,6 +26,8 @@ celery_app = Celery(
         "app.modules.memory.workers.memory_tasks",
         # Part 21.8 — AI Autonomous Sales Loop & Event-Driven Orchestration Engine workers
         "app.modules.autonomous_loop.workers.loop_tasks",
+        # Part 35 — AI Real Estate Revenue Autopilot workers
+        "app.modules.revenue_autopilot.tasks",
     ]
 )
 
@@ -145,12 +148,32 @@ celery_app.conf.update(
         "app.modules.workflow.workers.workflow_tasks.dispatch_workflow_trigger_task": {"queue": "workflow-trigger"},
         # ── AI Memory Engine routes ───────────────────────────────────────
         "app.modules.memory.workers.memory_tasks.evaluate_memory_decay_task": {"queue": "memory-decay"},
+        # ── Follow-Up Automation Engine routes ─────────────────────────────
+        "app.tasks.followup_tasks.evaluate_followups": {"queue": "lead_queue"},
+        "app.tasks.followup_tasks.escalate_stale_lead": {"queue": "lead_queue"},
+        "app.tasks.followup_tasks.process_followup_rule": {"queue": "lead_queue"},
+        "app.tasks.followup_tasks.send_daily_briefing": {"queue": "daily-brief"},
     },
     beat_schedule={
         # ── Existing schedules (unchanged) ────────────────────────────────
         "check-hourly-followups": {
             "task": "app.tasks.followup_tasks.check_and_schedule_followups",
             "schedule": crontab(minute=0, hour="*"),
+        },
+        # ── Part 27 — Follow-up evaluation every 5 minutes ────────────────
+        "evaluate-followups-periodic": {
+            "task": "app.tasks.followup_tasks.evaluate_followups",
+            "schedule": crontab(minute="*/5"),
+        },
+        # ── Part 27 — Escalate uncontacted hot leads every 10 minutes ─────
+        "escalate-stale-leads-periodic": {
+            "task": "app.tasks.followup_tasks.escalate_stale_lead",
+            "schedule": crontab(minute="*/10"),
+        },
+        # ── Part 27 — Daily CRM Briefing at 07:00 AM UTC ──────────────────
+        "send-daily-followup-briefing": {
+            "task": "app.tasks.followup_tasks.send_daily_briefing",
+            "schedule": crontab(minute=0, hour=7),
         },
         # ── Knowledge freshness expiration every 6 hours ──────────────────
         "expire-stale-knowledge": {
@@ -239,5 +262,24 @@ celery_app.conf.update(
             "schedule": crontab(minute="*/2"),
             "kwargs": {"tenant_id": "__all__"},
         },
+        # ── Part 35 — AI Real Estate Revenue Autopilot: Scan tenant opportunities every 10 min ──
+        "scan-revenue-opportunities": {
+            "task": "app.modules.revenue_autopilot.tasks.scan_all_tenants_revenue_opportunities_task",
+            "schedule": crontab(minute="*/10"),
+        },
+        # ── Part 35 — AI Real Estate Revenue Autopilot: Expire stale opportunities hourly ──
+        "expire-stale-revenue-opportunities": {
+            "task": "app.modules.revenue_autopilot.tasks.expire_stale_opportunities_task",
+            "schedule": crontab(minute=0, hour="*"),
+        },
     }
 )
+
+# ── Upstash Redis TLS SSL Configuration ──────────────────────────────────────
+# When using rediss:// (TLS), Celery requires ssl_cert_reqs for both broker and backend
+if settings.REDIS_URL and settings.REDIS_URL.startswith("rediss://"):
+    celery_app.conf.update(
+        broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+        redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+    )
+

@@ -21,10 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, get_current_broker
 from app.models.broker import Broker
 from app.modules.property_recommendation.service import PropertyRecommendationService
+from app.modules.property_recommendation.matching_service import AIPropertyMatchingEngine
 from app.modules.property_recommendation.dto import (
     PropertyRecommendationRequestDTO, PropertyRecommendationResponseDTO,
     PropertyComparisonRequestDTO, PropertyComparisonResponseDTO,
-    SimulationRequestDTO, ReverseMatchingResponseDTO, RecommendationFeedbackDTO
+    SimulationRequestDTO, ReverseMatchingResponseDTO, RecommendationFeedbackDTO,
+    LeadMatchItemDTO, MatchingDashboardDTO, ShortlistRequestDTO, RecommendRequestDTO,
+    RequirementExtractionRequestDTO, RequirementExtractionResponseDTO,
+    MatchFeedbackRequestDTO, MatchCompareRequestDTO
 )
 
 logger = logging.getLogger(__name__)
@@ -261,3 +265,225 @@ async def get_configuration_endpoint(
             },
         },
     }
+
+
+# ─── Part 29 AI Matching Engine Dedicated Endpoints ─────────────────────────
+
+@router.get(
+    "/api/v1/leads/{lead_id}/property-matches",
+    response_model=PropertyRecommendationResponseDTO,
+    summary="Lead → Properties: Ranked Matches (Canonical)",
+)
+@router.get(
+    "/api/v1/leads/{lead_id}/matches",
+    response_model=PropertyRecommendationResponseDTO,
+    summary="Lead → Properties: Ranked Matches (Alias)",
+)
+async def get_lead_property_matches_endpoint(
+    lead_id: str,
+    top_k: int = Query(5, ge=1, le=50),
+    limit: Optional[int] = Query(None, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    minimum_score: Optional[float] = Query(None, ge=0.0, le=100.0),
+    property_type: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    sort: str = Query("score_desc"),
+    availability: Optional[str] = Query(None),
+    transaction_type: Optional[str] = Query(None),
+    allow_alternatives: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Finds best property matches for lead. Zero hallucinated inventory, deterministic hard filtering.
+    Supports query filters, pagination, score cutoffs, and soft alternative relaxation.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.match_properties_for_lead(
+        lead_id=lead_id,
+        broker=current_broker,
+        top_k=top_k,
+        limit=limit,
+        offset=offset,
+        minimum_score=minimum_score,
+        property_type=property_type,
+        location=location,
+        sort=sort,
+        availability=availability,
+        transaction_type=transaction_type,
+        allow_alternatives=allow_alternatives
+    )
+
+
+@router.get(
+    "/api/v1/properties/{property_id}/lead-matches",
+    response_model=List[LeadMatchItemDTO],
+    summary="Property → Leads: Reverse Buyer Matches (Canonical)",
+)
+@router.get(
+    "/api/v1/properties/{property_id}/matches",
+    response_model=List[LeadMatchItemDTO],
+    summary="Property → Leads: Reverse Buyer Matches (Alias)",
+)
+async def get_property_lead_matches_endpoint(
+    property_id: str,
+    top_k: int = Query(10, ge=1, le=50),
+    limit: Optional[int] = Query(None, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    minimum_score: Optional[float] = Query(None, ge=0.0, le=100.0),
+    sort: str = Query("score_desc"),
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Identifies top qualified buyers in the CRM for this property using the exact same canonical engine.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.match_leads_for_property(
+        property_id=property_id,
+        broker=current_broker,
+        top_k=top_k,
+        limit=limit,
+        offset=offset,
+        minimum_score=minimum_score,
+        sort=sort
+    )
+
+
+@router.post(
+    "/api/v1/matches/shortlist",
+    summary="Shortlist Matched Property for Lead",
+)
+async def shortlist_match_endpoint(
+    dto: ShortlistRequestDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Shortlists a property for a lead, creating/updating LeadPropertyInterest with scores & audit log.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.shortlist_property_for_lead(
+        lead_id=dto.lead_id,
+        property_id=dto.property_id,
+        broker=current_broker,
+        dto=dto
+    )
+
+
+@router.post(
+    "/api/v1/matches/recommend",
+    summary="Recommend Matched Property to Lead",
+)
+async def recommend_match_endpoint(
+    dto: RecommendRequestDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Formally records property recommendation, updating LeadPropertyInterest and creating follow-up task.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.recommend_property_to_lead(
+        lead_id=dto.lead_id,
+        property_id=dto.property_id,
+        broker=current_broker,
+        dto=dto
+    )
+
+
+@router.post(
+    "/api/v1/matches/feedback",
+    summary="Record Match Feedback",
+)
+async def record_match_feedback_endpoint(
+    dto: MatchFeedbackRequestDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Records agent feedback on a match (e.g. good_match, bad_match, wrong_budget, etc.).
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.record_match_feedback(
+        lead_id=dto.lead_id,
+        property_id=dto.property_id,
+        broker=current_broker,
+        feedback=dto.feedback,
+        notes=dto.notes
+    )
+
+
+@router.post(
+    "/api/v1/matches/compare",
+    summary="Compare Matched Properties Side-by-Side",
+)
+async def compare_matched_properties_endpoint(
+    dto: MatchCompareRequestDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Generates side-by-side comparison matrix for selected matched properties with grounded trade-offs.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.compare_properties(
+        property_ids=dto.property_ids,
+        broker=current_broker,
+        lead_id=dto.lead_id
+    )
+
+
+@router.get(
+    "/api/v1/matches/alternatives/{lead_id}",
+    response_model=PropertyRecommendationResponseDTO,
+    summary="Controlled Soft Constraint Alternatives",
+)
+async def get_alternatives_endpoint(
+    lead_id: str,
+    top_k: int = Query(5, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Finds alternative properties by relaxing soft constraints in controlled order.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.match_properties_for_lead(
+        lead_id=lead_id,
+        broker=current_broker,
+        top_k=top_k,
+        allow_alternatives=True
+    )
+
+
+@router.get(
+    "/api/v1/matches/dashboard",
+    response_model=MatchingDashboardDTO,
+    summary="AI Matching Dashboard Metrics & Supply Gaps",
+)
+async def get_matching_dashboard_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Aggregates active buyer demand vs available inventory, highlighting supply gaps and unmatched hot leads.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.get_matching_dashboard(broker=current_broker)
+
+
+@router.post(
+    "/api/v1/matches/extract-requirements",
+    response_model=RequirementExtractionResponseDTO,
+    summary="Extract Structured Requirements from Free Text",
+)
+async def extract_requirements_endpoint(
+    dto: RequirementExtractionRequestDTO,
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Extracts structured requirements with prompt injection immunity and provenance tracking.
+    """
+    return AIPropertyMatchingEngine.extract_requirements_from_text(dto.text)
+

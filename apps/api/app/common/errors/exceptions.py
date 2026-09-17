@@ -43,8 +43,8 @@ class ApiErrorResponse(BaseModel):
 
 # ─── Domain Exception Hierarchy ─────────────────────────────────────────────
 
-class BeetleLabsError(Exception):
-    """Base exception for all BeetleLabs domain errors."""
+class WefyLabsError(Exception):
+    """Base exception for all WefyLabs domain errors."""
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_code: str = "INTERNAL_ERROR"
     message: str = "An unexpected error occurred."
@@ -55,7 +55,11 @@ class BeetleLabsError(Exception):
         super().__init__(self.message)
 
 
-class NotFoundError(BeetleLabsError):
+# Backward-compatible alias for existing imports
+BeetleLabsError = WefyLabsError
+
+
+class NotFoundError(WefyLabsError):
     """Resource not found."""
     status_code = status.HTTP_404_NOT_FOUND
     error_code = "NOT_FOUND"
@@ -86,7 +90,7 @@ class UserNotFoundError(NotFoundError):
         super().__init__(message=f"User '{user_id}' not found." if user_id else "User not found.")
 
 
-class AuthenticationError(BeetleLabsError):
+class AuthenticationError(WefyLabsError):
     """Authentication failed — invalid or expired token."""
     status_code = status.HTTP_401_UNAUTHORIZED
     error_code = "AUTHENTICATION_FAILED"
@@ -98,7 +102,7 @@ class TokenExpiredError(AuthenticationError):
     message = "Your session has expired. Please sign in again."
 
 
-class PermissionDeniedError(BeetleLabsError):
+class PermissionDeniedError(WefyLabsError):
     """RBAC permission check failed."""
     status_code = status.HTTP_403_FORBIDDEN
     error_code = "PERMISSION_DENIED"
@@ -112,7 +116,7 @@ class PermissionDeniedError(BeetleLabsError):
         super().__init__(message=msg)
 
 
-class ValidationError(BeetleLabsError):
+class ValidationError(WefyLabsError):
     """Domain-level validation failure (distinct from HTTP 422)."""
     status_code = 422
     error_code = "VALIDATION_FAILED"
@@ -122,7 +126,7 @@ class ValidationError(BeetleLabsError):
         super().__init__(message=f"Validation failed: {message}", details=details)
 
 
-class ConflictError(BeetleLabsError):
+class ConflictError(WefyLabsError):
     """Resource conflict — duplicate or optimistic lock failure."""
     status_code = status.HTTP_409_CONFLICT
     error_code = "CONFLICT"
@@ -143,14 +147,14 @@ class DuplicateError(ConflictError):
         super().__init__(message=f"A resource with {field}='{value}' already exists.")
 
 
-class TenantIsolationError(BeetleLabsError):
+class TenantIsolationError(WefyLabsError):
     """Attempt to access data belonging to a different organization."""
     status_code = status.HTTP_403_FORBIDDEN
     error_code = "TENANT_ISOLATION_VIOLATION"
     message = "Access to this resource is not permitted for your organization."
 
 
-class QuotaExceededError(BeetleLabsError):
+class QuotaExceededError(WefyLabsError):
     """Organization has exceeded a plan quota."""
     status_code = status.HTTP_402_PAYMENT_REQUIRED
     error_code = "QUOTA_EXCEEDED"
@@ -159,14 +163,14 @@ class QuotaExceededError(BeetleLabsError):
         super().__init__(message=f"Plan quota exceeded: {resource} limit is {limit}. Upgrade your plan.")
 
 
-class RateLimitError(BeetleLabsError):
+class RateLimitError(WefyLabsError):
     """Too many requests."""
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     error_code = "RATE_LIMIT_EXCEEDED"
     message = "Too many requests. Please slow down and try again."
 
 
-class IntegrationError(BeetleLabsError):
+class IntegrationError(WefyLabsError):
     """External service integration failed."""
     status_code = status.HTTP_502_BAD_GATEWAY
     error_code = "INTEGRATION_FAILED"
@@ -178,7 +182,7 @@ class IntegrationError(BeetleLabsError):
         super().__init__(message=msg)
 
 
-class StorageError(BeetleLabsError):
+class StorageError(WefyLabsError):
     """File storage operation failed."""
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_code = "STORAGE_ERROR"
@@ -191,8 +195,8 @@ def _get_request_id(request: Request) -> Optional[str]:
     return request.headers.get("x-request-id") or request.headers.get("x-correlation-id")
 
 
-async def beetlelabs_error_handler(request: Request, exc: BeetleLabsError) -> JSONResponse:
-    """Handles all domain-specific BeetleLabs errors with consistent response structure."""
+async def wefylabs_error_handler(request: Request, exc: WefyLabsError) -> JSONResponse:
+    """Handles all domain-specific WefyLabs errors with consistent response structure."""
     request_id = _get_request_id(request)
     logger.warning(
         f"[{exc.error_code}] {exc.message}",
@@ -208,6 +212,8 @@ async def beetlelabs_error_handler(request: Request, exc: BeetleLabsError) -> JS
             request_id=request_id
         ).model_dump(exclude_none=True)
     )
+
+beetlelabs_error_handler = wefylabs_error_handler
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -256,12 +262,15 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+wefylabs_error_handler = beetlelabs_error_handler
+
+
 def register_error_handlers(app) -> None:
     """
     Registers all error handlers on the FastAPI app.
     Call this once in app startup, before any routes are mounted.
     """
     from fastapi.exceptions import RequestValidationError
-    app.add_exception_handler(BeetleLabsError, beetlelabs_error_handler)
+    app.add_exception_handler(WefyLabsError, wefylabs_error_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 import logging
 import json
 
-logger = logging.getLogger("beetlelabs.ai_agent.workers")
+logger = logging.getLogger("wefylabs.ai_agent.workers")
 
 async def async_summarize_session(session_id: str) -> bool:
     """Background task to generate conversation summary for long sessions."""

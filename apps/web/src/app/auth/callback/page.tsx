@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api-client';
-import { BeetleLabsLogo } from '@/components/shared/BeetleLabsLogo';
+import { WefyLabsLogo } from '@/components/shared/WefyLabsLogo';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -85,7 +85,7 @@ function AuthCallbackContent() {
 
       <div className="relative z-10 flex flex-col items-center text-center max-w-md bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl">
         <div className="mb-6">
-          <BeetleLabsLogo dark href="/" iconSize={36} textSize="text-2xl" />
+          <WefyLabsLogo dark href="/" iconSize={36} textSize="text-2xl" />
         </div>
 
         {errorMessage ? (

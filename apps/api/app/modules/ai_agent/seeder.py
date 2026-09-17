@@ -14,13 +14,13 @@ from sqlalchemy import select
 
 from app.models.agent_models import AgentConfiguration
 
-logger = logging.getLogger("beetlelabs.ai_agent.seeder")
+logger = logging.getLogger("wefylabs.ai_agent.seeder")
 
 
 async def seed_default_agent_configuration(
     db: AsyncSession,
     organization_id: str,
-    agent_name: str = "BeetleLabs AI",
+    agent_name: str = "WefyLabs AI",
 ) -> AgentConfiguration:
     """
     Ensure a default AgentConfiguration exists for the given organization.

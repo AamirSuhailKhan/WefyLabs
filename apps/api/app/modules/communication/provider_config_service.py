@@ -20,7 +20,7 @@ from app.modules.communication.provider_adapters.base_provider import (
 )
 from app.models.communication_models import ProviderCredential
 
-logger = logging.getLogger("beetlelabs.communication.config")
+logger = logging.getLogger("wefylabs.communication.config")
 
 
 @dataclass

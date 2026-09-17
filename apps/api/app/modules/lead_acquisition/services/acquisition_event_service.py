@@ -90,6 +90,12 @@ class AcquisitionEventService:
         logger.warning(f"[ACQ_EVENT] Rejected event {event.id}: {reason}")
         await self.db.flush()
 
+    async def get_by_idempotency_key(
+        self, organization_id: str, key: str
+    ) -> Optional[LeadAcquisitionEvent]:
+        """Find acquisition event by organization and idempotency key."""
+        return await self._find_by_idempotency_key(organization_id, key)
+
     async def _find_by_idempotency_key(
         self, organization_id: str, key: str
     ) -> Optional[LeadAcquisitionEvent]:

@@ -11,6 +11,7 @@ import SalesActionCard from '@/components/leads/SalesActionCard';
 import ConversationIntelligencePanel from '@/components/leads/ConversationIntelligencePanel';
 import AutonomousSalesTimeline from '@/components/leads/AutonomousSalesTimeline';
 import ScoreBadge from '@/components/shared/ScoreBadge';
+import LeadPropertyMatchesPanel from '@/components/leads/LeadPropertyMatchesPanel';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -151,6 +152,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <SalesActionCard leadId={lead.id} leadName={lead.name} />
           {/* Part 21.8 — Autonomous Sales Loop Timeline & Broker Controls */}
           <AutonomousSalesTimeline leadId={lead.id} leadName={lead.name} />
+          {/* Part 29 — Explainable AI Property Matches */}
+          <LeadPropertyMatchesPanel leadId={lead.id} leadName={lead.name} />
           <ExtractedDataCard lead={lead} />
         </div>
       </div>

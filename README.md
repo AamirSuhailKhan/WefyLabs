@@ -1,6 +1,6 @@
-# 🏠 LeadScore — AI-Powered Lead Qualification Platform for Real Estate Brokers
+# 🏠 WefyLabs — AI-Powered Lead Qualification Platform for Real Estate Brokers
 
-**LeadScore** is an automated AI lead qualification platform built specifically for Indian real estate brokers. It connects with WhatsApp Business API (via 360dialog), automatically chats with forwarded leads using OpenAI GPT-4o, qualifies property buyers/renters, scores leads (Hot, Warm, Cold), schedules automated follow-up drip messages, and provides a Kanban pipeline CRM dashboard.
+**WefyLabs** (formerly BeetleLabs) is an enterprise-grade AI lead qualification and revenue autopilot platform built specifically for real estate brokers and sales teams. Operating on `wefylabs.com`, it integrates AI lead scoring, instant multi-channel qualification, visual Kanban pipelines, automated CRM workflows, calendar site-visit scheduling, and proactive revenue opportunities.
 
 ---
 

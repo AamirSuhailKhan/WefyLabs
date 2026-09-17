@@ -88,7 +88,7 @@ After every tool call, incorporate the VERIFIED result naturally into your respo
 
 FALLBACK_RULE_RESPONSE = {
     "greeting": (
-        "Hello! I'm your BeetleLabs property advisor. "
+        "Hello! I'm your WefyLabs property advisor. "
         "To find the best options for you, may I know your budget range?"
     ),
     "ask_budget": "What is your approximate budget for this property?",

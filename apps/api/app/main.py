@@ -10,13 +10,13 @@ from app.database import engine
 from app.common.logger.logging_config import configure_logging
 configure_logging(
     level="DEBUG" if settings.ENV in ("development", "dev") else "INFO",
-    service_name="beetlelabs-api",
+    service_name="wefylabs-api",
     env=settings.ENV,
     json_output=settings.ENV not in ("development", "dev")
 )
 
 # ─── Unified Error Handlers ───────────────────────────────────────────────────
-from app.common.errors.exceptions import BeetleLabsError, register_error_handlers
+from app.common.errors.exceptions import WefyLabsError, BeetleLabsError, register_error_handlers
 
 # ─── Middleware ───────────────────────────────────────────────────────────────
 from app.common.middleware.correlation import CorrelationMiddleware
@@ -31,6 +31,7 @@ from app.infrastructure.events.subscribers import register_default_subscribers
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.invitations_router import router as invitations_router
 from app.routers.brokers import router as brokers_router
 from app.modules.leads.router import router as leads_router
 from app.routers.whatsapp import router as whatsapp_router
@@ -222,6 +223,9 @@ from app.modules.calendar.router import router as calendar_router
 app.include_router(health_router)
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(auth_router)
+app.include_router(invitations_router, prefix=settings.API_V1_STR)
+app.include_router(invitations_router)
 app.include_router(brokers_router, prefix=settings.API_V1_STR)
 app.include_router(leads_router, prefix=settings.API_V1_STR)
 app.include_router(clean_leads_v1_router, prefix=settings.API_V1_STR)
@@ -323,13 +327,17 @@ app.include_router(ai_memory_router)
 # ─── Volume 2 Part 14 — Global Multi-Country Infrastructure & Localization Engine ───
 app.include_router(global_infrastructure_router)
 
-# ─── Part 21.1 — Real-Estate Lead Acquisition Foundation ─────────────────────
+# ─── Part 21.1 & Part 26 — Real-Estate Lead Acquisition & Capture Hub ──────────
 from app.modules.lead_acquisition.controller.acquisition_controller import (
     router as lead_acquisition_router,
     website_router as website_acquisition_router,
 )
+from app.modules.lead_acquisition.controller.public_capture_controller import (
+    router as public_capture_router,
+)
 app.include_router(lead_acquisition_router)
 app.include_router(website_acquisition_router)
+app.include_router(public_capture_router)
 
 # ─── Part 21.2 — Real-Estate AI Lead Discovery Engine ─────────────────────────
 from app.modules.discovery import discovery_router
@@ -359,21 +367,23 @@ app.include_router(conversation_intelligence_router, prefix=settings.API_V1_STR)
 from app.modules.autonomous_loop import autonomous_loop_router
 app.include_router(autonomous_loop_router, prefix=settings.API_V1_STR)
 
+# ─── Part 30 — AI Real-Estate Agent Daily Command Center Engine ──────────────
+from app.modules.command_center import command_center_router
+app.include_router(command_center_router)
+
+# ─── Part 31 — Customer Onboarding, Tenant Activation & Demo Mode ────────────
+from app.modules.onboarding import onboarding_router
+app.include_router(onboarding_router)
+
+# ─── Part 35 — AI Real Estate Revenue Autopilot Engine ───────────────────────
+from app.modules.revenue_autopilot import revenue_router
+app.include_router(revenue_router, prefix=settings.API_V1_STR)
+
 @app.get("/metrics", response_class=PlainTextResponse, tags=["Observability"])
 async def metrics():
     """Prometheus-compatible metrics endpoint."""
     return metrics_registry.generate_prometheus_text()
 
-@app.get("/health/liveness", tags=["Health"])
-async def health_liveness():
-    """Kubernetes / Cloud Liveness Probe."""
-    return {"status": "alive", "timestamp": settings.VERSION}
-
-@app.get("/health/readiness", tags=["Health"])
-async def health_readiness():
-    """Kubernetes / Cloud Readiness Probe."""
-    return {"status": "ready", "database": "connected", "cache": "connected"}
-
 @app.get("/", tags=["Root"])
 async def root():
-    return {"message": "Welcome to BeetleLabs Enterprise API. Visit /docs for OpenAPI documentation."}
+    return {"message": "Welcome to WefyLabs Enterprise API. Visit /api/v1/docs for documentation."}

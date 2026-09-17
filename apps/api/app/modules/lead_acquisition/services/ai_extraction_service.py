@@ -67,7 +67,7 @@ def _sanitize_input(text: str) -> str:
 
 def _build_extraction_prompt(content: str, language_hint: Optional[str] = None) -> str:
     lang_note = f"The message may be in {language_hint}." if language_hint else ""
-    return f"""You are a real-estate lead data extraction assistant for BeetleLabs CRM.
+    return f"""You are a real-estate lead data extraction assistant for WefyLabs CRM.
 Extract structured information from the following real estate inquiry message.
 
 CRITICAL RULES:

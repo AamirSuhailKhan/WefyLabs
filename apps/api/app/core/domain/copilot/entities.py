@@ -43,3 +43,5 @@ class CopilotResponseEntity:
     citations: List[str] = field(default_factory=list)
     suggested_followups: List[str] = field(default_factory=list)
     executed_tools: List[CopilotToolCallEntity] = field(default_factory=list)
+    action_preview: Optional[Dict[str, Any]] = None
+    conversation_id: Optional[str] = None

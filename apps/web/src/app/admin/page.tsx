@@ -31,7 +31,7 @@ export default function AdminPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-2">
             <ShieldCheck className="w-7 h-7 text-emerald-400" />
-            BeetleLabs Admin Control Panel
+            WefyLabs Admin Control Panel
           </h1>
           <p className="text-xs text-slate-400 mt-1">Platform overview, MRR analytics, broker retention & usage</p>
         </div>

@@ -155,8 +155,12 @@ async def _async_process_acquisition_event(
             # Quality score
             await score_and_save(prospect, db)
 
+            # Convert to canonical Lead / update duplicate attribution
+            if not prospect.canonical_lead_id:
+                await svc.import_as_lead(organization_id, prospect)
+
             await db.commit()
-            logger.info(f"[ACQ_TASK] Processed prospect {prospect_id}: status={prospect.status}")
+            logger.info(f"[ACQ_TASK] Processed and imported prospect {prospect_id}: status={prospect.status}")
         except Exception as exc:
             logger.error(f"[ACQ_TASK] Pipeline failed for prospect {prospect_id}: {exc}")
             await db.rollback()

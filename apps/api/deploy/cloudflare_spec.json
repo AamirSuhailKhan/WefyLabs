@@ -1,7 +1,7 @@
 {
-  "project": "BeetleLabs Hyperscale Edge",
+  "project": "WefyLabs Hyperscale Edge",
   "dns": {
-    "zone": "beetlelabs.ai",
+    "zone": "wefylabs.com",
     "proxied": true,
     "anycast_routing": "global"
   },
@@ -28,8 +28,8 @@
     }
   },
   "multi_region_origins": [
-    { "region": "us-east", "endpoint": "api-us.beetlelabs.ai", "weight": 40 },
-    { "region": "eu-central", "endpoint": "api-eu.beetlelabs.ai", "weight": 30 },
-    { "region": "ap-south", "endpoint": "api-in.beetlelabs.ai", "weight": 30 }
+    { "region": "us-east", "endpoint": "api-us.wefylabs.com", "weight": 40 },
+    { "region": "eu-central", "endpoint": "api-eu.wefylabs.com", "weight": 30 },
+    { "region": "ap-south", "endpoint": "api-in.wefylabs.com", "weight": 30 }
   ]
 }

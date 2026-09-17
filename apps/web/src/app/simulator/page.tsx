@@ -13,7 +13,7 @@ export default function SimulatorPage() {
         </div>
         <h1 className="text-3xl font-extrabold text-white">WhatsApp Bot Live Simulator</h1>
         <p className="text-xs text-slate-400 mt-2">
-          Test how BeetleLabs AI interacts with leads, extracts budget, timeline, location, loan status & generates Hot/Warm/Cold scorecards in real time.
+          Test how WefyLabs AI interacts with leads, extracts budget, timeline, location, loan status & generates Hot/Warm/Cold scorecards in real time.
         </p>
       </div>
 

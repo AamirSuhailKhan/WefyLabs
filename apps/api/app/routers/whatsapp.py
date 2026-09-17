@@ -1,5 +1,6 @@
 import hmac
 import hashlib
+import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, Request, Response, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from app.config import settings
 from app.dependencies import get_db
 from app.services.conversation_service import process_incoming_whatsapp_message
 
+logger = logging.getLogger("beetlelabs.whatsapp")
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
 def verify_meta_signature(raw_body: bytes, signature_header: str, app_secret: str) -> bool:
@@ -73,5 +75,5 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
         result = await process_incoming_whatsapp_message(db, data)
         return {"status": "ok", "result": result}
     except Exception as e:
-        print(f"[WhatsApp Webhook Error] {e}")
-        return {"status": "ok", "detail": str(e)}
+        logger.error(f"[WhatsApp Webhook Error] {type(e).__name__}: {e}", exc_info=False)
+        return {"status": "ok", "detail": "Internal processing error"}

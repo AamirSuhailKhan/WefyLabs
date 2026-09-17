@@ -92,8 +92,16 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
       const b = await api.getBrokerProfile();
       setBroker(b);
       return b;
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[BrokerProvider] Failed fetching broker profile:', err);
+      // If token is expired or invalid (401), clear it and redirect to login
+      if (err?.status === 401 || (err?.message && err.message.toLowerCase().includes('expired'))) {
+        removeToken();
+        setBroker(null);
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+      }
       return null;
     } finally {
       setLoading(false);
@@ -107,10 +115,12 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
       fetchProfile();
     };
 
+    window.addEventListener('wefylabs:auth_change', handleProfileUpdate);
     window.addEventListener('beetlelabs:auth_change', handleProfileUpdate);
     window.addEventListener('storage', handleProfileUpdate);
 
     return () => {
+      window.removeEventListener('wefylabs:auth_change', handleProfileUpdate);
       window.removeEventListener('beetlelabs:auth_change', handleProfileUpdate);
       window.removeEventListener('storage', handleProfileUpdate);
     };
@@ -120,6 +130,7 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
     const updated = await api.updateBrokerProfile(data);
     setBroker(updated);
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('wefylabs:auth_change'));
       window.dispatchEvent(new Event('beetlelabs:auth_change'));
     }
     return updated;
@@ -129,6 +140,7 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
     api.auth.logout();
     setBroker(null);
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('wefylabs:auth_change'));
       window.dispatchEvent(new Event('beetlelabs:auth_change'));
     }
   };

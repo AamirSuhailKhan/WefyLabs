@@ -6,8 +6,8 @@ FROM base AS deps
 RUN apk add --no-libc-compat libc6-compat
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml* ./
-RUN corepack enable pnpm && pnpm i --frozen-lockfile || npm install
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
 
 # 3. Builder Stage
 FROM base AS builder
@@ -16,7 +16,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN corepack enable pnpm && pnpm run build || npm run build
+RUN npm run build
+
 
 # 4. Runner Stage
 FROM base AS runner

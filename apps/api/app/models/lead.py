@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.score import Score
     from app.models.follow_up import FollowUp
+    from app.models.property_models import LeadPropertyInterest
 
 # Preferred locations ARRAY for Postgres with JSON fallback for SQLite
 PreferredLocationsType = ARRAY(String).with_variant(JSON(), "sqlite")
@@ -141,3 +142,8 @@ class Lead(Base):
     conversations: Mapped[List["Conversation"]] = relationship("Conversation", back_populates="lead", cascade="all, delete-orphan", order_by="Conversation.created_at.asc()")
     scores: Mapped[List["Score"]] = relationship("Score", back_populates="lead", cascade="all, delete-orphan", order_by="Score.created_at.desc()")
     follow_ups: Mapped[List["FollowUp"]] = relationship("FollowUp", back_populates="lead", cascade="all, delete-orphan", order_by="FollowUp.scheduled_at.asc()")
+    interested_properties: Mapped[List["LeadPropertyInterest"]] = relationship("LeadPropertyInterest", back_populates="lead", cascade="all, delete-orphan")
+
+    @property
+    def organization_id(self) -> str:
+        return str(self.broker_id)

@@ -166,7 +166,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
               <Bot className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-white">BeetleLabs AI Assistant</div>
+              <div className="text-sm font-semibold text-white">WefyLabs AI Assistant</div>
               <div className="text-xs text-blue-400 flex items-center gap-1.5 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 WhatsApp Live Simulator
@@ -193,7 +193,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
             <div>
               <h3 className="text-lg font-bold text-white">Test Real-Time AI Lead Qualification</h3>
               <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                Enter a sample lead phone number to test how BeetleLabs AI qualifies buyers &amp; outputs Hot/Warm/Cold scores.
+                Enter a sample lead phone number to test how WefyLabs AI qualifies buyers &amp; outputs Hot/Warm/Cold scores.
               </p>
             </div>
 

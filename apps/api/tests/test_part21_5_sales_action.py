@@ -617,8 +617,8 @@ async def test_viewing_imminent_triggers_reminder(db_session: AsyncSession):
     meeting = Meeting(
         id=str(uuid.uuid4()),
         organization_id=org_id,
-        broker_id=str(broker.id),
-        lead_id=str(lead.id),
+        broker_id=broker.id,   # UUID(as_uuid=True) column — must be uuid.UUID
+        lead_id=lead.id,       # UUID(as_uuid=True) column — must be uuid.UUID
         title="Site Viewing",
         start_utc=datetime.now(timezone.utc) + timedelta(hours=12),
         end_utc=datetime.now(timezone.utc) + timedelta(hours=13),
@@ -657,8 +657,8 @@ async def test_viewing_completed_triggers_post_viewing_followup(db_session: Asyn
     meeting = Meeting(
         id=str(uuid.uuid4()),
         organization_id=org_id,
-        broker_id=str(broker.id),
-        lead_id=str(lead.id),
+        broker_id=broker.id,   # UUID(as_uuid=True) column — must be uuid.UUID
+        lead_id=lead.id,       # UUID(as_uuid=True) column — must be uuid.UUID
         title="Site Viewing",
         start_utc=datetime.now(timezone.utc) - timedelta(hours=25),
         end_utc=datetime.now(timezone.utc) - timedelta(hours=24),

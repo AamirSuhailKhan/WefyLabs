@@ -42,9 +42,11 @@ class LeadSourceService:
             name=dto.name,
             description=dto.description,
             channel=dto.channel,
+            source_type=dto.channel or "WEBSITE",
             provider=dto.provider,
-            country_code=dto.country_code,
+            country_code=dto.country_code or "IN",
             market_id=dto.market_id,
+
             configuration=dto.configuration,
             rate_limit_per_hour=dto.rate_limit_per_hour,
             webhook_url_token=webhook_token,

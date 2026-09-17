@@ -70,7 +70,7 @@ class PartnerAPIProvider(IDiscoveryProvider):
             params = {"limit": limit}
             if cursor:
                 params["cursor"] = cursor
-            headers = {"Authorization": f"Bearer {api_key}", "X-Partner-Client": "BeetleLabs-CRM"}
+            headers = {"Authorization": f"Bearer {api_key}", "X-Partner-Client": "WefyLabs-CRM"}
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(f"{api_url}/leads/inquiries", params=params, headers=headers)
                 if res.status_code == 200:

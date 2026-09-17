@@ -1,0 +1,3 @@
+web: /app/entrypoint.sh
+worker: celery -A app.celery_app.celery_app worker --loglevel=info -Q lead_queue,email_queue,whatsapp_queue,notification_queue,analytics_queue,webhook_queue,ai_queue,retry_queue
+beat: celery -A app.celery_app.celery_app beat --loglevel=info

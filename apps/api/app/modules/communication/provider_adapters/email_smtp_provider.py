@@ -34,7 +34,7 @@ from app.modules.communication.provider_adapters.base_provider import (
     ProviderStatusEnum,
 )
 
-logger = logging.getLogger("beetlelabs.communication.email")
+logger = logging.getLogger("wefylabs.communication.email")
 
 _KNOWN_DUMMY_HOSTS = {
     "smtp.example.com", "smtp.test.com", "placeholder", "localhost",
@@ -57,7 +57,7 @@ class EmailSMTPProvider(CommunicationProvider):
         smtp_user: Optional[str] = None,
         smtp_password: Optional[str] = None,
         from_email: Optional[str] = None,
-        from_name: str = "BeetleLabs",
+        from_name: str = "WefyLabs",
         smtp_use_tls: bool = True,
         smtp_use_ssl: bool = False,
         webhook_signing_key: str = "",
@@ -71,7 +71,7 @@ class EmailSMTPProvider(CommunicationProvider):
         self._smtp_user = (smtp_user or smtp_username or "").strip()
         self._smtp_password = (smtp_password or "").strip()
         self._from_email = (from_email or email_from_address or "").strip()
-        self._from_name = from_name or "BeetleLabs"
+        self._from_name = from_name or "WefyLabs"
         
         # Security protocol resolution: STARTTLS vs SSL vs Plain
         sec = (smtp_security or "").upper()
@@ -236,7 +236,7 @@ class EmailSMTPProvider(CommunicationProvider):
             )
 
         # 3. Assemble MIME Message
-        domain = self._from_email.split("@")[-1] if "@" in self._from_email else "beetlelabs.ai"
+        domain = self._from_email.split("@")[-1] if "@" in self._from_email else "wefylabs.com"
         rfc_msg_id = f"<{uuid.uuid4()}@{domain}>"
 
         msg = MIMEMultipart("alternative")

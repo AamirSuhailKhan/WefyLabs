@@ -40,6 +40,15 @@ const config: Config = {
           DEFAULT: '#0D9488',
           hover: '#0F766E',
         },
+        brand: {
+          DEFAULT: 'var(--brand-primary)',
+          primary: 'var(--brand-primary)',
+          'primary-hover': 'var(--brand-primary-hover)',
+          'primary-light': 'var(--brand-primary-light)',
+          secondary: 'var(--brand-secondary)',
+          silver: 'var(--brand-silver)',
+          'silver-light': 'var(--brand-silver-light)',
+        },
       },
       borderRadius: {
         '4xl': '32px',

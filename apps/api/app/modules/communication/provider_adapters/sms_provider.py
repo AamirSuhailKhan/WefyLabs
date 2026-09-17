@@ -29,7 +29,7 @@ from app.modules.communication.provider_adapters.base_provider import (
     ProviderStatusEnum,
 )
 
-logger = logging.getLogger("beetlelabs.communication.sms")
+logger = logging.getLogger("wefylabs.communication.sms")
 
 _KNOWN_DUMMY_SMS = {"mock_sid", "mock_token", "placeholder", "+10000000000", "", "none", "null"}
 

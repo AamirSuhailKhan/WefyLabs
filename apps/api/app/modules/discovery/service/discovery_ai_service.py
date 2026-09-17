@@ -60,7 +60,7 @@ def sanitize_discovery_input(text: str) -> str:
 
 def build_signal_extraction_prompt(message: str, country_hint: Optional[str] = None) -> str:
     country_note = f"The inquiry is located in {country_hint}." if country_hint else ""
-    return f"""You are a specialized Real Estate Signal Extraction Engine for BeetleLabs CRM.
+    return f"""You are a specialized Real Estate Signal Extraction Engine for WefyLabs CRM.
 Analyze the following inquiry message and extract ONLY factual buying/selling signals explicitly stated.
 
 CRITICAL RULES:

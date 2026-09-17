@@ -21,7 +21,8 @@ from app.modules.follow_up.service import FollowUpOrchestratorService
 from app.modules.follow_up.dto.follow_up_schemas import (
     FollowUpPolicyDTO, UpdatePolicyDTO, SequenceDTO, CreateSequenceDTO,
     FollowUpExecutionDTO, FollowUpEvaluationResponseDTO, LeadFollowUpStatusDTO,
-    FollowUpAnalyticsDTO
+    FollowUpAnalyticsDTO, FollowUpRuleDTO, CreateFollowUpRuleDTO, UpdateFollowUpRuleDTO,
+    SnoozeTaskDTO, RescheduleTaskDTO, DailyBriefingDTO
 )
 
 router = APIRouter(prefix="/v1/followups", tags=["AI Follow-Up & Autonomous Nurturing Engine"])
@@ -282,3 +283,193 @@ async def get_followup_analytics_endpoint(
         channel_distribution={"WHATSAPP": total_dispatched, "EMAIL": 0, "SMS": 0},
         top_suppression_reasons={"QUIET_HOURS": total_suppressed, "OPT_OUT": 0, "FATIGUE": 0}
     )
+
+
+# ── Follow-Up Dashboard & Summary ─────────────────────────────────────────────
+@router.get("/dashboard/summary")
+async def get_followup_dashboard_summary_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Returns live follow-up dashboard statistics: today's tasks, overdue, upcoming, and SLA metrics.
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    return await service.get_dashboard_summary(current_broker.id, org_id)
+
+
+# ── Daily Grounded CRM Briefing ───────────────────────────────────────────────
+@router.get("/briefing/daily", response_model=DailyBriefingDTO)
+async def get_daily_briefing_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Generates a live, honest daily briefing for the agent using actual CRM counts.
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    data = await service.briefing_service.get_daily_briefing_data(current_broker.id, org_id)
+    return DailyBriefingDTO(**data)
+
+
+# ── Organization Automation Rules CRUD ────────────────────────────────────────
+@router.get("/rules", response_model=List[FollowUpRuleDTO])
+async def list_organization_rules_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Lists all automated follow-up rules defined for the broker's organization."""
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    rules = await service.list_rules(org_id)
+    return [FollowUpRuleDTO.model_validate(r) for r in rules]
+
+
+@router.post("/rules", response_model=FollowUpRuleDTO, status_code=status.HTTP_201_CREATED)
+async def create_organization_rule_endpoint(
+    dto: CreateFollowUpRuleDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Creates a new automated follow-up rule with condition and action configuration."""
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    rule = await service.create_rule(
+        organization_id=org_id,
+        name=dto.name,
+        trigger=dto.trigger,
+        action=dto.action,
+        delay_minutes=dto.delay_minutes,
+        conditions=dto.conditions,
+        priority=dto.priority,
+        max_runs=dto.max_runs,
+        cooldown_hours=dto.cooldown_hours,
+        action_config=dto.action_config,
+        created_by=str(current_broker.id)
+    )
+    return FollowUpRuleDTO.model_validate(rule)
+
+
+@router.patch("/rules/{rule_id}", response_model=FollowUpRuleDTO)
+async def update_organization_rule_endpoint(
+    rule_id: str,
+    dto: UpdateFollowUpRuleDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Updates an existing automation rule, respecting tenant isolation."""
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    rule = await service.update_rule(org_id, rule_id, dto.model_dump(exclude_unset=True))
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule '{rule_id}' not found.")
+    return FollowUpRuleDTO.model_validate(rule)
+
+
+@router.delete("/rules/{rule_id}")
+async def delete_organization_rule_endpoint(
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Deletes an automation rule."""
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    deleted = await service.delete_rule(org_id, rule_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule '{rule_id}' not found.")
+    return {"status": "deleted", "rule_id": rule_id}
+
+
+# ── Human Override Controls: Snooze & Reschedule ──────────────────────────────
+@router.post("/tasks/{task_id}/snooze")
+async def snooze_followup_task_endpoint(
+    task_id: str,
+    dto: SnoozeTaskDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Snoozes a follow-up task to a later date/time.
+    Guarantees human manual adjustment takes precedence over automated resets.
+    """
+    service = FollowUpOrchestratorService(db)
+    task = await service.snooze_task(current_broker.id, task_id, dto.snooze_until, dto.reason or "Snoozed by user")
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task '{task_id}' not found.")
+    return {"status": "snoozed", "task_id": task.id, "due_at": task.due_at.isoformat()}
+
+
+@router.post("/tasks/{task_id}/reschedule")
+async def reschedule_followup_task_endpoint(
+    task_id: str,
+    dto: RescheduleTaskDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Reschedules a follow-up task to a new date/time."""
+    service = FollowUpOrchestratorService(db)
+    task = await service.reschedule_task(current_broker.id, task_id, dto.new_due_at, dto.reason or "Rescheduled by user")
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Task '{task_id}' not found.")
+    return {"status": "rescheduled", "task_id": task.id, "due_at": task.due_at.isoformat()}
+
+
+# ── AI Grounded Re-engagement Draft ───────────────────────────────────────────
+@router.post("/{lead_id}/reengage")
+async def generate_lead_reengagement_endpoint(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Generates a personalized, facts-grounded re-engagement draft for an inactive lead.
+    """
+    service = FollowUpOrchestratorService(db)
+    try:
+        lead_pk = uuid.UUID(str(lead_id))
+    except Exception:
+        lead_pk = lead_id
+
+    stmt = select(Lead).where(Lead.id == lead_pk)
+    res = await db.execute(stmt)
+    lead = res.scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Lead '{lead_id}' not found.")
+
+    draft = await service.reengagement_service.generate_reengagement_draft(
+        lead=lead,
+        days_inactive=14,
+        broker_name=current_broker.name or "your advisor"
+    )
+    return draft
+
+
+# ── Permanent Stop Automation ─────────────────────────────────────────────────
+@router.post("/{lead_id}/stop")
+async def stop_lead_followups_endpoint(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Permanently stops all follow-up automation for a lead and records customer opt-out.
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    await service.handle_opt_out(lead_id, org_id)
+    return {"status": "stopped", "lead_id": lead_id, "state": "DO_NOT_CONTACT"}
+
+
+# ── Extended Performance Analytics ────────────────────────────────────────────
+@router.get("/analytics/performance")
+async def get_performance_analytics_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Returns SLA compliance, completion rates, and response metrics."""
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    return await service.get_performance_analytics(org_id)

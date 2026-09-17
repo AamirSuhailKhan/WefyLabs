@@ -9,6 +9,12 @@
 #   - Kubernetes Pod startup (replace CMD in Dockerfile.prod)
 #   - Docker Compose production override
 #   - Manual production deployment
+#
+# Environment variables:
+#   TRUSTED_PROXY_IPS  Comma-separated list of trusted reverse-proxy IPs.
+#                      Defaults to '127.0.0.1' for safety.
+#                      On Render.com, set to '10.0.0.0/8' or Render's documented proxy IP range.
+#                      Use '*' only if the platform guarantees all traffic passes through its proxy.
 # =============================================================================
 set -euo pipefail
 
@@ -35,14 +41,18 @@ fi
 
 echo "[BeetleLabs] Migrations complete. Starting API server..."
 
+# ─── Trusted proxy IPs ───────────────────────────────────────────────────────
+# Default to loopback only. Set TRUSTED_PROXY_IPS in platform env vars.
+PROXY_IPS="${TRUSTED_PROXY_IPS:-127.0.0.1}"
+
 # ─── Start Uvicorn ────────────────────────────────────────────────────────────
 # 4 workers for production (tune based on CPU count: 2 * CPU + 1)
 exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers "${WORKERS:-4}" \
-    --loop uvloop \
+    --loop auto \
     --access-log \
     --log-level "${LOG_LEVEL:-info}" \
     --proxy-headers \
-    --forwarded-allow-ips "*"
+    --forwarded-allow-ips "${PROXY_IPS}"

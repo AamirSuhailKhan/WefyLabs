@@ -31,7 +31,7 @@ export default function MobileAppPage() {
         <div className="flex items-center gap-2">
           <Smartphone className="w-5 h-5 text-[#E8F5A8]" />
           <div>
-            <h1 className="text-sm font-bold font-mono">BeetleLabs Mobile Field App</h1>
+            <h1 className="text-sm font-bold font-mono">WefyLabs Mobile Field App</h1>
             <span className="text-[10px] text-gray-400 font-mono">iOS & Android WebView / PWA</span>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function MobileAppPage() {
         </div>
 
         <p className="text-xs text-gray-600 font-sans">
-          Snap or upload a photo of a prospect's business card to instantly parse contact profile into BeetleLabs.
+          Snap or upload a photo of a prospect's business card to instantly parse contact profile into WefyLabs.
         </p>
 
         <button

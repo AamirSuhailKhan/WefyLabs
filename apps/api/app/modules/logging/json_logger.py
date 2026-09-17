@@ -25,7 +25,7 @@ trace_context_var: ContextVar[Dict[str, Any]] = ContextVar(
         "organization_id": None,
         "workspace_id": None,
         "user_id": None,
-        "service": "beetlelabs-api",
+        "service": "wefylabs-api",
         "module": "core",
     }
 )
@@ -39,7 +39,7 @@ def set_trace_context(
     organization_id: Optional[str] = None,
     workspace_id: Optional[str] = None,
     user_id: Optional[str] = None,
-    service: str = "beetlelabs-api",
+    service: str = "wefylabs-api",
     module: str = "core",
 ) -> None:
     """Sets current thread/async task trace context."""
@@ -71,7 +71,7 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
-            "service": ctx.get("service", "beetlelabs-api"),
+            "service": ctx.get("service", "wefylabs-api"),
             "module": ctx.get("module", record.module),
             "environment": "production",
             "request_id": ctx.get("request_id"),

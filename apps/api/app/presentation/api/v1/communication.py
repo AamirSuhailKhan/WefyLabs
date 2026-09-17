@@ -92,7 +92,7 @@ async def get_customer_timeline(
                 "sender_name": current_broker.name or "Agent",
                 "content": "Outbound Call Completed (3m 45s)",
                 "call_record": {
-                    "recording_url": "https://cdn.beetlelabs.ai/audio/sample_call.mp3",
+                    "recording_url": "https://cdn.wefylabs.com/audio/sample_call.mp3",
                     "duration_seconds": 225,
                     "transcript": "Agent confirmed 3BHK availability. Buyer requested site visit tomorrow at 4 PM.",
                     "ai_summary": "Confirmed site visit for DLF Phase 5 tomorrow 4 PM."

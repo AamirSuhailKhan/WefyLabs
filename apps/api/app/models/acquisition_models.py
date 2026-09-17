@@ -19,7 +19,7 @@ Domain Restriction: This is a Real Estate CRM domain — not a recruitment platf
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy import (
     String, Text, DateTime, Boolean, Integer, Numeric,
     JSON, Index, UniqueConstraint, ForeignKey, Enum as SAEnum
@@ -127,15 +127,20 @@ class LeadSource(Base):
     # Channel & Provider taxonomy
     # channel: WEBSITE | WHATSAPP | META | GOOGLE | EMAIL | TELEGRAM | API | WEBHOOK | MANUAL | OTHER
     channel: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(50), default="WEBSITE", nullable=False)
     # provider: meta_lead_ads | google_lead_form | twilio_whatsapp | sendgrid | custom
+
     provider: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Status: active | paused | inactive | configuration_required
     status: Mapped[str] = mapped_column(String(50), default="active", nullable=False, index=True)
 
-    # Country/Market scope (NULL = org default)
-    country_code: Mapped[Optional[str]] = mapped_column(String(2), nullable=True, index=True)
-    market_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    # Country/Market scope (default IN)
+    country_code: Mapped[str] = mapped_column(String(2), default="IN", nullable=False, index=True)
+    market_id: Mapped[Optional[Any]] = mapped_column(UUIDType, nullable=True, index=True)
+
+    broker_id: Mapped[Optional[Any]] = mapped_column(UUIDType, nullable=True, index=True)
+
 
     # Provider-specific configuration (encrypted secrets stored separately in ConnectorConfig)
     configuration: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)

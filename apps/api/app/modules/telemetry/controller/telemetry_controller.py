@@ -9,8 +9,8 @@ router = APIRouter(prefix="/v1/telemetry", tags=["Grafana Telemetry Generator"])
 async def generate_grafana_dashboard_json(current_broker=Depends(get_current_broker)):
     """Generates standard Grafana Dashboard JSON for system monitoring."""
     dashboard = {
-        "title": "BeetleLabs Enterprise Production Telemetry",
-        "tags": ["production", "beetlelabs", "sre"],
+        "title": "WefyLabs Enterprise Production Telemetry",
+        "tags": ["production", "wefylabs", "sre"],
         "timezone": "browser",
         "schemaVersion": 36,
         "panels": [

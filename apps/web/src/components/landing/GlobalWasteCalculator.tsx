@@ -405,7 +405,7 @@ export default function GlobalWasteCalculator() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 font-mono">
-                    WITH BEETLELABS ({formatCurrency(results.leadScoreCost, region)}/MO)
+                    WITH WEFYLABS ({formatCurrency(results.leadScoreCost, region)}/MO)
                   </span>
                   <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
                     AI qualifies in 2 min
@@ -476,7 +476,7 @@ export default function GlobalWasteCalculator() {
                     <span className="font-bold text-amber-600">{formatCurrency(results.commissionLost, region)}</span>
                   </div>
                   <div className="flex justify-between py-1 pt-2 font-bold text-gray-900">
-                    <span>BeetleLabs starter price:</span>
+                    <span>WefyLabs starter price:</span>
                     <span>{formatCurrency(region.starterPrice, region)} / mo</span>
                   </div>
                 </motion.div>
@@ -508,7 +508,7 @@ export default function GlobalWasteCalculator() {
             <p className="text-sm sm:text-base text-gray-600 font-sans leading-relaxed">
               Join {getAgentTerm()} in{' '}
               <span className="font-semibold text-gray-900">{region.name}</span>{' '}
-              using BeetleLabs to qualify leads in 2 minutes — and stop wasting time on cold contacts.
+              using WefyLabs to qualify leads in 2 minutes — and stop wasting time on cold contacts.
             </p>
           </div>
 

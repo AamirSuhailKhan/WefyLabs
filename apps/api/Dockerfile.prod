@@ -1,5 +1,5 @@
 # ==============================================================================
-# BeetleLabs Enterprise API — Production Multi-Stage Dockerfile
+# WefyLabs Enterprise API — Production Multi-Stage Dockerfile
 # Security Hardened: Non-root user, minimal distroless/alpine base, CVE-scanned.
 # ==============================================================================
 

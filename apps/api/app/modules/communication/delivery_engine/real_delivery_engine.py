@@ -72,7 +72,7 @@ from app.modules.communication.monitoring.delivery_metrics import (
     mask_org_id,
 )
 
-logger = logging.getLogger("beetlelabs.communication.delivery_engine")
+logger = logging.getLogger("wefylabs.communication.delivery_engine")
 
 # In-memory execution lease lock registry to prevent race conditions across concurrent workers
 _execution_locks: Dict[str, asyncio.Lock] = {}
@@ -508,7 +508,7 @@ class RealDeliveryEngine:
             direction="outbound",
             message_type="text",
             content=message_text,
-            sender_name=broker.name or "BeetleLabs AI",
+            sender_name=broker.name or "WefyLabs AI",
             sender_identifier=str(broker.id),
             recipient_identifier=lead.phone or lead.email or "customer",
             sent_by_ai=True,
@@ -605,7 +605,7 @@ class RealDeliveryEngine:
             direction="outbound",
             message_type="text",
             content=message_text,
-            sender_name=broker.name or "BeetleLabs AI",
+            sender_name=broker.name or "WefyLabs AI",
             sender_identifier=str(broker.id),
             recipient_identifier=lead.phone or lead.email or "customer",
             sent_by_ai=True,

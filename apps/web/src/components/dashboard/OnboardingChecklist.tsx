@@ -1,67 +1,81 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CheckCircle2, Circle, Globe, MessageSquare, Plus, UserPlus, X, Sparkles } from 'lucide-react';
-import { useRegion } from '@/lib/i18n/region-context';
-import { FlagIcon } from '../shared/FlagIcon';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, Circle, X, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
+import { api } from '@/lib/api-client';
+import { OnboardingStatusResponse, TenantActivationResponse, ChecklistItem } from '@/types';
 
 export function OnboardingChecklist() {
-  const { region, openModal } = useRegion();
   const [dismissed, setDismissed] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState<number[]>([1]); // Step 1 completed by default
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<OnboardingStatusResponse | null>(null);
+  const [activation, setActivation] = useState<TenantActivationResponse | null>(null);
 
-  if (dismissed) return null;
-
-  const steps = [
-    {
-      id: 1,
-      title: `Set operating region (${region.name})`,
-      desc: `Configured in ${region.currency} for ${region.name}`,
-      icon: Globe,
-      action: openModal,
-      actionLabel: 'Change',
-    },
-    {
-      id: 2,
-      title: 'Forward your first WhatsApp lead',
-      desc: 'Send a phone number to your AI WhatsApp bot',
-      icon: MessageSquare,
-      action: () => (window.location.href = '/simulator'),
-      actionLabel: 'Test Simulator',
-    },
-    {
-      id: 3,
-      title: 'Add a manual lead or note',
-      desc: 'Add lead details directly into your dashboard',
-      icon: Plus,
-      action: () => (window.location.href = '/dashboard/leads'),
-      actionLabel: 'Go to Leads',
-    },
-    {
-      id: 4,
-      title: 'Invite a team member',
-      desc: 'Add assistant or co-broker to your workspace',
-      icon: UserPlus,
-      action: () => (window.location.href = '/dashboard/settings'),
-      actionLabel: 'Invite',
-    },
-  ];
-
-  const progressPct = Math.round((completedSteps.length / steps.length) * 100);
-
-  const toggleStep = (id: number) => {
-    if (completedSteps.includes(id)) {
-      setCompletedSteps(completedSteps.filter((s) => s !== id));
-    } else {
-      setCompletedSteps([...completedSteps, id]);
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchProgress() {
+      try {
+        const [statusRes, actRes] = await Promise.all([
+          api.onboarding.getStatus().catch(() => null),
+          api.onboarding.getActivation().catch(() => null),
+        ]);
+        if (isMounted) {
+          if (statusRes) setStatus(statusRes);
+          if (actRes) setActivation(actRes);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (isMounted) setLoading(false);
+      }
     }
-  };
+    fetchProgress();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (dismissed || loading || !status) return null;
+
+  // Once activated, render a compact activation badge or auto-collapse
+  if (status.is_activated && status.progress_percentage >= 80) {
+    return (
+      <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-2xl p-4 mb-6 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold font-mono text-emerald-400 uppercase tracking-wide">Workspace Activated</span>
+              <span className="text-[11px] bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700">
+                Score: {status.activation_score}/100
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Core CRM operations, AI property matching, and agent command center are operational.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+          aria-label="Dismiss banner"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  const items = status.checklist || [];
+  const completedCount = items.filter((i) => i.is_completed).length;
+  const progressPct = status.progress_percentage || 0;
 
   return (
-    <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-2xl p-5 mb-6 shadow-xs relative">
+    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 mb-6 shadow-xl relative backdrop-blur-sm text-slate-100">
       <button
         onClick={() => setDismissed(true)}
-        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-[#F0EDE8] transition-colors"
+        className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1 rounded-full hover:bg-slate-800 transition"
         aria-label="Dismiss checklist"
       >
         <X className="w-4 h-4" />
@@ -69,26 +83,26 @@ export function OnboardingChecklist() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pr-6">
         <div>
-          <div className="inline-flex items-center gap-1.5 bg-[#E8F5A8] border border-[#D4D0C8] px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono text-[#1A1A1A] uppercase tracking-wider mb-1">
+          <div className="inline-flex items-center gap-1.5 bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono text-indigo-300 uppercase tracking-wider mb-1">
             <Sparkles className="w-3 h-3" />
-            Quick Setup Checklist
+            Workspace Setup Guide
           </div>
-          <h2 className="text-base font-bold text-[#1A1A1A] font-mono">
-            Welcome to BeetleLabs! Let's get your CRM ready.
+          <h2 className="text-base font-bold text-white font-mono">
+            Complete your setup to reach 100% activation
           </h2>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
-            <div className="text-xs font-mono font-bold text-[#1A1A1A]">{progressPct}% Complete</div>
-            <div className="text-[10px] text-[#6B6B6B]">{completedSteps.length} of {steps.length} tasks</div>
+            <div className="text-xs font-mono font-bold text-indigo-400">{progressPct}% Complete</div>
+            <div className="text-[10px] text-slate-400">{completedCount} of {items.length} tasks</div>
           </div>
-          <div className="w-12 h-12 rounded-full border-2 border-[#D4D0C8] flex items-center justify-center p-1 bg-white">
+          <div className="w-12 h-12 rounded-full border border-slate-700 flex items-center justify-center p-1 bg-slate-950">
             <div
-              className="w-full h-full rounded-full bg-[#E8F5A8] flex items-center justify-center text-xs font-mono font-extrabold text-[#1A1A1A]"
-              style={{ background: `conic-gradient(#1A1A1A ${progressPct}%, #E8F5A8 0)` }}
+              className="w-full h-full rounded-full flex items-center justify-center text-[10px] font-mono font-extrabold text-white"
+              style={{ background: `conic-gradient(#6366F1 ${progressPct}%, #1E293B 0)` }}
             >
-              <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[11px]">
+              <div className="w-8 h-8 rounded-full bg-slate-950 flex items-center justify-center">
                 {progressPct}%
               </div>
             </div>
@@ -97,45 +111,45 @@ export function OnboardingChecklist() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {steps.map((step) => {
-          const isDone = completedSteps.includes(step.id);
-          return (
-            <div
-              key={step.id}
-              className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
-                isDone
-                  ? 'bg-white/80 border-[#D4D0C8] opacity-85'
-                  : 'bg-white border-[#D4D0C8] shadow-2xs hover:border-gray-400'
+        {items.slice(0, 8).map((item) => (
+          <div
+            key={item.id}
+            className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+              item.is_completed
+                ? 'bg-slate-950/40 border-slate-800 opacity-75'
+                : 'bg-slate-950 border-slate-700/80 hover:border-indigo-500/50 shadow-md'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-400">
+                  {item.is_completed ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-slate-500" />
+                  )}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">#{item.order}</span>
+              </div>
+              <h3 className={`text-xs font-bold mb-1 ${item.is_completed ? 'line-through text-slate-400' : 'text-white'}`}>
+                {item.title}
+              </h3>
+              <p className="text-[11px] text-slate-400 leading-tight mb-3">{item.description}</p>
+            </div>
+
+            <a
+              href={item.action_route}
+              className={`w-full py-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition text-center flex items-center justify-center gap-1 ${
+                item.is_completed
+                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs'
               }`}
             >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <button onClick={() => toggleStep(step.id)} className="text-[#1A1A1A] hover:opacity-80 transition-opacity">
-                    {isDone ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
-                    ) : (
-                      <Circle className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                  {step.id === 1 && (
-                    <FlagIcon code={region.code} className="w-4 h-3 rounded-[2px] shadow-2xs border border-black/10 inline-block" />
-                  )}
-                </div>
-                <h3 className={`text-xs font-bold font-mono mb-1 ${isDone ? 'line-through text-gray-500' : 'text-[#1A1A1A]'}`}>
-                  {step.title}
-                </h3>
-                <p className="text-[11px] text-[#6B6B6B] leading-tight font-sans mb-3">{step.desc}</p>
-              </div>
-
-              <button
-                onClick={step.action}
-                className="w-full py-1 px-2 bg-[#F0EDE8] hover:bg-[#E8F5A8] border border-[#D4D0C8] text-[#1A1A1A] rounded-lg text-[10px] font-bold font-mono transition-colors text-center"
-              >
-                {step.actionLabel} →
-              </button>
-            </div>
-          );
-        })}
+              <span>{item.action_label}</span>
+              <ArrowRight className="w-3 h-3" />
+            </a>
+          </div>
+        ))}
       </div>
     </div>
   );

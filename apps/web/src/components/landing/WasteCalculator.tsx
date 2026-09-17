@@ -61,10 +61,10 @@ export function calculateWaste(
   const commissionLost = Math.round(hotLeadsMissed * convRate * commissionPerDeal);
 
   const totalWaste = adWaste + opportunityCost + commissionLost;
-  const beetleLabsCost = 2999;
-  const netSavings = Math.max(0, totalWaste - beetleLabsCost);
-  const roi = (totalWaste / beetleLabsCost).toFixed(1);
-  const paybackDays = Math.max(1, Math.ceil(beetleLabsCost / Math.max(1, totalWaste / 30)));
+  const wefyLabsCost = 2999;
+  const netSavings = Math.max(0, totalWaste - wefyLabsCost);
+  const roi = (totalWaste / wefyLabsCost).toFixed(1);
+  const paybackDays = Math.max(1, Math.ceil(wefyLabsCost / Math.max(1, totalWaste / 30)));
 
   return {
     coldLeads,
@@ -414,13 +414,13 @@ export default function WasteCalculator() {
             </div>
           </div>
 
-          {/* Bottom Card — With BeetleLabs */}
+          {/* Bottom Card — With WefyLabs */}
           <div className="bg-[#FAF7F2] border-l-4 border-[#0D9488] border-y border-r border-[#D4D0C8] rounded-3xl p-6 sm:p-8 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-widest text-[#0D9488] font-mono">
-                    WITH BEETLELABS (₹2,999/MO)
+                    WITH WEFYLABS (₹2,999/MO)
                   </span>
                   <span className="bg-[#CCFBF1] text-[#0F766E] text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-[#99F6E4]">
                     AI qualifies in 2 min
@@ -491,7 +491,7 @@ export default function WasteCalculator() {
                     <span className="font-bold text-amber-600">{formatINR(results.commissionLost)}</span>
                   </div>
                   <div className="flex justify-between py-1 pt-2 font-bold text-[#1A1A1A]">
-                    <span>BeetleLabs subscription:</span>
+                    <span>WefyLabs subscription:</span>
                     <span>₹2,999 / mo</span>
                   </div>
                 </motion.div>

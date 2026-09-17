@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Sparkles, X, Send, Bot, User, CheckCircle2, RefreshCw, ChevronUp, ChevronDown, Copy, Check, RotateCcw, AlertTriangle, Info, Zap, Phone, ExternalLink, Calendar, CheckCircle } from 'lucide-react';
+import {
+  Sparkles, X, Send, Bot, User, CheckCircle2, RefreshCw,
+  ChevronUp, ChevronDown, Copy, Check, RotateCcw, AlertTriangle,
+  Info, Zap, Trash2, Plus, Clock, ShieldAlert, CheckCircle, ExternalLink
+} from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { WefyLabsIcon } from '@/components/shared/WefyLabsIcon';
+
+interface ActionPreview {
+  tool_name: string;
+  title: string;
+  summary: string;
+  impacted_records: number;
+  is_destructive: boolean;
+  confirmation_token: string;
+  arguments: any;
+}
 
 interface Message {
   id: string;
@@ -21,9 +36,23 @@ interface Message {
     action_type: string;
     payload?: any;
   }>;
+  executed_tools?: Array<{
+    tool_name: string;
+    arguments?: any;
+  }>;
   citations?: string[];
   suggested_followups?: string[];
+  action_preview?: ActionPreview | null;
+  action_confirmed?: boolean;
   isError?: boolean;
+}
+
+interface ConversationSummary {
+  id: string;
+  title: string;
+  route_context: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export function GlobalAICopilot() {
@@ -31,25 +60,31 @@ export function GlobalAICopilot() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [queryInput, setQueryInput] = useState('');
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'init-1',
       sender: 'copilot',
-      text: "👋 Hi! I'm your BeetleLabs AI Copilot powered by Google Gemini. Ask me anything about your leads, at-risk deals, revenue forecasts, or daily call lists."
+      text: "👋 Hi! I'm your WefyLabs enterprise AI Copilot. Ask me anything about your leads, follow-ups, calendar availability, or to execute verified CRM actions."
     }
   ]);
+
   const [suggestedActions, setSuggestedActions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({});
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [confirmingToken, setConfirmingToken] = useState<string | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(messages.length);
 
-  // Auto-scroll ONLY when a new message arrives
+  // Auto-scroll when new message is added
   useEffect(() => {
     if (isOpen && messages.length > prevMessagesLengthRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,11 +92,27 @@ export function GlobalAICopilot() {
     prevMessagesLengthRef.current = messages.length;
   }, [messages.length, isOpen, loading]);
 
-  // Fetch route-specific suggested actions from API or fallback pills
+  // Load conversation list when opened
+  useEffect(() => {
+    if (isOpen) {
+      loadConversations();
+    }
+  }, [isOpen]);
+
+  const loadConversations = async () => {
+    try {
+      const list = await apiClient.listCopilotConversations();
+      setConversations(list);
+    } catch {
+      // Ignored for unauthenticated/testing states
+    }
+  };
+
+  // Fetch route-specific suggested actions from API
   useEffect(() => {
     let isMounted = true;
     const currentRoute = pathname || '/dashboard';
-    
+
     apiClient.getCopilotSuggestedActions(currentRoute)
       .then((res) => {
         if (isMounted && res?.suggested_actions) {
@@ -72,13 +123,13 @@ export function GlobalAICopilot() {
         if (isMounted) {
           const r = currentRoute.toLowerCase();
           if (r.includes('/settings')) {
-            setSuggestedActions(["Compare Plans", "Open Billing", "Contact Sales", "Start Checkout"]);
+            setSuggestedActions(["Compare Plans", "Explain 7-Day Trial", "Open Billing Settings"]);
           } else if (r.includes('/leads') || r.includes('/inbox')) {
-            setSuggestedActions(["View Leads", "Draft WhatsApp", "Create Follow-up"]);
+            setSuggestedActions(["Show my hottest leads", "Which leads haven't been contacted in 7 days?", "Create follow-up task"]);
           } else if (r.includes('/deals') || r.includes('/pipeline')) {
-            setSuggestedActions(["Open Pipeline", "Schedule Meeting", "Generate Proposal"]);
+            setSuggestedActions(["Analyze Pipeline Velocity", "Show At-Risk Deals", "Schedule Meeting"]);
           } else {
-            setSuggestedActions(["View Leads", "Open Pipeline", "Compare Plans"]);
+            setSuggestedActions(["Show my hottest leads", "What tasks are due today?", "Explain how billing works"]);
           }
         }
       });
@@ -90,6 +141,79 @@ export function GlobalAICopilot() {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleNewConversation = async () => {
+    try {
+      const newConv = await apiClient.createCopilotConversation("New Consultation", pathname || "/dashboard");
+      setActiveConversationId(newConv.id);
+      setMessages([
+        {
+          id: `init-${Date.now()}`,
+          sender: 'copilot',
+          text: "Fresh session started. How can I assist with your workspace today?"
+        }
+      ]);
+      setShowHistory(false);
+      loadConversations();
+    } catch {
+      setActiveConversationId(null);
+      setMessages([
+        {
+          id: `init-${Date.now()}`,
+          sender: 'copilot',
+          text: "Fresh session started. How can I assist with your workspace today?"
+        }
+      ]);
+      setShowHistory(false);
+    }
+  };
+
+  const handleSelectConversation = async (convId: string) => {
+    try {
+      setLoading(true);
+      const conv = await apiClient.getCopilotConversation(convId);
+      setActiveConversationId(conv.id);
+      if (conv.messages && conv.messages.length > 0) {
+        setMessages(
+          conv.messages.map((m) => ({
+            id: m.id,
+            sender: m.sender,
+            text: m.content,
+            reasoning: m.reasoning,
+            tool_calls: m.tool_calls,
+            citations: m.citations,
+            action_preview: m.action_preview
+          }))
+        );
+      } else {
+        setMessages([
+          {
+            id: `init-${Date.now()}`,
+            sender: 'copilot',
+            text: `Resumed conversation: "${conv.title}". What would you like to explore?`
+          }
+        ]);
+      }
+      setShowHistory(false);
+    } catch (err: any) {
+      setActionFeedback(`Could not load session: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    try {
+      await apiClient.deleteCopilotConversation(convId);
+      setConversations((prev) => prev.filter((c) => c.id !== convId));
+      if (activeConversationId === convId) {
+        handleNewConversation();
+      }
+    } catch (err: any) {
+      setActionFeedback(`Delete failed: ${err.message}`);
+    }
   };
 
   const handleActionButtonClick = async (btn: { label: string; action_type: string; payload?: any }) => {
@@ -106,9 +230,61 @@ export function GlobalAICopilot() {
       setActionFeedback(`✓ ${res.message || 'Action executed successfully'}`);
       setTimeout(() => setActionFeedback(null), 4000);
     } catch (err: any) {
-      setActionFeedback(`⚠️ Execution notice: ${err.message || 'Action sent to queue'}`);
+      setActionFeedback(`⚠️ Execution notice: ${err.message || 'Action failed'}`);
       setTimeout(() => setActionFeedback(null), 4000);
     }
+  };
+
+  const handleConfirmAction = async (msgId: string, preview: ActionPreview) => {
+    setConfirmingToken(preview.confirmation_token);
+    setActionFeedback(`Confirming and executing ${preview.tool_name}...`);
+
+    try {
+      const res = await apiClient.confirmCopilotAction(
+        preview.confirmation_token,
+        preview.tool_name,
+        preview.arguments,
+        activeConversationId || undefined
+      );
+
+      // Mark preview as confirmed
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId
+            ? {
+                ...m,
+                action_confirmed: true,
+                text: res.answer_markdown || `✓ Executed: ${preview.title}`,
+                action_preview: null,
+                citations: res.citations || m.citations
+              }
+            : m
+        )
+      );
+      setActionFeedback(`✓ Action confirmed and executed successfully.`);
+      setTimeout(() => setActionFeedback(null), 4000);
+    } catch (err: any) {
+      setActionFeedback(`⚠️ Action failed: ${err.message}`);
+      setTimeout(() => setActionFeedback(null), 4000);
+    } finally {
+      setConfirmingToken(null);
+    }
+  };
+
+  const handleCancelAction = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId
+          ? {
+              ...m,
+              action_preview: null,
+              text: `${m.text}\n\n*Action cancelled by user.*`
+            }
+          : m
+      )
+    );
+    setActionFeedback("Action cancelled.");
+    setTimeout(() => setActionFeedback(null), 2500);
   };
 
   const handleSend = async (textToSend?: string) => {
@@ -123,14 +299,23 @@ export function GlobalAICopilot() {
     setLoading(true);
 
     try {
-      // Prepare history turns for conversation memory
       const historyContext = messages
         .filter((m) => !m.isError)
         .slice(-8)
         .map((m) => ({ sender: m.sender, text: m.text }));
 
       const currentRoute = pathname || '/dashboard';
-      const res = await apiClient.copilotQuery(q, currentRoute, historyContext);
+      const res = await apiClient.copilotQuery(
+        q,
+        currentRoute,
+        historyContext,
+        undefined,
+        activeConversationId || undefined
+      );
+
+      if (res.conversation_id && !activeConversationId) {
+        setActiveConversationId(res.conversation_id);
+      }
 
       const copilotMsg: Message = {
         id: `copilot-${Date.now()}`,
@@ -139,18 +324,20 @@ export function GlobalAICopilot() {
         reasoning: res.reasoning,
         rich_cards: res.rich_cards,
         action_buttons: res.action_buttons,
+        executed_tools: res.executed_tools,
         citations: res.citations,
-        suggested_followups: res.suggested_followups
+        suggested_followups: res.suggested_followups,
+        action_preview: res.action_preview
       };
 
       setMessages((prev) => [...prev, copilotMsg]);
+      loadConversations();
     } catch (err: any) {
-      const detailedErr = (err && err.message) ? err.message : String(err);
-      console.error('[Copilot API Exception]', err);
+      const detailedErr = err?.message || String(err);
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
         sender: 'copilot',
-        text: `⚠️ **Copilot Connection Error:** ${detailedErr}`,
+        text: `⚠️ **Copilot Notice:** ${detailedErr}`,
         isError: true
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -166,11 +353,9 @@ export function GlobalAICopilot() {
     }
   };
 
-  // Render clean formatted Markdown with headers, bolding, bullet points, and code blocks
   const renderFormattedContent = (content: string) => {
     const lines = content.split('\n');
     return lines.map((line, lIdx) => {
-      // Headers
       if (line.startsWith('### ')) {
         return (
           <h3 key={lIdx} className="font-bold text-xs text-gray-900 mt-2 mb-1">
@@ -186,13 +371,19 @@ export function GlobalAICopilot() {
         );
       }
 
-      // Bullet points
       const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ');
       const cleanLine = isBullet ? line.trim().substring(2) : line;
-
       const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+
       return (
-        <div key={lIdx} className={`${isBullet ? 'pl-3 relative before:content-["•"] before:absolute before:left-0 before:text-amber-600' : ''} ${lIdx > 0 && !isBullet ? 'mt-1' : ''}`}>
+        <div
+          key={lIdx}
+          className={`${
+            isBullet
+              ? 'pl-3 relative before:content-["•"] before:absolute before:left-0 before:text-amber-600'
+              : ''
+          } ${lIdx > 0 && !isBullet ? 'mt-1' : ''}`}
+        >
           {parts.map((part, pIdx) => {
             if (part.startsWith('**') && part.endsWith('**')) {
               return (
@@ -201,7 +392,7 @@ export function GlobalAICopilot() {
                 </strong>
               );
             }
-            return part;
+            return <span key={pIdx}>{part}</span>;
           })}
         </div>
       );
@@ -210,93 +401,142 @@ export function GlobalAICopilot() {
 
   return (
     <>
-      {/* Floating Copilot Trigger Button */}
+      {/* Floating Trigger Button */}
       {!isOpen && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 bg-[#1A1A1A] hover:bg-black text-white p-3.5 rounded-full shadow-2xl border-2 border-[#E8F5A8] flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 bg-[#1A1A1A] hover:bg-black text-white border border-gray-800 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group font-mono text-xs font-bold"
+          aria-label="Open WefyLabs AI Copilot"
         >
-          <Sparkles className="w-5 h-5 text-[#E8F5A8] fill-[#E8F5A8] animate-pulse" />
-          <span className="text-xs font-mono font-bold pr-1">AI Copilot</span>
+          <WefyLabsIcon size={14} theme="dark" />
+          <span>AI Copilot</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         </button>
       )}
 
-      {/* Floating Copilot Drawer Panel */}
+      {/* Slide-out Drawer */}
       {isOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[100] w-[calc(100vw-2rem)] sm:w-[420px] h-[640px] max-h-[88vh] bg-[#FAF7F2] border border-[#D4D0C8] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
-          
-          {/* Fixed Header */}
-          <div className="bg-[#1A1A1A] text-white p-3.5 flex items-center justify-between shrink-0 border-b border-gray-800">
-            <div className="flex items-center gap-2 truncate">
-              <Sparkles className="w-4 h-4 text-[#E8F5A8] fill-[#E8F5A8] shrink-0" />
-              <span className="text-xs font-mono font-bold">BeetleLabs Copilot</span>
-              <span className="bg-white/20 text-[9px] font-mono px-2 py-0.5 rounded text-[#E8F5A8] truncate">
-                {pathname || '/dashboard'}
-              </span>
+        <div
+          className="fixed bottom-4 right-4 z-50 w-96 sm:w-[440px] h-[640px] max-h-[90vh] bg-[#F3EFEA] border border-[#D4D0C8] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300"
+        >
+          {/* Drawer Header */}
+          <div className="p-3.5 bg-[#1A1A1A] text-white flex items-center justify-between border-b border-gray-800 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1 rounded-xl bg-[#2A2A2A] flex items-center justify-center border border-gray-700">
+                <WefyLabsIcon size={16} theme="dark" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h2 className="font-bold text-xs tracking-wide">WefyLabs AI Copilot</h2>
+                  <span className="text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded-full">
+                    ACTIVE
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400 font-mono">Product-Native CRM Assistant</p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-white p-1 rounded transition-colors"
-              aria-label="Close Copilot"
-            >
-              <X className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleNewConversation}
+                className="p-1.5 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-[10px] font-mono flex items-center gap-1"
+                title="Start New Chat"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Chat</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowHistory((prev) => !prev)}
+                className={`p-1.5 rounded-lg transition-colors text-[10px] font-mono flex items-center gap-1 ${
+                  showHistory ? 'bg-white/20 text-white' : 'text-gray-300 hover:text-white hover:bg-white/10'
+                }`}
+                title="Conversation History"
+              >
+                <Clock className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1"
+                aria-label="Close Copilot"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Action Feedback Banner */}
+          {/* Feedback Banner */}
           {actionFeedback && (
-            <div className="bg-emerald-600 text-white text-[10px] font-mono px-3 py-1.5 flex items-center justify-between shrink-0 animate-in fade-in duration-150">
-              <div className="flex items-center gap-1.5 truncate">
-                <CheckCircle className="w-3 h-3 text-[#E8F5A8] shrink-0" />
-                <span className="truncate">{actionFeedback}</span>
-              </div>
+            <div className="bg-amber-100/90 border-b border-amber-200 text-amber-900 px-3 py-1.5 text-[11px] font-mono flex items-center gap-1.5 shrink-0 animate-in fade-in duration-200">
+              <Info className="w-3 h-3 text-amber-700 shrink-0" />
+              <span className="truncate">{actionFeedback}</span>
             </div>
           )}
 
-          {/* Collapsible Quick Action Suggestions */}
-          {suggestedActions.length > 0 && (
-            <div className="bg-white border-b border-[#D4D0C8] shrink-0">
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 text-[10px] font-mono text-gray-500">
-                <span className="font-semibold uppercase tracking-wider">Suggested Actions</span>
-                <button
-                  type="button"
-                  onClick={() => setShowSuggestions(!showSuggestions)}
-                  className="hover:text-gray-900 flex items-center gap-1 font-sans text-[11px]"
-                >
-                  {showSuggestions ? (
-                    <><span>Hide</span><ChevronUp className="w-3 h-3" /></>
-                  ) : (
-                    <><span>Show ({suggestedActions.length})</span><ChevronDown className="w-3 h-3" /></>
-                  )}
-                </button>
+          {/* Sliding History View */}
+          {showHistory && (
+            <div className="bg-[#FAF7F2] border-b border-[#D4D0C8] p-3 max-h-48 overflow-y-auto space-y-1.5 shrink-0 animate-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between text-[11px] font-bold text-gray-700 pb-1 border-b border-gray-200">
+                <span>Recent Conversations</span>
+                <span className="text-[10px] text-gray-400 font-mono">{conversations.length} total</span>
               </div>
-
-              {showSuggestions && (
-                <div className="p-2 flex flex-nowrap gap-1.5 overflow-x-auto no-scrollbar">
-                  {suggestedActions.map((act, i) => (
+              {conversations.length === 0 ? (
+                <p className="text-[11px] text-gray-500 font-mono py-2 text-center">No past conversations yet.</p>
+              ) : (
+                conversations.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => handleSelectConversation(c.id)}
+                    className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer border transition-colors ${
+                      activeConversationId === c.id
+                        ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold'
+                        : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800'
+                    }`}
+                  >
+                    <div className="truncate pr-2">
+                      <p className="truncate text-[11px]">{c.title || 'Conversation'}</p>
+                      <span className="text-[9px] font-mono text-gray-400">{c.route_context}</span>
+                    </div>
                     <button
-                      key={i}
                       type="button"
-                      disabled={loading}
-                      onClick={() => handleSend(act)}
-                      className="text-[10px] font-mono bg-[#FAF7F2] hover:bg-[#E8F5A8] text-gray-800 border border-[#D4D0C8] px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+                      onClick={(e) => handleDeleteConversation(e, c.id)}
+                      className="text-gray-400 hover:text-rose-600 p-1 rounded transition-colors"
+                      title="Delete conversation"
                     >
-                      {act}
+                      <Trash2 className="w-3 h-3" />
                     </button>
-                  ))}
-                </div>
+                  </div>
+                ))
               )}
             </div>
           )}
 
-          {/* Message Stream with Independent Scrolling & Event Isolation */}
-          <div
-            ref={scrollContainerRef}
-            onWheel={(e) => e.stopPropagation()}
-            className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 scroll-smooth"
-          >
+          {/* Context Pills */}
+          {suggestedActions.length > 0 && showSuggestions && !showHistory && (
+            <div className="p-2.5 bg-[#FAF7F2] border-b border-[#D4D0C8] flex items-center gap-1.5 overflow-x-auto shrink-0 no-scrollbar">
+              <span className="text-[10px] font-mono font-bold text-gray-500 shrink-0 uppercase tracking-wider pl-1">
+                Suggested:
+              </span>
+              {suggestedActions.map((action, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSend(action)}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-800 text-[10px] font-mono font-bold rounded-lg border border-[#D4D0C8] shadow-2xs whitespace-nowrap transition-all shrink-0 hover:border-gray-400 active:scale-95"
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Messages Stream */}
+          <div className="flex-1 p-3.5 overflow-y-auto space-y-3.5" ref={scrollContainerRef}>
             {messages.map((m) => (
               <div
                 key={m.id}
@@ -317,7 +557,7 @@ export function GlobalAICopilot() {
                     ) : (
                       <Bot className="w-3 h-3 text-amber-500" />
                     )}
-                    <span>{m.sender === 'user' ? 'You' : 'Copilot AI OS'}</span>
+                    <span>{m.sender === 'user' ? 'You' : 'Copilot AI'}</span>
                   </div>
 
                   {m.sender === 'copilot' && !m.isError && (
@@ -332,12 +572,12 @@ export function GlobalAICopilot() {
                   )}
                 </div>
 
-                {/* Explainability Accordion ("Why this recommendation?") */}
+                {/* Reasoning Accordion */}
                 {m.reasoning && (
                   <div className="bg-[#FAF7F2] border border-[#E5E0D8] rounded-xl p-2 text-[10px] font-mono">
                     <button
                       type="button"
-                      onClick={() => setExpandedReasoning(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
+                      onClick={() => setExpandedReasoning((prev) => ({ ...prev, [m.id]: !prev[m.id] }))}
                       className="flex items-center justify-between w-full text-gray-600 hover:text-gray-900 font-bold"
                     >
                       <div className="flex items-center gap-1">
@@ -354,9 +594,70 @@ export function GlobalAICopilot() {
                   </div>
                 )}
 
+                {/* Answer Content */}
                 <div className="leading-relaxed font-sans text-xs">
                   {renderFormattedContent(m.text)}
                 </div>
+
+                {/* ACTION CONFIRMATION PREVIEW CARD */}
+                {m.action_preview && (
+                  <div
+                    className={`mt-2 p-3 rounded-xl border space-y-2 ${
+                      m.action_preview.is_destructive
+                        ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                        : 'bg-amber-50/90 border-amber-300 text-amber-950'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-xs">
+                        <ShieldAlert className={`w-4 h-4 ${m.action_preview.is_destructive ? 'text-rose-600' : 'text-amber-600'}`} />
+                        <span>{m.action_preview.title}</span>
+                      </div>
+                      <span
+                        className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                          m.action_preview.is_destructive
+                            ? 'bg-rose-200 border-rose-300 text-rose-900'
+                            : 'bg-amber-200 border-amber-300 text-amber-900'
+                        }`}
+                      >
+                        {m.action_preview.is_destructive ? 'DESTRUCTIVE' : 'CONFIRMATION REQUIRED'}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] leading-relaxed font-sans">{m.action_preview.summary}</p>
+                    <p className="text-[10px] font-mono text-gray-600">
+                      Impacted records: <strong>{m.action_preview.impacted_records}</strong>
+                    </p>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={confirmingToken === m.action_preview.confirmation_token}
+                        onClick={() => handleConfirmAction(m.id, m.action_preview!)}
+                        className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all active:scale-95 ${
+                          m.action_preview.is_destructive
+                            ? 'bg-rose-700 hover:bg-rose-800 text-white'
+                            : 'bg-[#1A1A1A] hover:bg-black text-[#E8F5A8]'
+                        }`}
+                      >
+                        {confirmingToken === m.action_preview.confirmation_token ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <CheckCircle className="w-3 h-3" />
+                        )}
+                        <span>Confirm & Execute</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCancelAction(m.id)}
+                        className="text-[10px] font-mono text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg border border-gray-300 hover:bg-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Rich Native UI Cards */}
                 {m.rich_cards && m.rich_cards.length > 0 && (
@@ -366,7 +667,7 @@ export function GlobalAICopilot() {
                         <div className="flex items-center justify-between font-bold text-gray-900">
                           <span>{card.title}</span>
                           {card.badge && (
-                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-${card.badge_color || 'emerald'}-100 text-${card.badge_color || 'emerald'}-800 border border-${card.badge_color || 'emerald'}-300`}>
+                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
                               {card.badge}
                             </span>
                           )}
@@ -378,7 +679,7 @@ export function GlobalAICopilot() {
                   </div>
                 )}
 
-                {/* Executable 1-Click Action Buttons */}
+                {/* 1-Click Action Buttons */}
                 {m.action_buttons && m.action_buttons.length > 0 && (
                   <div className="pt-2 flex flex-wrap gap-1.5">
                     {m.action_buttons.map((btn, bIdx) => (
@@ -395,13 +696,15 @@ export function GlobalAICopilot() {
                   </div>
                 )}
 
+                {/* Provenance Citations */}
                 {m.citations && m.citations.length > 0 && (
-                  <div className="flex items-center gap-1 pt-1.5 border-t border-gray-100 text-[9px] font-mono text-gray-400 flex-wrap">
+                  <div className="flex items-center gap-1 pt-1.5 border-t border-gray-100 text-[9px] font-mono text-gray-500 flex-wrap">
                     <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
-                    <span>Citations: {m.citations.join(' • ')}</span>
+                    <span>Sources: {m.citations.join(' • ')}</span>
                   </div>
                 )}
 
+                {/* Followup suggestions */}
                 {m.suggested_followups && m.suggested_followups.length > 0 && (
                   <div className="pt-2 flex flex-wrap gap-1">
                     {m.suggested_followups.map((fol, fIdx) => (
@@ -434,7 +737,7 @@ export function GlobalAICopilot() {
             {loading && (
               <div className="flex items-center gap-2 p-3 bg-white rounded-2xl border border-[#D4D0C8] mr-4 text-xs text-gray-600 font-mono shadow-xs animate-pulse">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
-                <span>Copilot AI OS is querying CRM tools & Gemini...</span>
+                <span>Copilot is reasoning with live CRM tools...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -448,7 +751,7 @@ export function GlobalAICopilot() {
               disabled={loading}
               onChange={(e) => setQueryInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask Copilot AI OS to execute actions..."
+              placeholder="Ask Copilot to analyze, search, or act..."
               className="flex-1 px-3.5 py-2 bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl text-xs text-[#1A1A1A] placeholder-gray-400 focus:outline-none focus:border-gray-800 transition-colors disabled:opacity-50"
             />
             <button

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy import (
     String, Text, DateTime, Boolean, Integer, Float, JSON, Index,
-    UniqueConstraint, ForeignKey
+    UniqueConstraint, ForeignKey, Uuid
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,7 +18,7 @@ from app.database import Base
 from app.models.base_mixins import TimestampMixin, SoftDeleteMixin
 
 JSONBType = JSONB().with_variant(JSON(), "sqlite")
-UUIDType = UUID(as_uuid=True).with_variant(String(36), "sqlite")
+UUIDType = Uuid(as_uuid=True)
 
 def _gen_uuid() -> str:
     return str(uuid.uuid4())

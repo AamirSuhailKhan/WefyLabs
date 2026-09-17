@@ -138,3 +138,77 @@ class RecommendationFeedbackDTO(BaseModel):
     action: str  # viewed | saved | shortlisted | rejected | shared | viewing_booked | deal_won | deal_lost
     feedback_reason: Optional[str] = None
     override_comment: Optional[str] = None
+
+
+class LeadMatchItemDTO(BaseModel):
+    """Structured result for reverse property-to-lead candidate matching."""
+    lead_id: str
+    name: Optional[str] = None
+    phone: str
+    lead_tier: str = "warm"  # hot | warm | cold | unqualified
+    match_score: float = 0.0
+    confidence: float = 1.0
+    budget_fit: float = 0.0
+    location_fit: float = 0.0
+    bhk_fit: float = 0.0
+    reasons: List[str] = Field(default_factory=list)
+    mismatches: List[str] = Field(default_factory=list)
+    status: str = "active"
+    notes: Optional[str] = None
+    last_activity: Optional[str] = None
+
+
+class MatchingDashboardDTO(BaseModel):
+    """Analytics and overview metrics for AI Matching dashboard."""
+    leads_needing_matches_count: int = 0
+    unmatched_hot_leads: List[Dict[str, Any]] = Field(default_factory=list)
+    high_demand_properties: List[Dict[str, Any]] = Field(default_factory=list)
+    supply_gaps: List[Dict[str, Any]] = Field(default_factory=list)
+    strongest_recent_matches: List[Dict[str, Any]] = Field(default_factory=list)
+    total_inventory_count: int = 0
+    total_leads_count: int = 0
+
+
+class ShortlistRequestDTO(BaseModel):
+    """Payload to shortlist a property for a lead."""
+    lead_id: str
+    property_id: str
+    notes: Optional[str] = None
+    interest_level: str = "high"
+
+
+class RecommendRequestDTO(BaseModel):
+    """Payload to formally recommend a property to a lead."""
+    lead_id: str
+    property_id: str
+    notes: Optional[str] = None
+    create_followup_task: bool = True
+
+
+class RequirementExtractionRequestDTO(BaseModel):
+    """Payload to extract requirements from free text."""
+    text: str
+
+
+class RequirementExtractionResponseDTO(BaseModel):
+    """Structured requirements extracted from natural text."""
+    extracted_requirements: Dict[str, Any]
+    confidence: float
+    provenance: str = "AI_EXTRACTED"
+    summary: str
+
+
+class MatchFeedbackRequestDTO(BaseModel):
+    """Payload to record match feedback."""
+    lead_id: str
+    property_id: str
+    feedback: str  # good_match | bad_match | wrong_budget | wrong_location | wrong_property_type | already_contacted | customer_rejected | customer_interested | customer_shortlisted
+    notes: Optional[str] = None
+
+
+class MatchCompareRequestDTO(BaseModel):
+    """Payload to compare multiple matched properties."""
+    property_ids: List[str] = Field(..., min_length=2, max_length=5)
+    lead_id: Optional[str] = None
+
+

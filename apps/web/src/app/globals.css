@@ -14,13 +14,25 @@
     --lime: #E8F5A8;
     --lime-hover: #D4E894;
     --warm-border: #D4D0C8;
+
+    /* WefyLabs Official Brand Tokens */
+    --brand-primary: #2C4BFB;
+    --brand-primary-hover: #1D3BE6;
+    --brand-primary-light: #60A5FA;
+    --brand-secondary: #1E293B;
+    --brand-silver: #CBD5E1;
+    --brand-silver-light: #F1F5F9;
+    --brand-gradient-start: #E2E8F0;
+    --brand-gradient-mid: #334155;
+    --brand-gradient-end: #2C4BFB;
+    --brand-mark-muted: #94A3B8;
   }
 
   * {
     box-sizing: border-box;
   }
 
-  html {
+  html[data-scroll-behavior="smooth"] {
     scroll-behavior: smooth;
   }
 

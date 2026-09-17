@@ -6,7 +6,7 @@ from app.dependencies import get_current_broker
 from app.models.broker import Broker
 from app.core.integrations.provider_interface import IntegrationRegistry
 
-router = APIRouter(prefix="/integrations", tags=["BeetleLabs Integration Platform Engine"])
+router = APIRouter(prefix="/integrations", tags=["WefyLabs Integration Platform Engine"])
 
 # --- Schemas ---
 class IntegrationProviderInfo(BaseModel):

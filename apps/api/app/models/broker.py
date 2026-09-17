@@ -45,6 +45,7 @@ class Broker(Base):
         nullable=False
     )
     subscription_plan: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
     razorpay_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     razorpay_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

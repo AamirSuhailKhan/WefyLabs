@@ -425,7 +425,7 @@ class AgentConfiguration(Base):
     organization_id: Mapped[str] = mapped_column(
         String(36), nullable=False, unique=True, index=True
     )
-    agent_name: Mapped[str] = mapped_column(String(80), nullable=False, default="BeetleLabs AI Agent")
+    agent_name: Mapped[str] = mapped_column(String(80), nullable=False, default="WefyLabs AI Agent")
     enabled_channels_json: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)  # list of channel strings
     llm_provider: Mapped[str] = mapped_column(String(30), nullable=False, default="openai")
     llm_model: Mapped[str] = mapped_column(String(60), nullable=False, default="gpt-4o")

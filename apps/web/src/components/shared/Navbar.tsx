@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Menu, X } from 'lucide-react';
 
-import { BeetleLabsLogo } from './BeetleLabsLogo';
+import { WefyLabsLogo } from './WefyLabsLogo';
 import RegionSwitcher from './RegionSwitcher';
 
 export default function Navbar() {
@@ -28,7 +28,7 @@ export default function Navbar() {
         }`}
       >
         {/* Logo */}
-        <BeetleLabsLogo href="/" iconSize={26} textSize="text-xl" />
+        <WefyLabsLogo href="/" iconSize={26} textSize="text-xl" />
 
         {/* Desktop Nav Links */}
         <div className="hidden md:flex items-center gap-8">

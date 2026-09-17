@@ -17,6 +17,7 @@ from app.models.organization import (
     Workspace, Department,
     RoleModel, PermissionModel, RolePermission
 )
+from app.models.invitation_models import PasswordResetToken, OrganizationInvitation
 from app.models.audit_log import AuditLog
 from app.models.base_mixins import TimestampMixin, SoftDeleteMixin, TenantMixin, AuditMixin
 from app.models.communication_models import (
@@ -27,7 +28,9 @@ from app.models.communication_models import (
     MessageTemplate, TemplateVariable, ProviderCredential,
     OutboundQueue, InboundQueue, TypingEvent, PresenceRecord,
 )
-from app.models.property_models import PropertyListing, PropertyMedia, PropertyPriceHistory
+from app.models.property_models import PropertyListing, PropertyMedia, PropertyPriceHistory, LeadPropertyInterest
+from app.models.command_center_models import CommandCenterDismissal
+from app.models.onboarding_models import OnboardingState, TenantActivation, DemoSession
 from app.models.transaction_models import DealTransaction, DealMilestone, DealPaymentSchedule
 
 from app.models.ingestion_models import ConnectorConfig, LeadImportBatch, LeadImportItem, OriginalPayload, IngestionLog
@@ -71,7 +74,7 @@ from app.models.knowledge_models import (
 from app.models.follow_up_models import (
     FollowUpPolicy, FollowUpSequence, FollowUpSequenceStep, FollowUpEnrollment,
     FollowUpExecution, FollowUpDecision, CommunicationConsent, ContactFatigue,
-    NextBestAction, FollowUpAttribution
+    NextBestAction, FollowUpAttribution, FollowUpRule, FollowUpAutomationEvent
 )
 
 # ─── Part 9 — Calendar, Meeting & Scheduling Intelligence Engine ──────────────
@@ -234,11 +237,18 @@ __all__ = [
     # Organization & RBAC
     "Organization",
     "OrganizationMember",
+    "OrganizationInvitation",
+    "PasswordResetToken",
     "Workspace",
     "Department",
     "RoleModel",
     "PermissionModel",
     "RolePermission",
+    # Onboarding, Activation & Demo (Part 31)
+    "OnboardingState",
+    "TenantActivation",
+    "DemoSession",
+    "CommandCenterDismissal",
     # Audit & Infrastructure
     "AuditLog",
     "TimestampMixin",
@@ -284,6 +294,8 @@ __all__ = [
     "ContactFatigue",
     "NextBestAction",
     "FollowUpAttribution",
+    "FollowUpRule",
+    "FollowUpAutomationEvent",
     # Part 9 — Calendar, Meeting & Scheduling Intelligence Engine
     "CalendarAccount",
     "CalendarConnection",
@@ -444,4 +456,23 @@ from app.models.payment_models import (
     RefundStatus,
     WebhookEventStatus,
 )
+
+# ─── Part 25 — Enterprise AI Copilot Operating System ─────────────────────────
+from app.models.copilot_models import (
+    CopilotConversation,
+    CopilotMessage,
+)
+
+# ─── Part 35 — AI Real Estate Revenue Autopilot ───────────────────────────────
+from app.models.revenue_autopilot_models import (
+    RevenueOpportunity,
+    RevenueFeedbackLog,
+)
+
+__all__ = __all__ + [
+    "CopilotConversation",
+    "CopilotMessage",
+    "RevenueOpportunity",
+    "RevenueFeedbackLog",
+]
 

@@ -1,7 +1,12 @@
 import { 
   Lead, LeadDetail, LeadListResponse, Broker, AdminStats, PipelineStage, LeadNote, LeadTag, Task, Conversation,
   CalendarSlotSearchResponse, CalendarBookingRequest, CalendarBookingResponse, MeetingPreparationBrief,
-  MeetingNoShowPrediction, MeetingOutcome, ViewingItineraryResponse, CalendarConflict
+  MeetingNoShowPrediction, MeetingOutcome, ViewingItineraryResponse, CalendarConflict,
+  PriorityItem, TodayScheduleItem, InventoryIntelligence, DailyBriefing, CommandCenterSummary,
+  CommandCenterResponse, StartMyDayResponse,
+  OnboardingStatusResponse, TenantActivationResponse, BusinessProfileSetup,
+  DemoSessionResponse, CsvImportPreview, CsvImportResult, OnboardingTeamInvite,
+  ActionQueueResponse, RevenueOpportunity, DemandIntelligenceResponse, RevenueBriefing, OutreachDraft
 } from '@/types';
 
 export const getApiBase = (): string => {
@@ -16,19 +21,21 @@ export const getApiBase = (): string => {
 
 export const getToken = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('beetlelabs_token') || '';
+    return localStorage.getItem('wefylabs_token') || localStorage.getItem('beetlelabs_token') || '';
   }
   return '';
 };
 
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
+    localStorage.setItem('wefylabs_token', token);
     localStorage.setItem('beetlelabs_token', token);
   }
 };
 
 export const removeToken = (): void => {
   if (typeof window !== 'undefined') {
+    localStorage.removeItem('wefylabs_token');
     localStorage.removeItem('beetlelabs_token');
   }
 };
@@ -138,7 +145,7 @@ export function extractApiErrorMessage(errorText: string, status: number): strin
   try {
     const jsonErr = JSON.parse(errorText);
 
-    // 1. Nested BeetleLabs error response: jsonErr.error.details.errors / jsonErr.details?.errors / list
+    // 1. Nested WefyLabs error response: jsonErr.error.details.errors / jsonErr.details?.errors / list
     const errorsList =
       jsonErr.error?.details?.errors ||
       jsonErr.details?.errors ||
@@ -164,12 +171,22 @@ export function extractApiErrorMessage(errorText: string, status: number): strin
       return messages.join('\n');
     }
 
-    // 2. String detail
+    // 2. Object detail with message / code (FastAPI custom HTTPException)
+    if (typeof jsonErr.detail === 'object' && jsonErr.detail !== null) {
+      if (typeof jsonErr.detail.message === 'string' && jsonErr.detail.message.trim()) {
+        return jsonErr.detail.message.trim();
+      }
+      if (typeof jsonErr.detail.detail === 'string' && jsonErr.detail.detail.trim()) {
+        return jsonErr.detail.detail.trim();
+      }
+    }
+
+    // 3. String detail
     if (typeof jsonErr.detail === 'string' && jsonErr.detail.trim()) {
       return jsonErr.detail.trim();
     }
 
-    // 3. String message on error object or root
+    // 4. String message on error object or root
     if (typeof jsonErr.error?.message === 'string' && jsonErr.error.message.trim() && !jsonErr.error.message.toLowerCase().includes('validation failed')) {
       return jsonErr.error.message.trim();
     }
@@ -177,7 +194,7 @@ export function extractApiErrorMessage(errorText: string, status: number): strin
       return jsonErr.message.trim();
     }
 
-    // 4. Fallback error string
+    // 5. Fallback error string
     if (typeof jsonErr.error === 'string' && jsonErr.error.trim()) {
       return jsonErr.error.trim();
     }
@@ -187,7 +204,29 @@ export function extractApiErrorMessage(errorText: string, status: number): strin
     }
   }
 
-  return `Request failed with status ${status}`;
+  // Explicit HTTP Error Taxonomy (Section 20)
+  switch (status) {
+    case 401:
+      return 'Session expired or unauthenticated. Please sign in to continue.';
+    case 402:
+      return 'Active plan required. Please upgrade your subscription to access this feature.';
+    case 403:
+      return 'Access restricted. You do not have permission or your trial period has expired.';
+    case 404:
+      return 'Requested resource not found.';
+    case 409:
+      return 'Conflict: This record or resource already exists.';
+    case 422:
+      return 'Validation error: Please verify the submitted data format.';
+    case 429:
+      return 'Rate limit exceeded. Please wait a moment before trying again.';
+    case 500:
+      return 'Internal server error. The engineering team has been alerted.';
+    case 503:
+      return 'Service temporarily unavailable. Please retry in a few moments.';
+    default:
+      return `Request failed with status ${status}`;
+  }
 }
 
 export async function fetcher<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -219,11 +258,27 @@ export async function fetcher<T>(endpoint: string, options?: RequestInit): Promi
       try {
         apiError.data = JSON.parse(errorText);
       } catch {}
+      // Auto-clear stale/expired token on 401 so the user is redirected to login
+      if (res.status === 401 && typeof window !== 'undefined') {
+        const storedToken = localStorage.getItem('wefylabs_token') || localStorage.getItem('beetlelabs_token');
+        if (storedToken) {
+          localStorage.removeItem('wefylabs_token');
+          localStorage.removeItem('beetlelabs_token');
+          // Only redirect if not already on auth pages
+          const path = window.location.pathname;
+          if (!path.startsWith('/login') && !path.startsWith('/register') && !path.startsWith('/auth')) {
+            window.location.href = '/login';
+          }
+        }
+      }
       throw apiError;
     }
     
     return res.json();
   } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw err;
+    }
     if (typeof window !== 'undefined' && (err.name === 'TypeError' || (err.message && err.message.toLowerCase().includes('fetch')))) {
       console.warn(`[API Client Warning] Cannot reach API at ${url}:`, err.message || err);
       throw new Error('Authentication server unavailable. Please ensure backend services are active.');
@@ -325,10 +380,51 @@ export const api = {
     }
   },
 
+  // Part 31 — Onboarding, Activation & Demo Mode
+  onboarding: {
+    getStatus: () => fetcher<OnboardingStatusResponse>('/onboarding/status'),
+    updateStep: (step: string, action: 'complete' | 'skip' = 'complete', payload?: Record<string, any>) =>
+      fetcher<OnboardingStatusResponse>('/onboarding/step', {
+        method: 'POST',
+        body: JSON.stringify({ step, action, payload: payload || {} }),
+      }),
+    updateBusinessProfile: (data: BusinessProfileSetup) =>
+      fetcher<OnboardingStatusResponse>('/onboarding/business-profile', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getActivation: () => fetcher<TenantActivationResponse>('/onboarding/activation'),
+    startDemo: (intendedAgencyName?: string, operatingCity?: string) =>
+      fetcher<DemoSessionResponse>('/onboarding/demo/start', {
+        method: 'POST',
+        body: JSON.stringify({ intended_agency_name: intendedAgencyName, operating_city: operatingCity || 'Bengaluru' }),
+      }),
+    resetDemo: (sessionToken: string) =>
+      fetcher<{ status: string; message: string }>(`/onboarding/demo/reset?session_token=${encodeURIComponent(sessionToken)}`, {
+        method: 'POST',
+      }),
+    previewCsv: (rawCsv: string, entityType: 'leads' | 'properties' = 'leads') =>
+      fetcher<CsvImportPreview>(`/onboarding/import/preview?entity_type=${entityType}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: rawCsv,
+      }),
+    commitCsv: (entityType: 'leads' | 'properties', items: Record<string, any>[]) =>
+      fetcher<CsvImportResult>('/onboarding/import/commit', {
+        method: 'POST',
+        body: JSON.stringify({ entity_type: entityType, items }),
+      }),
+    inviteTeam: (email: string, role: 'admin' | 'manager' | 'agent' = 'agent') =>
+      fetcher<{ status: string; message: string; invitation: any }>('/onboarding/invite-team', {
+        method: 'POST',
+        body: JSON.stringify({ email, role }),
+      }),
+  },
+
   // Brokers
   getBrokerProfile: () => fetcher<Broker>('/brokers/me').catch(() => ({
     id: 'demo-broker-1',
-    email: 'broker@beetlelabs.ai',
+    email: 'broker@wefylabs.com',
     phone: '+919876543210',
     name: 'Authenticated Broker',
     agency_name: 'Unassigned Agency',
@@ -537,10 +633,39 @@ export const api = {
 
   // Properties
   properties: {
-    list: (params?: { property_type?: string; search?: string; page?: number; limit?: number }) => {
+    list: (params?: {
+      search?: string;
+      property_type?: string;
+      property_category?: string;
+      transaction_category?: string;
+      status?: string;
+      city?: string;
+      locality?: string;
+      min_price?: number;
+      max_price?: number;
+      bedrooms?: number;
+      bathrooms?: number;
+      furnishing?: string;
+      construction_status?: string;
+      sort_by?: string;
+      page?: number;
+      limit?: number;
+    }) => {
       const q = new URLSearchParams();
-      if (params?.property_type && params.property_type !== 'all') q.append('property_type', params.property_type);
       if (params?.search) q.append('search', params.search);
+      if (params?.property_type && params.property_type !== 'all') q.append('property_type', params.property_type);
+      if (params?.property_category && params.property_category !== 'all') q.append('property_category', params.property_category);
+      if (params?.transaction_category && params.transaction_category !== 'all') q.append('transaction_category', params.transaction_category);
+      if (params?.status && params.status !== 'all') q.append('status', params.status);
+      if (params?.city) q.append('city', params.city);
+      if (params?.locality) q.append('locality', params.locality);
+      if (params?.min_price !== undefined) q.append('min_price', params.min_price.toString());
+      if (params?.max_price !== undefined) q.append('max_price', params.max_price.toString());
+      if (params?.bedrooms !== undefined) q.append('bedrooms', params.bedrooms.toString());
+      if (params?.bathrooms !== undefined) q.append('bathrooms', params.bathrooms.toString());
+      if (params?.furnishing && params.furnishing !== 'all') q.append('furnishing', params.furnishing);
+      if (params?.construction_status && params.construction_status !== 'all') q.append('construction_status', params.construction_status);
+      if (params?.sort_by) q.append('sort_by', params.sort_by);
       if (params?.page) q.append('page', params.page.toString());
       if (params?.limit) q.append('limit', params.limit.toString());
       const qStr = q.toString() ? `?${q.toString()}` : '';
@@ -552,8 +677,47 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data)
       }),
+    update: (id: string, data: any) =>
+      fetcher<any>(`/properties/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      }),
     delete: (id: string) =>
       fetcher<any>(`/properties/${id}`, { method: 'DELETE' }),
+    getDashboard: () => fetcher<any>('/properties/dashboard'),
+    getDemandAnalytics: () => fetcher<any>('/properties/demand-analytics'),
+    getPublic: (shareToken: string) => fetcher<any>(`/properties/public/${shareToken}`),
+    reserve: (id: string, leadId?: string, notes?: string) =>
+      fetcher<any>(`/properties/${id}/reserve`, {
+        method: 'POST',
+        body: JSON.stringify({ lead_id: leadId, notes })
+      }),
+    getLeads: (id: string) => fetcher<any>(`/properties/${id}/leads`),
+    linkLead: (id: string, data: { lead_id: string; status?: string; interest_level?: string; notes?: string; source?: string }) =>
+      fetcher<any>(`/properties/${id}/leads`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    scheduleVisit: (id: string, data: { lead_id: string; scheduled_at: string; duration_minutes?: number; notes?: string }) =>
+      fetcher<any>(`/properties/${id}/visits`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    recordVisitOutcome: (meetingId: string, data: { outcome: string; feedback?: string; next_action?: string }) =>
+      fetcher<any>(`/properties/visits/${meetingId}/outcome`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    bulk: (data: { property_ids: string[]; action: string; status?: string; assigned_agent_id?: string }) =>
+      fetcher<any>('/properties/bulk', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    generateAIDescription: (data: any) =>
+      fetcher<any>('/properties/ai-description', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
     getValuation: (id: string, params?: { price?: number; area_sqft?: number; locality?: string }) => {
       const q = new URLSearchParams();
       if (params?.price) q.append('price', params.price.toString());
@@ -561,7 +725,19 @@ export const api = {
       if (params?.locality) q.append('locality', params.locality);
       const qStr = q.toString() ? `?${q.toString()}` : '';
       return fetcher<any>(`/properties/${id}/valuation${qStr}`);
-    }
+    },
+    updatePrice: (id: string, data: { new_price: number; reason?: string }) =>
+      fetcher<any>(`/properties/${id}/price`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    listVisits: (status?: string, limit: number = 15) => {
+      const q = new URLSearchParams();
+      if (status) q.append('status', status);
+      if (limit) q.append('limit', limit.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any[]>(`/properties/visits${qStr}`);
+    },
   },
 
   // Deals & Transaction Lifecycle Management
@@ -702,6 +878,96 @@ export const api = {
     getStatus: () => fetcher<{ subscription_status: string; subscription_plan?: string; trial_ends_at: string; trial_days_remaining: number; razorpay_customer_id?: string; razorpay_subscription_id?: string }>('/billing/status')
   },
 
+  // Part 27 — Follow-Up Automation Engine
+  followups: {
+    getDashboardSummary: () => fetcher<{
+      counts: {
+        due_today: number;
+        overdue: number;
+        upcoming: number;
+        sla_breaches: number;
+        awaiting_first_contact: number;
+      };
+      tasks_due_today: any[];
+      tasks_overdue: any[];
+      tasks_upcoming: any[];
+      sla_breaches: any[];
+    }>('/followups/dashboard/summary'),
+
+    getDailyBriefing: () => fetcher<{
+      due_today_count: number;
+      overdue_count: number;
+      hot_uncontacted_count: number;
+      meetings_today_count: number;
+      top_priority_lead?: any;
+      summary_text: string;
+      generated_at: string;
+    }>('/followups/briefing/daily'),
+
+    getRules: () => fetcher<any[]>('/followups/rules'),
+
+    createRule: (data: {
+      name: string;
+      trigger: string;
+      action: string;
+      delay_minutes?: number;
+      priority?: string;
+      conditions?: Record<string, any>;
+      action_config?: Record<string, any>;
+    }) =>
+      fetcher<any>('/followups/rules', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+    updateRule: (ruleId: string, data: any) =>
+      fetcher<any>(`/followups/rules/${ruleId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      }),
+
+    deleteRule: (ruleId: string) =>
+      fetcher<any>(`/followups/rules/${ruleId}`, {
+        method: 'DELETE'
+      }),
+
+    snoozeTask: (taskId: string, snoozeUntil: string, reason?: string) =>
+      fetcher<any>(`/followups/tasks/${taskId}/snooze`, {
+        method: 'POST',
+        body: JSON.stringify({ snooze_until: snoozeUntil, reason })
+      }),
+
+    rescheduleTask: (taskId: string, newDueAt: string, reason?: string) =>
+      fetcher<any>(`/followups/tasks/${taskId}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({ new_due_at: newDueAt, reason })
+      }),
+
+    getLeadStatus: (leadId: string) => fetcher<any>(`/followups/${leadId}`),
+
+    reengageLead: (leadId: string) =>
+      fetcher<any>(`/followups/${leadId}/reengage`, {
+        method: 'POST'
+      }),
+
+    pauseLead: (leadId: string, reason?: string) =>
+      fetcher<any>(`/followups/${leadId}/pause?reason=${encodeURIComponent(reason || 'Paused by Broker')}`, {
+        method: 'POST'
+      }),
+
+    resumeLead: (leadId: string) =>
+      fetcher<any>(`/followups/${leadId}/resume`, {
+        method: 'POST'
+      }),
+
+    stopLead: (leadId: string) =>
+      fetcher<any>(`/followups/${leadId}/stop`, {
+        method: 'POST'
+      }),
+
+    getPerformance: () => fetcher<any>('/followups/analytics/performance')
+  },
+
   // Predictive Intelligence
   predictive: {
     getDashboard: () => fetcher<{
@@ -758,10 +1024,13 @@ export const api = {
     query: string,
     routePath: string = '/dashboard',
     history?: Array<{ sender: 'user' | 'copilot'; text: string }>,
-    activeEntityId?: string
+    activeEntityId?: string,
+    conversationId?: string,
+    confirmedAction?: any
   ) =>
     fetcher<{
       query: string;
+      conversation_id?: string;
       context_type: string;
       summary: string;
       reasoning?: string;
@@ -783,13 +1052,24 @@ export const api = {
       citations?: string[];
       suggested_followups?: string[];
       executed_tools?: any[];
+      action_preview?: {
+        tool_name: string;
+        title: string;
+        summary: string;
+        impacted_records: number;
+        is_destructive: boolean;
+        confirmation_token: string;
+        arguments: any;
+      } | null;
     }>('/copilot/query', {
       method: 'POST',
       body: JSON.stringify({
         query,
         route_path: routePath,
         history,
-        active_entity_id: activeEntityId
+        active_entity_id: activeEntityId,
+        conversation_id: conversationId,
+        confirmed_action: confirmedAction
       })
     }),
 
@@ -807,6 +1087,73 @@ export const api = {
         target_id,
         payload
       })
+    }),
+
+  confirmCopilotAction: (
+    confirmation_token: string,
+    tool_name: string,
+    args?: any,
+    conversation_id?: string
+  ) =>
+    fetcher<{
+      success?: boolean;
+      query: string;
+      answer_markdown: string;
+      summary: string;
+      citations?: string[];
+      executed_tools?: any[];
+    }>('/copilot/actions/confirm', {
+      method: 'POST',
+      body: JSON.stringify({
+        confirmation_token,
+        tool_name,
+        arguments: args,
+        conversation_id
+      })
+    }),
+
+  listCopilotConversations: () =>
+    fetcher<
+      Array<{
+        id: string;
+        title: string;
+        route_context: string;
+        created_at: string;
+        updated_at: string;
+      }>
+    >('/copilot/conversations'),
+
+  createCopilotConversation: (title?: string, route_context?: string) =>
+    fetcher<{
+      id: string;
+      title: string;
+      route_context: string;
+      created_at: string;
+    }>('/copilot/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ title, route_context })
+    }),
+
+  getCopilotConversation: (conversationId: string) =>
+    fetcher<{
+      id: string;
+      title: string;
+      route_context: string;
+      messages: Array<{
+        id: string;
+        sender: 'user' | 'copilot';
+        content: string;
+        reasoning?: string;
+        tool_calls?: any[];
+        citations?: string[];
+        action_preview?: any;
+        created_at?: string;
+      }>;
+    }>(`/copilot/conversations/${conversationId}`),
+
+  deleteCopilotConversation: (conversationId: string) =>
+    fetcher<{ success: boolean; message: string }>(`/copilot/conversations/${conversationId}`, {
+      method: 'DELETE'
     }),
 
   getCopilotSuggestedActions: (routePath: string = '/dashboard') =>
@@ -1232,6 +1579,326 @@ export const api = {
       fetcher<FollowUpStateData>(`/leads/${leadId}/follow-up/resume`, {
         method: 'POST',
       }),
+  },
+
+  // ─── Part 26 — Lead Capture Hub ───────────────────────────────────────────
+  leadCapture: {
+    getMetrics: () =>
+      fetcher<{
+        total_captured: number;
+        today: number;
+        this_week: number;
+        this_month: number;
+        by_status: Record<string, number>;
+        by_channel: Record<string, number>;
+        sources: Array<{
+          id: string;
+          name: string;
+          channel: string;
+          provider?: string;
+          status: string;
+          is_active: boolean;
+          health: string;
+          total_events: number;
+          webhook_token?: string;
+          created_at?: string;
+        }>;
+        healthy_sources_count: number;
+        attention_needed_count: number;
+      }>('/lead-acquisition/dashboard/metrics'),
+
+    listSources: (params?: { channel?: string; status?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.channel) q.append('channel', params.channel);
+      if (params?.status) q.append('status', params.status);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any[]>(`/lead-acquisition/sources${qStr}`);
+    },
+
+    createSource: (data: { name: string; channel: string; provider?: string; description?: string }) =>
+      fetcher<any>('/lead-acquisition/sources', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    updateSource: (id: string, data: any) =>
+      fetcher<any>(`/lead-acquisition/sources/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    rotateToken: (sourceId: string) =>
+      fetcher<{ source_id: string; new_token: string; message: string }>(
+        `/lead-acquisition/sources/${sourceId}/rotate-token`,
+        { method: 'POST' }
+      ),
+
+    sendTestLead: (sourceId: string) =>
+      fetcher<{ status: string; is_test: boolean; event_id: string; lead_id: string; lead_name: string; lead_phone: string; message: string }>(
+        `/lead-acquisition/sources/${sourceId}/test`,
+        { method: 'POST' }
+      ),
+
+    getEmbedCode: (sourceId: string) =>
+      fetcher<{ source_id: string; source_name: string; token: string; script_snippet: string; api_endpoint: string; curl_example: string }>(
+        `/lead-acquisition/sources/${sourceId}/embed-code`
+      ),
+
+    listEvents: (params?: { source_id?: string; status?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.source_id) q.append('source_id', params.source_id);
+      if (params?.status) q.append('status', params.status);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<{ items: any[]; total: number; limit: number; offset: number }>(`/lead-acquisition/events${qStr}`);
+    },
+
+    retryEvent: (eventId: string) =>
+      fetcher<any>(`/lead-acquisition/events/${eventId}/retry`, { method: 'POST' }),
+
+    uploadImportFile: (formData: FormData) =>
+      fetcher<{ batch_id: string; filename: string; total_records: number; processed_records: number; failed_records: number; status: string }>(
+        '/v1/ingest/import-file',
+        { method: 'POST', body: formData }
+      ),
+
+    listImportBatches: () =>
+      fetcher<any[]>('/v1/ingest/imports'),
+  },
+
+  // ─── Part 29 — AI Lead ↔ Property Matching Engine ────────────────────────
+  matching: {
+    getLeadMatches: (
+      leadId: string,
+      options?: number | { limit?: number; top_k?: number; property_type?: string; allow_alternatives?: boolean },
+      allowAlternativesFlag?: boolean
+    ) => {
+      let topK = 5;
+      let allowAlternatives = allowAlternativesFlag ?? false;
+      let propType = '';
+      if (typeof options === 'number') {
+        topK = options;
+      } else if (options) {
+        topK = options.limit || options.top_k || 5;
+        allowAlternatives = options.allow_alternatives ?? (allowAlternativesFlag ?? false);
+        if (options.property_type && options.property_type !== 'all') {
+          propType = options.property_type;
+        }
+      }
+      const q = new URLSearchParams();
+      q.append('top_k', topK.toString());
+      q.append('allow_alternatives', allowAlternatives.toString());
+      if (propType) q.append('property_type', propType);
+      return fetcher<any>(`/leads/${leadId}/matches?${q.toString()}`);
+    },
+
+    getPropertyLeadMatches: (
+      propertyId: string,
+      options?: number | { limit?: number; top_k?: number }
+    ) => {
+      const topK = typeof options === 'number' ? options : (options?.limit || options?.top_k || 10);
+      return fetcher<any>(`/properties/${propertyId}/matches?top_k=${topK}`);
+    },
+
+    shortlist: (data: { lead_id: string; property_id: string; notes?: string; interest_level?: string }) =>
+      fetcher<{ status: string; message: string; match_score: number; interest_status: string }>(
+        '/matches/shortlist',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+
+    shortlistMatch: (data: { lead_id: string; property_id: string; notes?: string; interest_level?: string }) =>
+      fetcher<{ status: string; message: string; match_score: number; interest_status: string }>(
+        '/matches/shortlist',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+
+    recommend: (data: { lead_id: string; property_id: string; notes?: string; create_followup_task?: boolean }) =>
+      fetcher<{ status: string; message: string; match_score: number }>(
+        '/matches/recommend',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+
+    recommendMatch: (data: { lead_id: string; property_id: string; notes?: string; create_followup_task?: boolean }) =>
+      fetcher<{ status: string; message: string; match_score: number }>(
+        '/matches/recommend',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+
+    getAlternatives: (leadId: string, topK: number = 5) =>
+      fetcher<any>(`/matches/alternatives/${leadId}?top_k=${topK}`),
+
+    getDashboard: () =>
+      fetcher<{
+        leads_needing_matches_count: number;
+        unmatched_hot_leads: any[];
+        high_demand_properties: any[];
+        supply_gaps: any[];
+        strongest_recent_matches: any[];
+        total_inventory_count: number;
+        total_leads_count: number;
+      }>('/matches/dashboard'),
+
+    extractRequirements: (text: string) =>
+      fetcher<{
+        extracted_requirements: Record<string, any>;
+        confidence: number;
+        provenance: string;
+        summary: string;
+      }>('/matches/extract-requirements', { method: 'POST', body: JSON.stringify({ text }) }),
+
+    recordFeedback: (data: { lead_id: string; property_id: string; feedback: string; notes?: string }) =>
+      fetcher<any>('/matches/feedback', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+
+    compare: (data: { property_ids: string[]; lead_id?: string }) =>
+      fetcher<any>('/matches/compare', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+  },
+
+  // ─── Part 30 — AI Real-Estate Agent Daily Command Center ─────────────
+  commandCenter: {
+    getData: async (userTimezone?: string, signal?: AbortSignal): Promise<CommandCenterResponse> => {
+      const q = userTimezone ? `?user_timezone=${encodeURIComponent(userTimezone)}` : '';
+      const res = await fetcher<any>(`/command-center${q}`, { signal });
+      return (res && res.data) ? res.data as CommandCenterResponse : res as CommandCenterResponse;
+    },
+    getSummary: async (userTimezone?: string, signal?: AbortSignal): Promise<CommandCenterSummary> => {
+      const q = userTimezone ? `?user_timezone=${encodeURIComponent(userTimezone)}` : '';
+      const res = await fetcher<any>(`/command-center/summary${q}`, { signal });
+      return (res && res.data) ? res.data as CommandCenterSummary : res as CommandCenterSummary;
+    },
+    getPriorities: async (options?: { limit?: number; priority_filter?: string; entity_type?: string }, signal?: AbortSignal): Promise<PriorityItem[]> => {
+      const q = new URLSearchParams();
+      if (options?.limit) q.append('limit', options.limit.toString());
+      if (options?.priority_filter) q.append('priority_filter', options.priority_filter);
+      if (options?.entity_type) q.append('entity_type', options.entity_type);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      const res = await fetcher<any>(`/command-center/priorities${qStr}`, { signal });
+      return (res && res.data) ? res.data as PriorityItem[] : res as PriorityItem[];
+    },
+    getToday: async (userTimezone?: string, signal?: AbortSignal): Promise<TodayScheduleItem[]> => {
+      const q = userTimezone ? `?user_timezone=${encodeURIComponent(userTimezone)}` : '';
+      const res = await fetcher<any>(`/command-center/today${q}`, { signal });
+      return (res && res.data) ? res.data as TodayScheduleItem[] : res as TodayScheduleItem[];
+    },
+    getInventoryIntelligence: async (signal?: AbortSignal): Promise<InventoryIntelligence> => {
+      const res = await fetcher<any>('/command-center/inventory-intelligence', { signal });
+      return (res && res.data) ? res.data as InventoryIntelligence : res as InventoryIntelligence;
+    },
+    getBriefing: async (signal?: AbortSignal): Promise<DailyBriefing> => {
+      const res = await fetcher<any>('/command-center/briefing', { signal });
+      return (res && res.data) ? res.data as DailyBriefing : res as DailyBriefing;
+    },
+    getStartMyDay: async (userTimezone?: string, signal?: AbortSignal): Promise<StartMyDayResponse> => {
+      const q = userTimezone ? `?user_timezone=${encodeURIComponent(userTimezone)}` : '';
+      const res = await fetcher<any>(`/command-center/start-my-day${q}`, { signal });
+      return (res && res.data) ? res.data as StartMyDayResponse : res as StartMyDayResponse;
+    },
+    dismissItem: async (data: { item_key: string; action?: string; snooze_minutes?: number; reason?: string }) => {
+      const res = await fetcher<any>(
+        '/command-center/items/dismiss',
+        { method: 'POST', body: JSON.stringify(data) }
+      );
+      return (res && res.data) ? res.data : res;
+    },
+  },
+
+  // ─── Part 35 — AI Real Estate Revenue Autopilot ───────────────────────
+  revenue: {
+    getActionQueue: async (limit: number = 10, signal?: AbortSignal): Promise<ActionQueueResponse> => {
+      const res = await fetcher<any>(`/revenue/action-queue?limit=${limit}`, { signal });
+      return (res && res.data) ? res.data as ActionQueueResponse : res as ActionQueueResponse;
+    },
+    getOpportunities: async (
+      options?: {
+        status?: string;
+        priority?: string;
+        urgency?: string;
+        opportunity_type?: string;
+        min_score?: number;
+        page?: number;
+        page_size?: number;
+      },
+      signal?: AbortSignal
+    ): Promise<{ items: RevenueOpportunity[]; total_count: number; page: number; page_size: number; has_more: boolean }> => {
+      const q = new URLSearchParams();
+      if (options?.status) q.append('status', options.status);
+      if (options?.priority) q.append('priority', options.priority);
+      if (options?.urgency) q.append('urgency', options.urgency);
+      if (options?.opportunity_type) q.append('opportunity_type', options.opportunity_type);
+      if (options?.min_score !== undefined) q.append('min_score', options.min_score.toString());
+      if (options?.page) q.append('page', options.page.toString());
+      if (options?.page_size) q.append('page_size', options.page_size.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      const res = await fetcher<any>(`/revenue/opportunities${qStr}`, { signal });
+      return (res && res.data) ? res.data : res;
+    },
+    getOpportunity: async (id: string, signal?: AbortSignal): Promise<RevenueOpportunity> => {
+      const res = await fetcher<any>(`/revenue/opportunities/${id}`, { signal });
+      return (res && res.data) ? res.data as RevenueOpportunity : res as RevenueOpportunity;
+    },
+    performAction: async (
+      id: string,
+      data: {
+        action_type: string;
+        notes?: string;
+        scheduled_at?: string;
+        send_email_now?: boolean;
+        email_subject?: string;
+        email_body?: string;
+        create_follow_up_task?: boolean;
+      }
+    ) => {
+      const res = await fetcher<any>(`/revenue/opportunities/${id}/action`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return (res && res.data) ? res.data : res;
+    },
+    dismissOpportunity: async (id: string, data: { reason?: string; notes?: string }) => {
+      const res = await fetcher<any>(`/revenue/opportunities/${id}/dismiss`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return (res && res.data) ? res.data : res;
+    },
+    submitFeedback: async (id: string, data: { rating: string; reason?: string; notes?: string; actual_outcome?: string }) => {
+      const res = await fetcher<any>(`/revenue/opportunities/${id}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return (res && res.data) ? res.data : res;
+    },
+    completeOpportunity: async (id: string, notes?: string) => {
+      const q = notes ? `?notes=${encodeURIComponent(notes)}` : '';
+      const res = await fetcher<any>(`/revenue/opportunities/${id}/complete${q}`, {
+        method: 'POST',
+      });
+      return (res && res.data) ? res.data : res;
+    },
+    generateOutreach: async (id: string): Promise<OutreachDraft> => {
+      const res = await fetcher<any>(`/revenue/opportunities/${id}/outreach`, {
+        method: 'POST',
+      });
+      return (res && res.data) ? res.data as OutreachDraft : res as OutreachDraft;
+    },
+    getBriefing: async (signal?: AbortSignal): Promise<RevenueBriefing> => {
+      const res = await fetcher<any>('/revenue/briefing', { signal });
+      return (res && res.data) ? res.data as RevenueBriefing : res as RevenueBriefing;
+    },
+    getDemandIntelligence: async (signal?: AbortSignal): Promise<DemandIntelligenceResponse> => {
+      const res = await fetcher<any>('/revenue/demand-intelligence', { signal });
+      return (res && res.data) ? res.data as DemandIntelligenceResponse : res as DemandIntelligenceResponse;
+    },
+    evaluate: async (signal?: AbortSignal): Promise<{ status: string; evaluated_opportunities_count: number; message: string }> => {
+      const res = await fetcher<any>('/revenue/evaluate', { method: 'POST', signal });
+      return (res && res.data) ? res.data : res;
+    },
   },
 };
 

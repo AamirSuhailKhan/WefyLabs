@@ -82,7 +82,7 @@ class BookingService:
         # 4. Create External Calendar Event & Virtual Meeting Link
         lead_name = lead.name or "Client"
         title = f"{dto.meeting_type.replace('_', ' ').title()}: {lead_name}"
-        location_str = dto.location_address or "BeetleLabs Real Estate Hub"
+        location_str = dto.location_address or "WefyLabs Real Estate Hub"
 
         if dto.property_id:
             try:
@@ -98,7 +98,7 @@ class BookingService:
                 location_str = f"{prop.locality}, {prop.city}"
 
         # 4. Resolve broker's connected calendar account & valid token
-        account_email = "broker@beetlelabs.com"
+        account_email = "broker@wefylabs.com"
         access_token = None
         try:
             b_uuid = uuid.UUID(str(broker_id))
@@ -127,7 +127,7 @@ class BookingService:
             end_utc=slot_end,
             description=dto.notes,
             location=location_str,
-            attendee_emails=[f"{lead.phone}@whatsapp.beetlelabs.internal"],
+            attendee_emails=[f"{lead.phone}@whatsapp.wefylabs.internal"],
             virtual_provider=dto.virtual_provider,
             access_token=access_token
         )

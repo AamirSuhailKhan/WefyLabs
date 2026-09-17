@@ -8,7 +8,7 @@ Vocabulary: Lead, Prospect, Buyer, Seller, Tenant, Landlord, Investor,
 NEVER: candidate, job, resume, CV, vacancy, employment.
 """
 from __future__ import annotations
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, Field, EmailStr, field_validator
@@ -170,6 +170,9 @@ class WebsiteLeadAcquisitionDTO(BaseModel):
     country: Optional[str] = Field(None, min_length=2, max_length=2)
     language: Optional[str] = None
 
+    city: Optional[str] = Field(None, max_length=100)
+    location: Optional[str] = Field(None, max_length=255)
+
     # Idempotency
     idempotency_key: Optional[str] = None
 
@@ -178,6 +181,8 @@ class WebsiteLeadAcquisitionDTO(BaseModel):
     def validate_email(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             v = v.strip().lower()
+            if not v:
+                return None
             if "@" not in v:
                 raise ValueError("Invalid email format")
         return v
@@ -196,7 +201,152 @@ class WebsiteLeadAcquisitionDTO(BaseModel):
         return bool(self.phone or self.email)
 
 
+class PublicLeadCaptureDTO(BaseModel):
+    """
+    Public website / embeddable form / API capture payload.
+    Supports flexible budget types (number or string like '50L', '1.5 Cr', '₹50,000,000').
+    Enforces anti-spam honeypot.
+    """
+    name: Optional[str] = Field(None, max_length=255)
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=30)
+    city: Optional[str] = Field(None, max_length=100)
+    location: Optional[str] = Field(None, max_length=255)
+    property_type: Optional[str] = Field(None, max_length=100)
+    transaction_type: Optional[str] = Field(None, max_length=30)
+    requirement: Optional[str] = None
+    message: Optional[str] = None
+    budget: Optional[Union[str, Decimal, int, float]] = None
+    budget_min: Optional[Union[str, Decimal, int, float]] = None
+    budget_max: Optional[Union[str, Decimal, int, float]] = None
+    currency: Optional[str] = Field(None, max_length=3)
+    timeline: Optional[str] = None
+    campaign_id: Optional[str] = None
+    landing_page: Optional[str] = None
+    referrer: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_term: Optional[str] = None
+    utm_content: Optional[str] = None
+    marketing_consent: bool = False
+    whatsapp_consent: bool = False
+    email_consent: bool = False
+    idempotency_key: Optional[str] = None
+    # Spam trap / Honeypot: bots fill this hidden field; humans don't
+    hp_trap: Optional[str] = Field(None, alias="_hp_trap")
+    website_url_hp: Optional[str] = None
+    custom_fields: Optional[Dict[str, Any]] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip().lower()
+            if not v:
+                return None
+            if "@" not in v:
+                raise ValueError("Invalid email format")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
+    def validate_contact_present(self) -> bool:
+        return bool(self.phone or self.email)
+
+    @property
+    def is_honeypot_triggered(self) -> bool:
+        """Returns True if bot honeypot fields were filled."""
+        return bool(self.hp_trap or self.website_url_hp)
+
+
+def _parse_flexible_budget(val: Optional[Union[str, Decimal, int, float]]) -> Optional[Decimal]:
+    """
+    Normalizes Indian and International budget representations:
+      '50L', '50 lakhs', '1.5 Cr', '1.5 crore', '₹5,000,000', 5000000 -> Decimal(5000000)
+    """
+    if val is None:
+        return None
+    if isinstance(val, (int, float, Decimal)):
+        return Decimal(str(int(val)))
+
+    text = str(val).strip().replace(",", "").replace("₹", "").replace("$", "").replace("AED", "").strip()
+    if not text:
+        return None
+
+    # Check for Lakhs
+    lakh_match = re.search(r"^([\d\.]+)\s*(?:l|lakh|lakhs|lac|lacs)$", text, re.IGNORECASE)
+    if lakh_match:
+        try:
+            return Decimal(str(int(float(lakh_match.group(1)) * 100000)))
+        except ValueError:
+            pass
+
+    # Check for Crores
+    cr_match = re.search(r"^([\d\.]+)\s*(?:cr|crore|crores)$", text, re.IGNORECASE)
+    if cr_match:
+        try:
+            return Decimal(str(int(float(cr_match.group(1)) * 10000000)))
+        except ValueError:
+            pass
+
+    # Check for k / M
+    k_match = re.search(r"^([\d\.]+)\s*k$", text, re.IGNORECASE)
+    if k_match:
+        try:
+            return Decimal(str(int(float(k_match.group(1)) * 1000)))
+        except ValueError:
+            pass
+
+    m_match = re.search(r"^([\d\.]+)\s*m$", text, re.IGNORECASE)
+    if m_match:
+        try:
+            return Decimal(str(int(float(m_match.group(1)) * 1000000)))
+        except ValueError:
+            pass
+
+    # Plain digits
+    digits_only = re.sub(r"[^\d.]", "", text)
+    if digits_only:
+        try:
+            return Decimal(str(int(float(digits_only))))
+        except ValueError:
+            pass
+
+    return None
+
+
+def _sanitize_text(text: Optional[str], max_chars: int = 1000) -> Optional[str]:
+    """Sanitizes text fields to protect against prompt injection and control character abuse."""
+    if not text:
+        return None
+    cleaned = text.strip()[:max_chars]
+    # Neutralize prompt injection markers if passed directly to Gemini downstream
+    injection_patterns = [
+        r"(?i)\bignore\s+all\s+(?:previous|prior)\s+instructions\b",
+        r"(?i)\bsystem\s*:\s*",
+        r"(?i)\bdeveloper\s+mode\b",
+        r"(?i)\byou\s+are\s+now\s+(?:in|a\s+malicious)\b",
+    ]
+    for pattern in injection_patterns:
+        cleaned = re.sub(pattern, "[FILTERED_INSTRUCTION]", cleaned)
+    # Remove script tags
+    cleaned = re.sub(r"(?i)<\s*script[^>]*>.*?<\s*/\s*script\s*>", "", cleaned)
+    return cleaned
+
+
+_sanitize_untrusted_text = _sanitize_text
+
+
 class AcquisitionResponseDTO(BaseModel):
+
     """Standard response for acquisition endpoints."""
     acquisition_event_id: str
     prospect_id: Optional[str]

@@ -198,7 +198,8 @@ class SalesActionDomainService:
             logger.debug(f"[SALES_ACTION_SERVICE] Recommendation lookup info: {ex}")
 
         # ── 4. Ingest Calendar Viewings ──────────────────────────────────────
-        stmt_v = select(Meeting).where(Meeting.lead_id == str(lead.id)).order_by(desc(Meeting.start_utc))
+        # Meeting.lead_id is UUID(as_uuid=True); use the uuid.UUID object directly
+        stmt_v = select(Meeting).where(Meeting.lead_id == lead.id).order_by(desc(Meeting.start_utc))
         res_v = await self.db.execute(stmt_v)
         viewings = list(res_v.scalars().all())
 

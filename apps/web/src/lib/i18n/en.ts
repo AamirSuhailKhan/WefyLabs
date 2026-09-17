@@ -19,11 +19,11 @@ export const en = {
     hoursWaste: "Hours Wasted/Week",
     dealsLost: "Deals Lost",
     totalLoss: "Total Monthly Loss",
-    withLeadScore: "With BeetleLabs ({price}/mo)",
+    withLeadScore: "With WefyLabs ({price}/mo)",
     netSavings: "Net savings per month",
     roi: "{roi}x ROI — pays for itself in {days} days",
     ctaTitle: "Stop the bleed. Start qualifying.",
-    ctaSubtitle: "Join {agentTerm} in {region} using BeetleLabs to qualify leads in 2 minutes.",
+    ctaSubtitle: "Join {agentTerm} in {region} using WefyLabs to qualify leads in 2 minutes.",
     startTrial: "START FREE TRIAL →",
     seeDemo: "See Live Demo"
   },

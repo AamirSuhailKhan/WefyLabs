@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import PageTransition from '@/components/shared/PageTransition';
 import { useEffect, useState } from 'react';
 import { api, getToken } from '@/lib/api-client';
+import { WefyLabsIcon } from '@/components/shared/WefyLabsIcon';
 
 export default function DashboardLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -64,7 +65,7 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
           </div>
           <h2 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">Account Suspended</h2>
           <p className="text-gray-500 mb-6">
-            Your broker account has been suspended by the administrator. Please contact support at support@beetlelabs.ai for resolution.
+            Your broker account has been suspended by the administrator. Please contact support at support@wefylabs.com for resolution.
           </p>
           <button
             onClick={() => {
@@ -84,8 +85,13 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F0EDE8]">
         <div className="flex flex-col items-center space-y-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-900 border-t-transparent"></div>
-          <p className="text-sm font-medium text-gray-600">Verifying session...</p>
+          <div className="relative flex items-center justify-center w-12 h-12">
+            <div className="absolute inset-0 animate-spin rounded-full border-2 border-[#D4D0C8] border-t-[#2C4BFB]" />
+            <div className="relative z-10 flex items-center justify-center">
+              <WefyLabsIcon size={18} className="animate-pulse" />
+            </div>
+          </div>
+          <p className="text-xs font-mono font-medium text-[#6B6B6B]">Verifying WefyLabs session...</p>
         </div>
       </div>
     );

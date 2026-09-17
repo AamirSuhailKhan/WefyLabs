@@ -23,7 +23,7 @@ export default function LeadSchedulingTab({ lead, onLeadUpdated }: LeadSchedulin
   const [locationAddress, setLocationAddress] = useState<string>(
     lead.preferred_locations && lead.preferred_locations.length > 0
       ? `${lead.preferred_locations[0]} Site Office`
-      : 'BeetleLabs Real Estate Hub'
+      : 'WefyLabs Real Estate Hub'
   );
   const [notes, setNotes] = useState<string>('');
 

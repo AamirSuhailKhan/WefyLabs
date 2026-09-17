@@ -9,7 +9,7 @@ from app.dependencies import get_db, get_current_broker
 from app.models.broker import Broker
 from app.models.marketplace_models import MarketplaceItem, MarketplaceInstallation
 
-router = APIRouter(prefix="/marketplace", tags=["BeetleLabs Marketplace & Developer Ecosystem"])
+router = APIRouter(prefix="/marketplace", tags=["WefyLabs Marketplace & Developer Ecosystem"])
 
 # --- Schemas ---
 class PublishItemRequest(BaseModel):
@@ -48,7 +48,7 @@ DEFAULT_MARKETPLACE_CATALOG = [
     {
         "name": "Dubai DLD Off-Plan AI Qualification Pack",
         "slug": "dubai-dld-offplan-pack",
-        "publisher_name": "BeetleLabs Official",
+        "publisher_name": "WefyLabs Official",
         "category": "ai_prompt",
         "description": "Pre-built AI prompt pack for Dubai off-plan buyers, covering payment plans, DLD fees, and Escrow approvals.",
         "version": "1.2.0",

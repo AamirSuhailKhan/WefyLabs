@@ -186,7 +186,7 @@ function ExplainabilityPanel({
         <div className="sticky top-0 flex items-center justify-between p-5 bg-[#111827]/90 backdrop-blur-sm border-b border-white/10">
           <div className="flex items-center gap-2">
             <Info className="w-4 h-4 text-violet-400" />
-            <span className="text-sm font-semibold text-white">Why did BeetleLabs do this?</span>
+            <span className="text-sm font-semibold text-white">Why did WefyLabs do this?</span>
           </div>
           <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
             <XCircle className="w-5 h-5" />

@@ -141,3 +141,66 @@ class FollowUpAnalyticsDTO(BaseModel):
     average_fatigue_score: float
     channel_distribution: Dict[str, int]
     top_suppression_reasons: Dict[str, int]
+
+
+class FollowUpRuleDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    organization_id: str
+    name: str
+    enabled: bool = True
+    trigger: str
+    delay_minutes: int = 0
+    action: str
+    action_config: Dict[str, Any] = {}
+    conditions: Dict[str, Any] = {}
+    priority: str = "normal"
+    max_runs: int = 1
+    cooldown_hours: int = 24
+    created_at: Optional[datetime] = None
+
+
+class CreateFollowUpRuleDTO(BaseModel):
+    name: str
+    trigger: str
+    action: str
+    delay_minutes: int = 0
+    action_config: Dict[str, Any] = {}
+    conditions: Dict[str, Any] = {}
+    priority: str = "normal"
+    max_runs: int = 1
+    cooldown_hours: int = 24
+
+
+class UpdateFollowUpRuleDTO(BaseModel):
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    trigger: Optional[str] = None
+    action: Optional[str] = None
+    delay_minutes: Optional[int] = None
+    action_config: Optional[Dict[str, Any]] = None
+    conditions: Optional[Dict[str, Any]] = None
+    priority: Optional[str] = None
+    max_runs: Optional[int] = None
+    cooldown_hours: Optional[int] = None
+
+
+class SnoozeTaskDTO(BaseModel):
+    snooze_until: datetime
+    reason: Optional[str] = "Snoozed by Broker"
+
+
+class RescheduleTaskDTO(BaseModel):
+    new_due_at: datetime
+    reason: Optional[str] = "Rescheduled by Broker"
+
+
+class DailyBriefingDTO(BaseModel):
+    due_today_count: int
+    overdue_count: int
+    hot_uncontacted_count: int
+    meetings_today_count: int
+    top_priority_lead: Optional[Dict[str, Any]] = None
+    summary_text: str
+    generated_at: str

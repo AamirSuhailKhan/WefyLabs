@@ -32,6 +32,10 @@ class Organization(Base, TimestampMixin, SoftDeleteMixin):
     default_timezone: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)         # "Asia/Dubai"
     # Data residency region: india | middle-east | europe | north-america | apac
     data_residency_region: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    business_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True) # agency | brokerage | developer | individual
+    currency_code: Mapped[Optional[str]] = mapped_column(String(10), default="INR", nullable=True)
+    team_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True) # 1-5 | 6-20 | 21-50 | 50+
+    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
     settings: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
 
     members: Mapped[List["OrganizationMember"]] = relationship(

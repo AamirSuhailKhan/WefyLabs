@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Download, LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { RefreshCw, Download, LayoutGrid, Table as TableIcon, Zap, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Lead } from '@/types';
 import StatsCards from '@/components/dashboard/StatsCards';
@@ -10,12 +10,14 @@ import KanbanBoard from '@/components/dashboard/KanbanBoard';
 import NewLeadModal from '@/components/dashboard/NewLeadModal';
 import LeadDrawer from '@/components/leads/LeadDrawer';
 import DashboardNav from '@/components/shared/DashboardNav';
+import CommandCenterView from '@/components/dashboard/CommandCenterView';
+import RevenueAutopilotView from '@/components/dashboard/RevenueAutopilotView';
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [viewMode, setViewMode] = useState<'autopilot' | 'command_center' | 'kanban' | 'table'>('autopilot');
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
@@ -70,7 +72,7 @@ export default function DashboardPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `beetlelabs_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `wefylabs_export_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -102,12 +104,34 @@ export default function DashboardPage() {
             {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               {/* View Toggle */}
-              <div className="flex items-center bg-[#FAF7F2] border border-[#D4D0C8] p-1 rounded-xl">
+              <div className="flex items-center bg-[#FAF7F2] border border-[#D4D0C8] p-1 rounded-xl flex-wrap">
+                <button
+                  onClick={() => setViewMode('autopilot')}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'autopilot'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
+                      : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-400 fill-teal-400" />
+                  Revenue Autopilot
+                </button>
+                <button
+                  onClick={() => setViewMode('command_center')}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'command_center'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
+                      : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  Command Center
+                </button>
                 <button
                   onClick={() => setViewMode('kanban')}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                     viewMode === 'kanban'
-                      ? 'bg-[#1A1A1A] text-white'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
                       : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
                   }`}
                 >
@@ -118,7 +142,7 @@ export default function DashboardPage() {
                   onClick={() => setViewMode('table')}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                     viewMode === 'table'
-                      ? 'bg-[#1A1A1A] text-white'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
                       : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
                   }`}
                 >
@@ -156,25 +180,37 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── Stats Cards ── */}
+          {/* ── Main View: Revenue Autopilot vs Command Center vs Kanban vs Table ── */}
           <div className="py-6">
-            <StatsCards leads={leads} />
-          </div>
-
-          {/* ── Main View: Kanban vs Table ── */}
-          <div className="pb-8">
-            {viewMode === 'kanban' ? (
-              <KanbanBoard
-                leads={leads}
-                onSelectLead={handleOpenDrawer}
-                onUpdateStage={handleUpdateStage}
+            {viewMode === 'autopilot' ? (
+              <RevenueAutopilotView
+                onOpenLead={handleOpenDrawer}
+                onOpenProperty={(propId) => window.open(`/dashboard/properties?id=${propId}`, '_blank')}
+              />
+            ) : viewMode === 'command_center' ? (
+              <CommandCenterView
+                onOpenLead={handleOpenDrawer}
+                onRefresh={fetchLeads}
               />
             ) : (
-              <LeadTable
-                leads={leads}
-                onRefresh={fetchLeads}
-                onSelectLead={handleOpenDrawer}
-              />
+              <>
+                <div className="mb-6">
+                  <StatsCards leads={leads} />
+                </div>
+                {viewMode === 'kanban' ? (
+                  <KanbanBoard
+                    leads={leads}
+                    onSelectLead={handleOpenDrawer}
+                    onUpdateStage={handleUpdateStage}
+                  />
+                ) : (
+                  <LeadTable
+                    leads={leads}
+                    onRefresh={fetchLeads}
+                    onSelectLead={handleOpenDrawer}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

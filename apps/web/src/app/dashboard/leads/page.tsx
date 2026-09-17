@@ -110,7 +110,7 @@ export default function LeadsPage() {
     const csv = 'data:text/csv;charset=utf-8,Name,Phone,Score,Budget,Location,Stage,Source,Created At\n' + rows.join('\n');
     const a = document.createElement('a');
     a.href = encodeURI(csv);
-    a.download = `beetlelabs_leads_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `wefylabs_leads_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 

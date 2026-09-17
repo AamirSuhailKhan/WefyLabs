@@ -45,7 +45,7 @@ class EnterpriseObservabilityMiddleware(BaseHTTPMiddleware):
             correlation_id=correlation_id,
             trace_id=trace_id,
             span_id=span_id,
-            service="beetlelabs-api",
+            service="wefylabs-api",
             module="http",
         )
 

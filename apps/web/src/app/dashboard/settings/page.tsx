@@ -98,8 +98,16 @@ export default function SettingsPage() {
     setIsCheckoutOpen(true);
   };
 
+  const getWebhookUrl = () => {
+    if (typeof window !== 'undefined') {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || `${window.location.origin}/api/v1`;
+      return `${apiBase.replace(/\/+$/, '')}/whatsapp/webhook`;
+    }
+    return '/api/v1/whatsapp/webhook';
+  };
+
   const handleCopyWebhook = () => {
-    navigator.clipboard.writeText('https://api.beetlelabs.ai/api/v1/whatsapp/webhook');
+    navigator.clipboard.writeText(getWebhookUrl());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -342,21 +350,21 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5 mb-3">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] shrink-0" />
-                  <span className="text-[14px] font-semibold text-[#10B981]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                    Status: Webhook Online
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#EAB308] shrink-0" />
+                  <span className="text-[14px] font-semibold text-[#B45309]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    Status: Disabled (Launch Standby)
                   </span>
                 </div>
 
                 <p className="text-[13px] text-[#6B6B6B] mb-5 leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  Forward lead phone numbers to your registered WhatsApp number to automatically trigger AI qualification.
+                  WhatsApp integration is disabled for this launch stage. Inbound webhooks are inactive.
                 </p>
 
                 <div>
-                  {fieldLabel('Webhook URL')}
+                  {fieldLabel('Webhook URL (Configured Endpoint)')}
                   <div className="relative">
                     <div className="bg-[#1A1A1A] text-[#E8F5A8] font-mono text-[12px] p-4 rounded-lg break-all leading-relaxed pr-12">
-                      https://api.beetlelabs.ai/api/v1/whatsapp/webhook
+                      {getWebhookUrl()}
                     </div>
                     <motion.button
                       whileHover={{ scale: 1.05 }}

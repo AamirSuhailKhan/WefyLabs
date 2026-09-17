@@ -10,7 +10,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-INTELLIGENCE_EVENTS_CHANNEL = "beetlelabs:lead_intelligence:events"
+INTELLIGENCE_EVENTS_CHANNEL = "wefylabs:lead_intelligence:events"
+LEGACY_INTELLIGENCE_EVENTS_CHANNEL = "beetlelabs:lead_intelligence:events"
 
 
 class IntelligenceEventPublisher:
@@ -23,7 +24,9 @@ class IntelligenceEventPublisher:
             return False
         try:
             payload = event.model_dump(mode="json")
-            await self.redis.publish(INTELLIGENCE_EVENTS_CHANNEL, json.dumps(payload))
+            raw_payload = json.dumps(payload)
+            await self.redis.publish(INTELLIGENCE_EVENTS_CHANNEL, raw_payload)
+            await self.redis.publish(LEGACY_INTELLIGENCE_EVENTS_CHANNEL, raw_payload)
             logger.info(f"[INTELLIGENCE_EVENTS] Published: {event.event_type}")
             return True
         except Exception as e:

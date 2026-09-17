@@ -65,3 +65,17 @@ async def update_broker_me(
     await db.refresh(current_broker)
 
     return BrokerResponse.model_validate(current_broker)
+
+
+@router.delete("/me", summary="Delete current broker account")
+async def delete_current_broker(
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db)
+):
+    """Deletes current broker account with external Google OAuth token revocation."""
+    from app.modules.auth.account_deletion_service import AccountDeletionService
+    return await AccountDeletionService.delete_broker_account(
+        db=db,
+        broker_id=current_broker.id
+    )
+

@@ -57,7 +57,7 @@ def process_email_dispatch(self, email_data: Dict[str, Any]):
     from app.modules.communication.provider_adapters.base_provider import OutboundMessageDTO
 
     recipient = email_data.get("recipient")
-    subject = email_data.get("subject", "Notification from BeetleLabs")
+    subject = email_data.get("subject", "Notification from WefyLabs")
     content = email_data.get("content", "")
     html_content = email_data.get("html")
 
@@ -107,3 +107,18 @@ def process_whatsapp_dispatch(self, message_data: Dict[str, Any]):
 def process_analytics_event(self, event_payload: Dict[str, Any]):
     logger.info(f"[QUEUE: analytics_queue] Aggregating metric for event: {event_payload.get('event_type')}")
     return {"status": "aggregated"}
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=5)
+def revoke_google_oauth_token_task(self, token: str):
+    """
+    Asynchronously revokes Google OAuth token via Google's token revocation endpoint.
+    Safe error handling: never exposes tokens in logs, never blocks indefinitely.
+    """
+    from app.modules.auth.oauth_revocation import perform_google_token_revocation
+    try:
+        success, status_code, err = perform_google_token_revocation(token)
+        return {"revoked": success, "status_code": status_code, "error": err}
+    except Exception as exc:
+        logger.warning(f"[Celery: Google OAuth Revocation] Revocation attempt encountered error: {exc}")
+        return {"revoked": False, "error": str(exc)}
+

@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-09-12T16:45:38.590168+00:00",
+  "database_type": "PostgreSQL",
+  "alembic_head": "0024_onboarding_activation_demo",
+  "table_count": 290,
+  "tables": {
+    "brokers": 11,
+    "organizations": 7,
+    "leads": 3,
+    "tasks": 1,
+    "command_center_dismissals": 0,
+    "onboarding_states": 0,
+    "payment_orders": 0,
+    "alembic_version": 1
+  },
+  "integrity_hash": "08b240b85a3d0e56add14836ff06df9e40af95bf09e49c775493ea4d367306db"
+}
