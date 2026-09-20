@@ -438,12 +438,25 @@ class RevenueAutopilotEngine:
         visits_stmt = select(Meeting).where(
             and_(
                 Meeting.broker_id == broker_uuid,
-                Meeting.status == "completed",
+                Meeting.status.in_(["completed", "COMPLETED"]),
                 Meeting.scheduled_at >= forty_eight_hours_ago,
                 Meeting.lead_id.isnot(None)
             )
         )
         completed_visits = list((await self.db.execute(visits_stmt)).scalars().all())
+
+        # Include canonical SchedulingMeeting records
+        from app.models.calendar_models import Meeting as SchedulingMeeting
+        sched_stmt = select(SchedulingMeeting).where(
+            and_(
+                SchedulingMeeting.broker_id == broker_uuid,
+                SchedulingMeeting.status.in_(["completed", "COMPLETED"]),
+                SchedulingMeeting.start_utc >= forty_eight_hours_ago,
+                SchedulingMeeting.lead_id.isnot(None)
+            )
+        )
+        sched_visits = list((await self.db.execute(sched_stmt)).scalars().all())
+        all_completed_visits = completed_visits + sched_visits
 
         # 5. Fetch existing active opportunities for deduplication
         existing_stmt = select(RevenueOpportunity).where(
@@ -663,20 +676,42 @@ class RevenueAutopilotEngine:
                             existing_by_key[dedup_key] = opp
 
         # ── Evaluation Category C: Post Site Visit Follow-Ups ─────────────────
-        for visit in completed_visits:
+        for visit in all_completed_visits:
             lead_stmt = select(Lead).where(and_(Lead.id == visit.lead_id, Lead.broker_id == broker_uuid))
             visit_lead = (await self.db.execute(lead_stmt)).scalars().first()
             if not visit_lead:
                 continue
 
+            # Determine property_id and location from visit (supporting both SchedulingMeeting and legacy Meeting)
+            prop_id = None
+            if hasattr(visit, "property_id") and getattr(visit, "property_id"):
+                prop_id = getattr(visit, "property_id")
+            else:
+                from app.models.calendar_models import Viewing
+                stmt_view = select(Viewing).where(Viewing.meeting_id == str(visit.id))
+                res_view = await self.db.execute(stmt_view)
+                v_record = res_view.scalars().first()
+                if v_record and v_record.property_id:
+                    prop_id = v_record.property_id
+
+            visit_location = getattr(visit, "location_address", None) or getattr(visit, "location", None) or "property"
+            visit_time = getattr(visit, "start_utc", None) or getattr(visit, "scheduled_at", None)
+
+            prop_uuid = None
+            if prop_id:
+                try:
+                    prop_uuid = uuid.UUID(str(prop_id))
+                except Exception:
+                    prop_uuid = None
+
             opp_type = "POST_SITE_VISIT_FOLLOW_UP"
-            dedup_key = self.generate_dedup_key(org_uuid, visit_lead.id, None, opp_type)
+            dedup_key = self.generate_dedup_key(org_uuid, visit_lead.id, prop_id, opp_type)
             if dedup_key not in existing_by_key:
                 opp = RevenueOpportunity(
                     organization_id=org_uuid,
                     broker_id=broker_uuid,
                     lead_id=visit_lead.id,
-                    property_id=None,
+                    property_id=prop_uuid,
                     assigned_agent_id=visit_lead.broker_id,
                     opportunity_type=opp_type,
                     priority="CRITICAL",
@@ -685,9 +720,9 @@ class RevenueAutopilotEngine:
                     match_score=85.0,
                     confidence=0.95,
                     status="RECOMMENDED",
-                    reason=f"Site visit completed at {visit.location or 'property'}. Follow-up call required.",
+                    reason=f"Site visit completed at {visit_location}. Follow-up call required.",
                     why_now="Site visit completed recently. Immediate post-visit feedback is the single highest predictor of deal closure.",
-                    why_property=f"Viewing was conducted at {visit.location or 'assigned property'}.",
+                    why_property=f"Viewing was conducted at {visit_location}.",
                     risk_of_inactivity="Unaddressed client objections lead to ghosting after viewings.",
                     recommended_action="FOLLOW_UP_AFTER_SITE_VISIT",
                     recommended_channel="CALL",
@@ -695,15 +730,15 @@ class RevenueAutopilotEngine:
                     alternative_properties=[],
                     positive_signals=["Site visit completed", "In-person interaction established"],
                     negative_signals=["No follow-up logged yet"],
-                    data_freshness={"visit_completed_at": visit.scheduled_at.isoformat() if visit.scheduled_at else None},
+                    data_freshness={"visit_completed_at": visit_time.isoformat() if visit_time else None},
                     call_brief={
                         "lead_name": visit_lead.name or "Client",
                         "objective": "Collect feedback on site visit, address objections, and propose offer or next viewing",
-                        "key_requirements": f"Location: {visit.location}",
-                        "suggested_opening": f"Hi {visit_lead.name or 'there'}, thank you for attending the site visit at {visit.location or 'the property'}. How did you feel about the layout and location?"
+                        "key_requirements": f"Location: {visit_location}",
+                        "suggested_opening": f"Hi {visit_lead.name or 'there'}, thank you for attending the site visit at {visit_location}. How did you feel about the layout and location?"
                     },
                     email_draft={
-                        "subject": f"Thank you for visiting {visit.location or 'the property'}",
+                        "subject": f"Thank you for visiting {visit_location}",
                         "body": f"Dear {visit_lead.name or 'Client'},\n\nIt was a pleasure showing you the property. Please let us know if you'd like to review the floor plans, pricing structure, or schedule another visit.\n\nWarm regards,",
                         "cta": "Submit Feedback"
                     },

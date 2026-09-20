@@ -28,7 +28,9 @@ from app.modules.property_recommendation.dto import (
     SimulationRequestDTO, ReverseMatchingResponseDTO, RecommendationFeedbackDTO,
     LeadMatchItemDTO, MatchingDashboardDTO, ShortlistRequestDTO, RecommendRequestDTO,
     RequirementExtractionRequestDTO, RequirementExtractionResponseDTO,
-    MatchFeedbackRequestDTO, MatchCompareRequestDTO
+    MatchFeedbackRequestDTO, MatchCompareRequestDTO,
+    PropertyShortlistResponseDTO, PropertyInteractionRequestDTO,
+    PropertyInteractionResponseDTO, MatchExplanationDTO
 )
 
 logger = logging.getLogger(__name__)
@@ -486,4 +488,97 @@ async def extract_requirements_endpoint(
     Extracts structured requirements with prompt injection immunity and provenance tracking.
     """
     return AIPropertyMatchingEngine.extract_requirements_from_text(dto.text)
+
+
+@router.get(
+    "/api/v1/leads/{lead_id}/shortlist",
+    response_model=PropertyShortlistResponseDTO,
+    summary="Get Lead Shortlisted Properties",
+)
+async def get_lead_shortlist_endpoint(
+    lead_id: str,
+    status_filter: Optional[str] = Query(None, description="SHORTLISTED | INTERESTED | LIKED | REJECTED | all"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Retrieves the tenant-isolated, paginated shortlist of properties saved/shortlisted for this lead.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.get_lead_shortlist(
+        lead_id=lead_id,
+        broker=current_broker,
+        status_filter=status_filter,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.delete(
+    "/api/v1/leads/{lead_id}/shortlist/{property_id}",
+    summary="Remove Property from Lead Shortlist",
+)
+async def remove_lead_shortlist_endpoint(
+    lead_id: str,
+    property_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Removes a property from the lead's shortlist with tenant authorization and audit log.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.remove_property_from_shortlist(
+        lead_id=lead_id,
+        property_id=property_id,
+        broker=current_broker,
+    )
+
+
+@router.post(
+    "/api/v1/matches/interaction",
+    response_model=PropertyInteractionResponseDTO,
+    summary="Record Customer-Property Interaction",
+)
+async def record_property_interaction_endpoint(
+    dto: PropertyInteractionRequestDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Records customer-property interaction lifecycle (VIEWED, LIKED, SHORTLISTED, REJECTED, VISITED).
+    Structured rejection reasons are persisted to both LeadPropertyInterest and MemoryPropertyFeedback.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.record_property_interaction(
+        lead_id=dto.lead_id,
+        property_id=dto.property_id,
+        broker=current_broker,
+        dto=dto,
+    )
+
+
+@router.get(
+    "/api/v1/leads/{lead_id}/matches/{property_id}/explain",
+    response_model=MatchExplanationDTO,
+    summary="Explain Specific Property Match",
+)
+async def explain_property_match_endpoint(
+    lead_id: str,
+    property_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+):
+    """
+    Provides explainable criteria breakdown (matched, partial, unmatched, negative_conflicts, unknown)
+    for a lead ↔ property match.
+    """
+    engine = AIPropertyMatchingEngine(db)
+    return await engine.explain_property_match(
+        lead_id=lead_id,
+        property_id=property_id,
+        broker=current_broker,
+    )
 

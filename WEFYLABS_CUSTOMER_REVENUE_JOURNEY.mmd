@@ -1,0 +1,65 @@
+﻿sequenceDiagram
+    participant C as Customer (Browser/WhatsApp)
+    participant API as WefyLabs API (FastAPI)
+    participant AI as AI Gateway (LLM Router)
+    participant DB as PostgreSQL DB
+    participant CAL as Calendar (Google OAuth)
+    participant CELERY as Celery Workers
+
+    Note over C,CELERY: Step 1 — Lead Capture
+    C->>API: POST /api/v1/leads/ingestion {name, phone, budget}
+    API->>DB: INSERT lead + identity record (tenant scoped)
+    API->>CELERY: dispatch enrichment task
+    DB-->>API: lead_id
+    API-->>C: 201 Created {lead_id}
+
+    Note over C,CELERY: Step 2 — AI Conversation + Qualification
+    C->>API: POST /api/v1/ai-agent/v1/message {content, lead_id, org_id}
+    API->>AI: route(context, qualification_state, property_facts)
+    AI->>DB: read memory, qualification facts
+    AI-->>API: structured response + qualification_updates
+    API->>DB: UPDATE qualification_facts
+    API-->>C: AI response + shortlisted properties
+
+    Note over C,CELERY: Step 3 — Property Shortlist + Matching
+    C->>API: GET /api/v1/recommendations/?lead_id={id}
+    API->>DB: read buyer_profile + active property_listings
+    API-->>C: Ranked shortlist with compatibility scores
+
+    Note over C,CELERY: Step 4 — Appointment Booking (AI Tool Call)
+    C->>API: POST /api/v1/ai-agent/v1/message {content: "Book Saturday 3pm", confirmed_action: true}
+    API->>AI: tool_call: get_available_slots
+    AI->>DB: check MeetingHold + confirmed Meetings
+    AI->>CAL: GET free_busy(broker_calendar, Sat 3pm)
+    CAL-->>AI: slot available
+    API->>AI: tool_call: book_viewing (confirmed)
+    AI->>DB: INSERT MeetingHold (5min lock)
+    AI->>CAL: POST create_event
+    CAL-->>AI: google_event_id
+    AI->>DB: INSERT Meeting + Viewing + Activity
+    AI->>DB: DELETE MeetingHold
+    API-->>C: Booking confirmed, calendar invite sent
+
+    Note over C,CELERY: Step 5 — Site Visit + Outcome
+    API->>API: POST /api/v1/calendar/viewings/{id}/outcome
+    API->>DB: INSERT MeetingOutcome {VERY_INTERESTED, interest_level:5}
+    API->>DB: UPDATE Lead.pipeline_stage = "viewing_completed"
+    API->>CELERY: dispatch process_site_visit_completed_task
+
+    Note over C,CELERY: Step 6 — Revenue Autopilot Triggers
+    CELERY->>DB: query leads with completed viewings < 48h
+    CELERY->>DB: INSERT RevenueOpportunity {POST_SITE_VISIT_FOLLOW_UP}
+    CELERY->>CELERY: schedule follow_up enrollment
+
+    Note over C,CELERY: Step 7 — Human Handoff (if needed)
+    C->>API: POST /api/v1/ai-agent/v1/message {content: "I want to talk to a human"}
+    API->>AI: escalation_detector.detect(human_requested=True)
+    AI->>DB: INSERT Escalation + UPDATE AgentSession.escalated=True
+    API->>DB: INSERT Activity {human_handoff_requested}
+    API-->>C: "Connecting you with a specialist..."
+    Note over AI: AI generation suppressed for this session
+
+    Note over C,CELERY: Step 8 — Follow-Up Automation
+    CELERY->>DB: evaluate follow_up_rules for lead
+    CELERY->>DB: INSERT FollowUpExecution {channel: email}
+    CELERY-->>C: Personalized follow-up message sent

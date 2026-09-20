@@ -95,6 +95,9 @@ class EnterpriseSettings(BaseSettings):
     SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     WHATSAPP_APP_SECRET: Optional[str] = None
+    # This is deliberately separate from tenant roles. Platform operations are
+    # not a tenant capability and must fail closed until operators are named.
+    SUPER_ADMIN_EMAILS: List[str] = []
 
     # Knowledge & Local OCR
     KNOWLEDGE_STORAGE_PROVIDER: str = "local"
@@ -131,8 +134,8 @@ class EnterpriseSettings(BaseSettings):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+    @field_validator("CORS_ORIGINS", "SUPER_ADMIN_EMAILS", mode="before")
+    def parse_comma_separated_values(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):

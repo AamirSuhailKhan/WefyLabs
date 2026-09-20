@@ -12,6 +12,8 @@ import ConversationIntelligencePanel from '@/components/leads/ConversationIntell
 import AutonomousSalesTimeline from '@/components/leads/AutonomousSalesTimeline';
 import ScoreBadge from '@/components/shared/ScoreBadge';
 import LeadPropertyMatchesPanel from '@/components/leads/LeadPropertyMatchesPanel';
+import AIConversationTab from '@/components/leads/AIConversationTab';
+import { Bot, MessageSquare } from 'lucide-react';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -21,6 +23,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState<boolean>(true);
   const [qualifying, setQualifying] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'ai' | 'whatsapp'>('ai');
 
   const fetchLeadDetail = async () => {
     setLoading(true);
@@ -141,9 +144,43 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Dual Panel Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: WhatsApp Chat Timeline */}
-        <div className="lg:col-span-7">
-          <ConversationTimeline conversations={lead.conversations} />
+        {/* Left Column: AI Conversation Tab or WhatsApp Timeline */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Tab Selector */}
+          <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'ai'
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>AI Sales Agent</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('whatsapp')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'whatsapp'
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>WhatsApp Timeline</span>
+            </button>
+          </div>
+
+          {activeTab === 'ai' ? (
+            <AIConversationTab
+              leadId={lead.id}
+              leadName={lead.name}
+              leadPhone={lead.phone}
+            />
+          ) : (
+            <ConversationTimeline conversations={lead.conversations} />
+          )}
         </div>
 
         {/* Right: AI Conversation Intelligence, Next Best Action & Extracted Data */}

@@ -28,6 +28,8 @@ from app.models.crm_models import Task, Meeting, Activity
 from app.models.audit_log import AuditLog
 from app.modules.security.services.file_security import FileSecurityScanner
 from app.services.property_ai_valuation_service import PropertyAIValuationService
+from app.infrastructure.cache.query_cache import AsyncQueryCacheService
+from app.infrastructure.events.event_bus import DomainEventBus, DomainEvent, StandardDomainEvents, ActorContext
 
 logger = logging.getLogger("beetlelabs.properties.service")
 
@@ -143,10 +145,23 @@ class PropertyService:
             resource_id=str(listing.id),
             new_values={"title": listing.title, "price": listing.price, "code": listing.property_code}
         )
-        self.db.add(audit)
-
         await self.db.commit()
         await self.db.refresh(listing)
+
+        # Invalidate tenant search and matching cache and emit domain event
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:matches")
+        try:
+            await DomainEventBus.publish(
+                DomainEvent(
+                    event_type=StandardDomainEvents.PROPERTY_CREATED,
+                    organization_id=str(broker_id),
+                    payload={"property_id": str(listing.id), "title": listing.title}
+                )
+            )
+        except Exception:
+            pass
+
         return listing
 
     async def get_property(
@@ -233,6 +248,22 @@ class PropertyService:
 
         await self.db.commit()
         await self.db.refresh(prop)
+
+        # Invalidate property, search, and matching cache and emit domain event
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:matches")
+        try:
+            await DomainEventBus.publish(
+                DomainEvent(
+                    event_type=StandardDomainEvents.PROPERTY_UPDATED,
+                    organization_id=str(broker_id),
+                    payload={"property_id": str(prop.id), "status": prop.status, "price": prop.price}
+                )
+            )
+        except Exception:
+            pass
+
         return prop
 
     async def archive_property(
@@ -257,6 +288,23 @@ class PropertyService:
 
         await self.db.commit()
         await self.db.refresh(prop)
+
+        # Invalidate property, search, and matching cache and emit domain event
+        b_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:matches")
+        try:
+            await DomainEventBus.publish(
+                DomainEvent(
+                    event_type=StandardDomainEvents.PROPERTY_ARCHIVED,
+                    organization_id=str(b_id),
+                    payload={"property_id": str(prop.id)}
+                )
+            )
+        except Exception:
+            pass
+
         return prop
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -322,6 +370,26 @@ class PropertyService:
 
         await self.db.commit()
         await self.db.refresh(prop)
+
+        # Invalidate property intelligence cache and search cache
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        try:
+            await DomainEventBus.publish(
+                DomainEvent(
+                    event_type=StandardDomainEvents.PROPERTY_PRICE_CHANGED,
+                    organization_id=str(broker_id),
+                    payload={
+                        "property_id": str(prop.id),
+                        "old_price": old_price,
+                        "new_price": new_price,
+                        "reason": reason
+                    }
+                )
+            )
+        except Exception:
+            pass
+
         logger.info(
             f"Price {direction} for property {prop.property_code}: "
             f"₹{old_price:,.0f} → ₹{new_price:,.0f} ({reason})"
@@ -517,6 +585,21 @@ class PropertyService:
 
         await self.db.commit()
         await self.db.refresh(prop)
+
+        # Invalidate property and search cache and emit domain event
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        try:
+            await DomainEventBus.publish(
+                DomainEvent(
+                    event_type=StandardDomainEvents.PROPERTY_AVAILABILITY_CHANGED,
+                    organization_id=str(broker_id),
+                    payload={"property_id": str(prop.id), "status": "reserved", "lead_id": str(lead_id) if lead_id else None}
+                )
+            )
+        except Exception:
+            pass
+
         return prop
 
     # ─────────────────────────────────────────────────────────────────────────

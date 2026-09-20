@@ -6,12 +6,18 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.dependencies import get_db, get_current_broker
+from app.dependencies import get_db, get_current_broker, require_super_admin
 from app.models.broker import Broker
 from app.models.lead import Lead
 from app.core.cache_manager import HighScaleCacheManager
 
-router = APIRouter(prefix="/super-admin", tags=["Internal Enterprise Operations & Super Admin Control Platform"])
+router = APIRouter(
+    prefix="/super-admin",
+    tags=["Internal Enterprise Operations & Super Admin Control Platform"],
+    # This boundary applies to every present and future operation under this
+    # router. Authentication alone is not platform-operator authorization.
+    dependencies=[Depends(require_super_admin)],
+)
 
 # --- Schemas ---
 class SystemHealthMetric(BaseModel):

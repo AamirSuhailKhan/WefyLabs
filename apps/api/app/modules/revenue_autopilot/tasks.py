@@ -131,10 +131,14 @@ def process_site_visit_completed_task(meeting_id: str):
     """
     async def _work():
         async with async_session_maker() as db:
-            meeting = await db.get(Meeting, str(meeting_id))
+            from app.models.calendar_models import Meeting as SchedulingMeeting
+            meeting = await db.get(SchedulingMeeting, str(meeting_id))
+            if not meeting:
+                meeting = await db.get(Meeting, str(meeting_id))
             if not meeting or not meeting.broker_id:
                 return 0
-            broker = await db.get(Broker, meeting.broker_id)
+            b_pk = meeting.broker_id if isinstance(meeting.broker_id, uuid.UUID) else uuid.UUID(str(meeting.broker_id))
+            broker = await db.get(Broker, b_pk)
             if not broker:
                 return 0
             engine = RevenueAutopilotEngine(db)

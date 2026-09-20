@@ -1,0 +1,87 @@
+﻿graph TB
+    subgraph CHANNELS["Channels (Web Form / Verified Messaging)"]
+        WF["Web Lead Form\n/api/v1/leads/ingestion"]
+        WA["WhatsApp Webhook\n/api/v1/whatsapp/webhook"]
+    end
+
+    subgraph IDENTITY["Identity & Deduplication [Tenant Scoped]"]
+        IR["Identity Resolution\n/api/v1/identity-resolution"]
+        CI["Customer Intelligence\n/api/v1/customer-intelligence"]
+    end
+
+    subgraph LEAD["Canonical Lead + Conversation Timeline"]
+        CL["Lead CRM\n/api/v1/leads"]
+        CONV["Conversation Manager\nai_agent/conversation_manager"]
+        MEM["AI Memory\n/api/v1/memory"]
+    end
+
+    subgraph PROPERTY["Property Authority [Tenant Scoped]"]
+        PI["Property Intelligence\n/api/v1/property-intelligence"]
+        KB["Knowledge Engine\n/api/v1/knowledge"]
+    end
+
+    subgraph QUALIFY["Qualification + Matching"]
+        QE["Qualification Engine\n/api/v1/qualification"]
+        ME["Matching Engine\n/api/v1/recommendations"]
+    end
+
+    subgraph AI_GATEWAY["AI Gateway [Context / Policy / Tools / Audit]"]
+        LR["LLM Router\nllm_router/router.py\nCircuit Breaker + Cost Cap"]
+        PG["Prompt Guard\ninfrastructure/security/prompt_guard.py"]
+        TE["Tool Executor\nai_agent/tool_executor/executor.py"]
+        GI["Gemini Primary\ngemini-3.5-flash"]
+        FB["Deterministic Fallback"]
+    end
+
+    subgraph CONVERSION["Conversion Execution"]
+        AE["Availability Engine\ncalendar/availability"]
+        BS["Booking Service\ncalendar/booking"]
+        HH["Human Handoff\nconversation_intelligence/handoff"]
+        FU["Follow-Up Engine\nfollow_up/engine"]
+    end
+
+    subgraph REVENUE["Revenue Funnel"]
+        RA["Revenue Autopilot\nrevenue_autopilot/engine.py"]
+        OP["Revenue Opportunities\n/api/v1/revenue"]
+    end
+
+    subgraph INFRA["Infrastructure"]
+        AUTH["Auth + RBAC\ninfrastructure/security/rbac.py\nPrincipal-Derived"]
+        MT["Multi-Tenancy\norganization_id scoping"]
+        CELERY["Celery Workers\ncelery_app.py + beat"]
+        OBS["Observability\n/metrics + /health"]
+    end
+
+    WF --> IR
+    WA --> IR
+    IR --> CI
+    CI --> CL
+    CL --> CONV
+    CONV --> MEM
+    CONV --> AI_GATEWAY
+    PI --> KB
+    KB --> AI_GATEWAY
+    QE --> ME
+    ME --> AI_GATEWAY
+    AI_GATEWAY --> LR
+    LR --> PG
+    PG --> TE
+    LR --> GI
+    LR --> FB
+    TE --> AE
+    TE --> BS
+    TE --> HH
+    TE --> FU
+    BS --> RA
+    HH --> FU
+    FU --> RA
+    RA --> OP
+    AUTH --> CONV
+    AUTH --> BS
+    AUTH --> RA
+    MT --> CL
+    MT --> PI
+    MT --> OP
+    CELERY --> FU
+    CELERY --> RA
+    OBS --> AUTH

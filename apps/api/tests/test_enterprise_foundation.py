@@ -8,6 +8,7 @@ import pytest
 import asyncio
 import uuid
 from datetime import datetime, timezone, timedelta
+from fastapi import HTTPException
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -97,8 +98,8 @@ class TestRBACPermissionEvaluator:
         for required in ["leads:create", "leads:read", "billing:manage", "audit:view", "organization:manage"]:
             assert required in perms, f"Owner missing permission: {required}"
 
-    async def test_unenrolled_broker_gets_agent_permissions(self, db, sample_organization):
-        """Broker not in any organization gets agent-level read/write permissions."""
+    async def test_unenrolled_broker_has_no_permissions(self, db, sample_organization):
+        """An authenticated broker without membership must fail closed."""
         isolated_broker = Broker(
             id=uuid.uuid4(),
             name="Isolated Agent",
@@ -110,10 +111,11 @@ class TestRBACPermissionEvaluator:
         await db.flush()
 
         perms = await RBACPermissionEvaluator.get_user_permissions(db, isolated_broker.id)
-        assert "leads:read" in perms
-        assert "leads:create" in perms
-        assert "billing:manage" not in perms
-        assert "organization:manage" not in perms
+        assert perms == []
+
+        with pytest.raises(HTTPException) as exc_info:
+            await RBACPermissionEvaluator.enforce_permission(db, isolated_broker, "leads:read")
+        assert exc_info.value.status_code == 403
 
     async def test_enforce_permission_raises_403_for_forbidden(self, db, sample_organization):
         """Agent attempting billing:manage should receive 403."""

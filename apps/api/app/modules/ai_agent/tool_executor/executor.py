@@ -18,7 +18,8 @@ from app.models.agent_models import ToolExecution
 from app.modules.ai_agent.tool_executor.registry import TOOL_MAP
 from app.modules.ai_agent.tool_executor.services import (
     PropertyService, CRMService, KnowledgeService,
-    NotificationService, WorkflowService
+    NotificationService, WorkflowService,
+    ShortlistService, CalendarSlotService, ComparisonService,
 )
 
 
@@ -33,6 +34,53 @@ class ToolResult:
     source_verified: bool = True
     duration_ms: int = 0
     data_source: Optional[str] = None
+    # A result is deliberately explicit: callers must never infer success
+    # from an empty object or a null value.
+    status: str = "success"  # success | failure | not_found | not_authorized | validation_error | unavailable | conflict | partial
+
+
+def _validate_tool_call(tool_name: str, arguments: Any, context: Dict[str, Any]) -> Optional[str]:
+    """Small, dependency-free schema gate for model-produced tool inputs."""
+    definition = TOOL_MAP.get(tool_name)
+    if not definition:
+        return "Unknown tool"
+    if not isinstance(arguments, dict):
+        return "Tool arguments must be an object"
+    schema = definition.parameters
+    for key in schema.get("required", []):
+        if arguments.get(key) in (None, "", []):
+            return f"Missing required argument: {key}"
+    properties = schema.get("properties", {})
+    for key, value in arguments.items():
+        if key not in properties:
+            return f"Unknown argument: {key}"
+        if isinstance(value, str) and len(value) > 2000:
+            return f"Argument too long: {key}"
+        declared_type = properties[key].get("type")
+        if declared_type == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+            return f"Invalid integer argument: {key}"
+        if declared_type == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            return f"Invalid numeric argument: {key}"
+        if declared_type == "array" and not isinstance(value, list):
+            return f"Invalid array argument: {key}"
+        if declared_type == "object" and not isinstance(value, dict):
+            return f"Invalid object argument: {key}"
+    # ConversationManager always sets enforce_tenant_scope.  Keeping the
+    # lower-level executor usable for isolated service tests/migrations avoids
+    # accidentally treating a synthetic internal call as a tenant request.
+    if definition.tenant_scoped and context.get("enforce_tenant_scope") and not context.get("organization_id"):
+        return "Missing tenant authorization context"
+    if context.get("enforce_tenant_scope") and tool_name == "get_lead_context" and arguments.get("lead_id") != context.get("lead_id"):
+        return "Lead is outside the authorized conversation scope"
+    if tool_name == "compare_properties" and len(arguments.get("property_ids", [])) > 4:
+        return "At most four properties can be compared"
+    if tool_name == "get_available_slots" and not 1 <= arguments.get("days_ahead", 7) <= 31:
+        return "days_ahead must be between 1 and 31"
+    # Booking is a Part 6 external side effect. It can only happen after a
+    # trusted application confirmation, never merely because a model asks.
+    if tool_name == "book_viewing" and not context.get("confirmed_action"):
+        return "Viewing booking requires explicit customer confirmation"
+    return None
 
 
 # ─── Production Tool Handlers ─────────────────────────────────────────────────
@@ -213,6 +261,128 @@ async def _handle_escalate_to_human(args: Dict[str, Any], ctx: Dict[str, Any]) -
     )
 
 
+async def _handle_get_available_slots(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = ctx.get("organization_id") or ctx.get("broker_id") or ""
+    svc = CalendarSlotService(ctx["db"])
+    data = await svc.get_available_slots(
+        organization_id=org_id,
+        property_id=args.get("property_id"),
+        days_ahead=int(args.get("days_ahead", 7)),
+    )
+    return ToolResult(
+        tool="get_available_slots",
+        success=True,
+        result=data,
+        source_verified=data.get("source_verified", False),
+        data_source="calendar_service",
+    )
+
+
+async def _handle_create_shortlist(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = ctx.get("organization_id") or ctx.get("broker_id")
+    lead_id = ctx.get("lead_id", "")
+    svc = ShortlistService(ctx["db"])
+    data = await svc.add(
+        lead_id=lead_id,
+        property_id=args["property_id"],
+        status=args.get("status", "shortlisted"),
+        organization_id=org_id,
+        notes=args.get("notes"),
+    )
+    return ToolResult(
+        tool="create_shortlist",
+        success=data.get("success", False),
+        result=data,
+        error=data.get("error") if not data.get("success") else None,
+        source_verified=data.get("source_verified", True),
+        data_source="crm_service",
+    )
+
+
+async def _handle_get_shortlist(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = ctx.get("organization_id") or ctx.get("broker_id")
+    lead_id = ctx.get("lead_id", "")
+    status_filter = args.get("status_filter")
+    if status_filter == "all":
+        status_filter = None
+    svc = ShortlistService(ctx["db"])
+    data = await svc.get(
+        lead_id=lead_id,
+        organization_id=org_id,
+        status_filter=status_filter,
+    )
+    return ToolResult(
+        tool="get_shortlist",
+        success=True,
+        result=data,
+        source_verified=data.get("source_verified", True),
+        data_source="crm_service",
+    )
+
+
+async def _handle_compare_properties(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = ctx.get("organization_id") or ctx.get("broker_id")
+    property_ids = args.get("property_ids", [])
+    if not property_ids:
+        return ToolResult(
+            tool="compare_properties",
+            success=False,
+            error="No property_ids provided for comparison",
+            source_verified=False,
+        )
+    # Limit to 4 properties to prevent abuse
+    property_ids = property_ids[:4]
+    svc = ComparisonService(ctx["db"])
+    data = await svc.compare(property_ids=property_ids, organization_id=org_id)
+    return ToolResult(
+        tool="compare_properties",
+        success=True,
+        result=data,
+        source_verified=data.get("source_verified", True),
+        data_source="property_service",
+    )
+
+
+async def _handle_get_handoff_context(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    """
+    Builds a structured context summary for the human agent.
+    Reads from session context — no external calls needed.
+    """
+    lead_data = ctx.get("lead_data", {})
+    qual = ctx.get("qualification", {})
+    shortlist_data: Dict[str, Any] = {}
+    if args.get("include_shortlist", True):
+        org_id = ctx.get("organization_id")
+        lead_id = ctx.get("lead_id", "")
+        if lead_id:
+            svc = ShortlistService(ctx["db"])
+            shortlist_data = await svc.get(
+                lead_id=lead_id,
+                organization_id=org_id,
+                status_filter="shortlisted",
+            )
+    context_summary = {
+        "customer": lead_data,
+        "qualification": qual,
+        "shortlisted_properties": shortlist_data.get("items", []),
+        "handoff_ready": True,
+        "source_verified": True,
+        "handoff_briefing": {
+            "customer": lead_data,
+            "buyer_requirements": qual,
+            "shortlisted_properties": shortlist_data.get("items", []),
+            "handoff_ready": True,
+        }
+    }
+    return ToolResult(
+        tool="get_handoff_context",
+        success=True,
+        result=context_summary,
+        source_verified=True,
+        data_source="crm_service",
+    )
+
+
 # ─── Handler Registry ─────────────────────────────────────────────────────────
 
 _HANDLERS: Dict[str, Callable] = {
@@ -227,11 +397,19 @@ _HANDLERS: Dict[str, Callable] = {
     "trigger_workflow":     _handle_trigger_workflow,
     "send_notification":    _handle_send_notification,
     "escalate_to_human":    _handle_escalate_to_human,
+    # New tools (Slice B)
+    "get_available_slots":  _handle_get_available_slots,
+    "create_shortlist":     _handle_create_shortlist,
+    "get_shortlist":        _handle_get_shortlist,
+    "compare_properties":   _handle_compare_properties,
+    "get_handoff_context":  _handle_get_handoff_context,
 }
 
 _READ_TOOLS = {
     "search_properties", "check_availability",
-    "search_knowledge", "get_lead_context", "get_payment_plan"
+    "search_knowledge", "get_lead_context", "get_payment_plan",
+    # New read tools
+    "get_available_slots", "get_shortlist", "compare_properties", "get_handoff_context",
 }
 
 
@@ -256,12 +434,20 @@ class ToolExecutor:
     ) -> ToolResult:
         ctx = {**(context or {}), "db": db}
         handler = _HANDLERS.get(tool_name)
-        if not handler:
+        validation_error = _validate_tool_call(tool_name, arguments, ctx)
+        if validation_error:
+            status = "not_authorized" if "authorized" in validation_error or "scope" in validation_error or "confirmation" in validation_error else "validation_error"
+            result = ToolResult(
+                tool=tool_name, success=False, error=validation_error,
+                source_verified=False, status=status,
+            )
+        elif not handler:
             result = ToolResult(
                 tool=tool_name,
                 success=False,
                 error=f"Unknown tool: {tool_name}",
                 source_verified=False,
+                status="validation_error",
             )
         else:
             t0 = time.monotonic()
@@ -270,7 +456,7 @@ class ToolExecutor:
             except Exception as exc:
                 result = ToolResult(
                     tool=tool_name, success=False,
-                    error=str(exc), source_verified=False,
+                    error=str(exc), source_verified=False, status="unavailable",
                 )
             result.duration_ms = int((time.monotonic() - t0) * 1000)
 
@@ -298,18 +484,9 @@ class ToolExecutor:
         tool_calls: List[Dict[str, Any]],
         context: Optional[Dict[str, Any]] = None,
     ) -> List[ToolResult]:
-        read_calls = [tc for tc in tool_calls if tc["name"] in _READ_TOOLS]
-        write_calls = [tc for tc in tool_calls if tc["name"] not in _READ_TOOLS]
-
-        read_tasks = [
-            self.run(db, session_id, turn_index, tc["name"], tc.get("arguments", {}), context)
-            for tc in read_calls
-        ]
-        read_results = list(await asyncio.gather(*read_tasks, return_exceptions=False))
-
-        write_results = []
-        for tc in write_calls:
+        # Execute tools in order, safely handling session flush
+        results = []
+        for tc in tool_calls:
             res = await self.run(db, session_id, turn_index, tc["name"], tc.get("arguments", {}), context)
-            write_results.append(res)
-
-        return read_results + write_results
+            results.append(res)
+        return results

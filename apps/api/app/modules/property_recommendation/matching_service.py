@@ -31,10 +31,14 @@ from app.models.property_models import PropertyListing, LeadPropertyInterest
 from app.models.broker import Broker
 from app.models.crm_models import Task, Activity
 from app.models.audit_log import AuditLog
+from app.models.memory_models import MemoryPropertyFeedback
+from app.infrastructure.cache.query_cache import get_query_cache
 from app.modules.property_recommendation.dto import (
     NormalizedRequirementsDTO, ScoreBreakdownDTO, RequirementCoverageDTO,
     PropertyRecommendationItemDTO, PropertyRecommendationResponseDTO,
     LeadMatchItemDTO, MatchingDashboardDTO, ShortlistRequestDTO, RecommendRequestDTO,
+    PropertyShortlistItemDTO, PropertyShortlistResponseDTO, PropertyInteractionRequestDTO,
+    PropertyInteractionResponseDTO, MatchExplanationDTO, ShortlistActionResponseDTO,
     RequirementExtractionResponseDTO
 )
 from app.modules.property_recommendation.requirement_normalizer import (
@@ -76,8 +80,10 @@ class AIPropertyMatchingEngine:
         self.ai_service = ai_service
 
     @classmethod
-    def normalize_lead_requirements(cls, lead: Lead) -> NormalizedRequirementsDTO:
-        return RequirementNormalizer.normalize(lead=lead)
+    def normalize_lead_requirements(
+        cls, lead: Lead, requirement_profile: Optional[Any] = None
+    ) -> NormalizedRequirementsDTO:
+        return RequirementNormalizer.normalize(lead=lead, requirement_profile=requirement_profile)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 1. Hard Constraints Filter (Deterministic & Non-Negotiable)
@@ -90,7 +96,7 @@ class AIPropertyMatchingEngine:
         lead: Lead,
         req: Optional[NormalizedRequirementsDTO] = None,
         allow_alternatives: bool = False,
-        flexibility_pct: float = 10.0,
+        flexibility_pct: float = 0.0,
     ) -> Tuple[bool, List[str]]:
         """
         Evaluates hard constraints. Returns (is_eligible, rejection_reasons).
@@ -192,22 +198,28 @@ class AIPropertyMatchingEngine:
     # ─────────────────────────────────────────────────────────────────────────
 
     @classmethod
-    def calculate_compatibility_score(
+    def calculate_compatibility_score_detailed(
         cls,
         prop: PropertyListing,
         lead: Lead,
         req: Optional[NormalizedRequirementsDTO] = None,
         weights: Optional[Dict[str, float]] = None,
-    ) -> Tuple[float, ScoreBreakdownDTO, List[str], List[str]]:
+    ) -> Tuple[float, ScoreBreakdownDTO, List[str], List[str], List[str], List[str], List[str], List[str], List[str]]:
         """
         Computes normalized 0.0 - 100.0 composite score, granular component breakdown,
-        grounded reasons, and mismatches.
+        reasons, mismatches, and explicit 5-category criteria classification:
+        (score, breakdown, reasons, mismatches, matched, partial, unmatched, negative_conflicts, unknown)
         """
         if req is None:
             req = cls.normalize_lead_requirements(lead)
         w = weights or DEFAULT_MATCHING_WEIGHTS
         reasons: List[str] = []
         mismatches: List[str] = []
+        matched_criteria: List[str] = []
+        partial_criteria: List[str] = []
+        unmatched_criteria: List[str] = []
+        negative_conflicts: List[str] = []
+        unknown_criteria: List[str] = []
 
         # ── 1. Budget Fit (0-100) ─────────────────────────────────────────────
         max_budget = float(lead.budget_max or req.max_budget or 0)
@@ -217,24 +229,27 @@ class AIPropertyMatchingEngine:
         if max_budget > 0:
             if prop_price <= max_budget:
                 if min_budget > 0 and prop_price < (min_budget * 0.7):
-                    # Slightly below target comfort zone
                     budget_score = 85.0
                     reasons.append(f"Within budget at ₹{prop_price:,.0f} (below minimum expected range)")
+                    matched_criteria.append(f"Within budget ceiling: ₹{prop_price:,.0f} <= ₹{max_budget:,.0f}")
                 else:
                     budget_score = 100.0
                     reasons.append(f"Within stated budget of ₹{max_budget:,.0f} (Priced at ₹{prop_price:,.0f})")
+                    matched_criteria.append(f"Within stated budget: ₹{prop_price:,.0f} (budget ceiling ₹{max_budget:,.0f})")
             elif prop_price <= (max_budget * 1.10):
-                # 0-10% over budget
                 pct_over = ((prop_price - max_budget) / max_budget) * 100.0
                 budget_score = max(50.0, 100.0 - (pct_over * 4.0))
                 mismatches.append(f"Price is {pct_over:.1f}% above stated budget ceiling")
+                partial_criteria.append(f"Price is {pct_over:.1f}% above budget ceiling (₹{prop_price:,.0f} vs ₹{max_budget:,.0f})")
             else:
                 pct_over = ((prop_price - max_budget) / max_budget) * 100.0
                 budget_score = max(10.0, 50.0 - (pct_over * 2.0))
                 mismatches.append(f"Priced at ₹{prop_price:,.0f} ({pct_over:.1f}% above budget)")
+                unmatched_criteria.append(f"Price ₹{prop_price:,.0f} exceeds max budget ₹{max_budget:,.0f}")
         else:
             budget_score = 70.0
             reasons.append(f"Listed at ₹{prop_price:,.0f} (Lead budget unstated)")
+            unknown_criteria.append("Customer budget unstated in requirements")
 
         # ── 2. Location Fit (0-100) ───────────────────────────────────────────
         lead_locs = [loc.lower().strip() for loc in (lead.preferred_locations or req.preferred_areas or [])]
@@ -251,16 +266,20 @@ class AIPropertyMatchingEngine:
             if exact_locality_match:
                 location_score = 100.0
                 reasons.append(f"Exact locality match: {prop.locality or prop.city}")
+                matched_criteria.append(f"Exact locality match: {prop.locality or prop.city}")
             elif city_match:
                 location_score = 75.0
                 reasons.append(f"City match: {prop.city}")
                 mismatches.append(f"In {prop.locality} rather than requested {lead_locs[0]}")
+                partial_criteria.append(f"City match ({prop.city}), but in {prop.locality} rather than requested {lead_locs[0]}")
             else:
                 location_score = 40.0
                 mismatches.append(f"Location ({prop.locality}, {prop.city}) differs from preferences: {', '.join(lead_locs)}")
+                unmatched_criteria.append(f"Location ({prop.locality}, {prop.city}) differs from preferences")
         else:
             location_score = 65.0
             reasons.append(f"Located in {prop.locality or prop.city} (No specific area requested)")
+            unknown_criteria.append("Preferred location not specified by customer")
 
         # ── 3. Property Type Fit (0-100) ──────────────────────────────────────
         lead_pt = (lead.property_type or req.property_type or "").lower().strip()
@@ -270,8 +289,8 @@ class AIPropertyMatchingEngine:
             if lead_pt in prop_pt or prop_pt in lead_pt:
                 prop_type_score = 100.0
                 reasons.append(f"Property type match: {prop.property_type.title()}")
+                matched_criteria.append(f"Property type match: {prop.property_type.title()}")
             else:
-                # Check synonym group
                 in_same_group = False
                 for group_members in PROPERTY_TYPE_GROUPS.values():
                     if any(m in lead_pt for m in group_members) and any(m in prop_pt for m in group_members):
@@ -280,11 +299,14 @@ class AIPropertyMatchingEngine:
                 if in_same_group:
                     prop_type_score = 90.0
                     reasons.append(f"Compatible property type ({prop.property_type.title()} ~ {lead_pt.title()})")
+                    partial_criteria.append(f"Compatible property type: {prop.property_type.title()} ~ {lead_pt.title()}")
                 else:
                     prop_type_score = 30.0
                     mismatches.append(f"Type is {prop.property_type} vs requested {lead_pt}")
+                    unmatched_criteria.append(f"Property type mismatch ({prop.property_type} vs requested {lead_pt})")
         else:
             prop_type_score = 70.0
+            unknown_criteria.append("Property type not specified")
 
         # ── 4. Bedrooms / BHK Fit (0-100) ─────────────────────────────────────
         req_bhk = None
@@ -297,50 +319,66 @@ class AIPropertyMatchingEngine:
             if prop.bedrooms == req_bhk:
                 bedrooms_score = 100.0
                 reasons.append(f"Exact {prop.bedrooms} BHK configuration matched")
+                matched_criteria.append(f"Exact {prop.bedrooms} BHK configuration matched")
             elif prop.bedrooms == req_bhk + 1:
                 bedrooms_score = 85.0
                 reasons.append(f"Offers extra bedroom ({prop.bedrooms} BHK vs {req_bhk} BHK required)")
+                partial_criteria.append(f"Offers {prop.bedrooms} BHK vs {req_bhk} BHK requested (+1 bedroom)")
             elif prop.bedrooms > req_bhk + 1:
                 bedrooms_score = 70.0
                 mismatches.append(f"Has {prop.bedrooms} BHK (exceeds {req_bhk} BHK requested)")
+                unmatched_criteria.append(f"Has {prop.bedrooms} BHK (exceeds {req_bhk} BHK requested)")
             else:
                 bedrooms_score = 30.0
                 mismatches.append(f"Offers only {prop.bedrooms} BHK vs {req_bhk} BHK requested")
+                unmatched_criteria.append(f"Bedroom deficit: offers {prop.bedrooms} BHK vs {req_bhk} BHK requested")
         else:
             bedrooms_score = 70.0
+            unknown_criteria.append("Bedroom (BHK) requirement not specified")
 
         # ── 5. Area / Size Fit (0-100) ────────────────────────────────────────
         prop_area = float(prop.area_value or getattr(prop, "built_up_area_sqft", 0) or 0)
-        req_min_area = float(req.min_bathrooms * 300 if req.min_bathrooms else 0)  # rough estimate if not set
-
         if prop_area > 0:
             area_score = 90.0
             reasons.append(f"Generous layout size: {prop_area:,.0f} {prop.area_unit or 'sqft'}")
+            matched_criteria.append(f"Layout size: {prop_area:,.0f} {prop.area_unit or 'sqft'}")
         else:
             area_score = 70.0
+            unknown_criteria.append("Property area not specified in listing")
 
-        # ── 6. Amenities Fit (0-100) ──────────────────────────────────────────
+        # ── 6. Amenities Fit & Missing Data Semantics (0-100) ────────────────
         prop_amenities = [a.lower().strip() for a in (prop.amenities or [])]
         lead_req_amenities = [a.lower().strip() for a in (req.amenities or [])]
-        # Check lead notes for amenity mentions (e.g. parking, pool, gym, lift)
         notes_str = " ".join([str(n.get("content", "")) if isinstance(n, dict) else str(n) for n in (lead.notes or [])]).lower()
         for common_a in ("parking", "gym", "pool", "lift", "security", "clubhouse", "power backup"):
             if common_a in notes_str and common_a not in lead_req_amenities:
                 lead_req_amenities.append(common_a)
 
         if lead_req_amenities:
-            matched_amenities = [a for a in lead_req_amenities if any(a in pa for pa in prop_amenities)]
-            if matched_amenities:
-                amenity_ratio = len(matched_amenities) / len(lead_req_amenities)
-                amenities_score = 50.0 + (amenity_ratio * 50.0)
-                reasons.append(f"Matched {len(matched_amenities)}/{len(lead_req_amenities)} requested amenities ({', '.join(matched_amenities[:3])})")
+            if not prop.amenities:
+                # Missing property amenities: preserve UNKNOWN per Phase 30
+                amenities_score = 50.0
+                for a in lead_req_amenities:
+                    unknown_criteria.append(f"Amenity '{a.title()}' status unknown in verified listing data")
             else:
-                amenities_score = 40.0
-                mismatches.append(f"Missing requested amenities ({', '.join(lead_req_amenities[:2])})")
+                matched_amenities = [a for a in lead_req_amenities if any(a in pa for pa in prop_amenities)]
+                unmatched_amenities = [a for a in lead_req_amenities if not any(a in pa for pa in prop_amenities)]
+                if matched_amenities:
+                    amenity_ratio = len(matched_amenities) / len(lead_req_amenities)
+                    amenities_score = 50.0 + (amenity_ratio * 50.0)
+                    reasons.append(f"Matched {len(matched_amenities)}/{len(lead_req_amenities)} requested amenities ({', '.join(matched_amenities[:3])})")
+                    for ma in matched_amenities:
+                        matched_criteria.append(f"Verified amenity: {ma.title()}")
+                else:
+                    amenities_score = 40.0
+                    mismatches.append(f"Missing requested amenities ({', '.join(lead_req_amenities[:2])})")
+                for ua in unmatched_amenities:
+                    unmatched_criteria.append(f"Missing requested amenity: {ua.title()}")
         else:
             amenities_score = 80.0
             if prop_amenities:
                 reasons.append(f"Key amenities available: {', '.join(prop_amenities[:3])}")
+                matched_criteria.append(f"Verified amenities available: {', '.join(prop_amenities[:3])}")
 
         # ── 7. Timeline / Possession Fit (0-100) ──────────────────────────────
         lead_timeline = (lead.timeline or req.possession_timeline or "").lower().strip()
@@ -349,13 +387,25 @@ class AIPropertyMatchingEngine:
         if lead_timeline in ("immediate", "ready") and prop_status_attr in ("ready_to_move", "ready"):
             timeline_score = 100.0
             reasons.append("Ready to move immediate possession")
+            matched_criteria.append("Ready to move immediate possession")
         elif lead_timeline and prop_status_attr:
             timeline_score = 80.0
+            partial_criteria.append(f"Construction status: {prop_status_attr.replace('_', ' ').title()}")
         else:
             timeline_score = 75.0
 
         # Always note availability
         reasons.append("Verified live available inventory")
+
+        # ── 8. Negative Preferences Evaluation ───────────────────────────────
+        neg_prefs = extract_negative_preferences(notes_str)
+        if neg_prefs.get("exclude_ground_floor") and prop.floor_number is not None and prop.floor_number == 0:
+            negative_conflicts.append("Property is on ground floor (violates customer exclusion)")
+        for excl_loc in neg_prefs.get("excluded_locations", []):
+            if excl_loc.lower() in f"{prop.locality or ''} {prop.city or ''}".lower():
+                negative_conflicts.append(f"Property in {prop.locality or prop.city} (violates excluded location: {excl_loc})")
+        if neg_prefs.get("require_furnished") and (prop.furnishing or "").lower() == "unfurnished":
+            negative_conflicts.append("Property is unfurnished (customer requires furnished)")
 
         # ── Composite Score Calculation ───────────────────────────────────────
         composite = (
@@ -367,6 +417,9 @@ class AIPropertyMatchingEngine:
             + amenities_score * w["amenities_fit"]
             + timeline_score * w["timeline_fit"]
         )
+        if negative_conflicts:
+            # Explicit negative preferences take precedence and strictly penalize compatibility
+            composite = max(0.0, composite * 0.5 - (len(negative_conflicts) * 10.0))
         final_score = round(min(100.0, max(0.0, composite)), 1)
 
         breakdown = ScoreBreakdownDTO(
@@ -380,7 +433,26 @@ class AIPropertyMatchingEngine:
             behavioral_fit=85.0,
         )
 
-        return final_score, breakdown, reasons, mismatches
+        return (
+            final_score, breakdown, reasons, mismatches,
+            matched_criteria, partial_criteria, unmatched_criteria,
+            negative_conflicts, unknown_criteria
+        )
+
+    @classmethod
+    def calculate_compatibility_score(
+        cls,
+        prop: PropertyListing,
+        lead: Lead,
+        req: Optional[NormalizedRequirementsDTO] = None,
+        weights: Optional[Dict[str, float]] = None,
+    ) -> Tuple[float, ScoreBreakdownDTO, List[str], List[str]]:
+        """
+        Computes normalized 0.0 - 100.0 composite score, granular component breakdown,
+        grounded reasons, and mismatches. (Backward compatible 4-tuple wrapper)
+        """
+        res = cls.calculate_compatibility_score_detailed(prop, lead, req, weights)
+        return res[0], res[1], res[2], res[3]
 
     # ─────────────────────────────────────────────────────────────────────────
     # 3. Confidence & Completeness Evaluator
@@ -450,16 +522,29 @@ class AIPropertyMatchingEngine:
         availability: Optional[str] = None,
         transaction_type: Optional[str] = None,
         allow_alternatives: bool = False,
-        flexibility_pct: float = 10.0,
+        flexibility_pct: float = 0.0,
+        force_refresh: bool = False,
+        requirement_profile: Optional[Any] = None,
     ) -> PropertyRecommendationResponseDTO:
         """
         Identifies and ranks the best property candidates for a given CRM lead.
-        Enforces tenant isolation, hard constraints, and explainable scoring.
+        Enforces tenant isolation, hard constraints, explainable scoring, and tenant-scoped caching.
         """
         start_time = time.time()
         lead_uuid = uuid.UUID(str(lead_id))
         broker_uuid = uuid.UUID(str(broker.id))
         effective_limit = limit or top_k
+
+        # ── Check Cache (Tenant-Isolated) ────────────────────────────────────
+        cache = get_query_cache()
+        cache_key = f"tenant:{broker_uuid}:matches:{lead_uuid}:{top_k}:{offset}:{sort}:{allow_alternatives}:{flexibility_pct}:{property_type}:{location}:{transaction_type}:{minimum_score}"
+        if not force_refresh:
+            cached_val = await cache.get(cache_key)
+            if cached_val:
+                try:
+                    return PropertyRecommendationResponseDTO.model_validate(cached_val)
+                except Exception:
+                    pass
 
         # Fetch Lead with tenant scoping
         lead_stmt = select(Lead).where(
@@ -473,7 +558,7 @@ class AIPropertyMatchingEngine:
         if not lead:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Lead {lead_id} not found in current organization.")
 
-        req = RequirementNormalizer.normalize(lead=lead)
+        req = RequirementNormalizer.normalize(lead=lead, requirement_profile=requirement_profile)
 
         # Database-level candidate narrowing (Indexed filtering)
         filters = [
@@ -519,7 +604,11 @@ class AIPropertyMatchingEngine:
                 continue
 
             # 2. Compatibility Score & Grounded Breakdown
-            score, breakdown, reasons, mismatches = self.calculate_compatibility_score(
+            (
+                score, breakdown, reasons, mismatches,
+                matched_crit, partial_crit, unmatched_crit,
+                neg_conflicts, unknown_crit
+            ) = self.calculate_compatibility_score_detailed(
                 prop=prop,
                 lead=lead,
                 req=req,
@@ -534,19 +623,20 @@ class AIPropertyMatchingEngine:
             conf, guidance = self.evaluate_confidence(lead, prop)
 
             coverage = RequirementCoverageDTO(
-                matched=reasons[:4],
-                unmet=mismatches[:3],
-                unknown=[guidance] if guidance else []
+                matched=matched_crit[:5] if matched_crit else reasons[:4],
+                partial=partial_crit[:3],
+                unmet=unmatched_crit[:3] if unmatched_crit else mismatches[:3],
+                negative_conflicts=neg_conflicts,
+                unknown=unknown_crit + ([guidance] if guidance else [])
             )
 
-            rec_type = "BEST_OVERALL"
-            if score >= 90.0:
-                rec_type = "BEST_OVERALL"
-            elif breakdown.budget_fit >= 95.0:
-                rec_type = "BEST_VALUE"
-            elif breakdown.location_fit >= 95.0:
-                rec_type = "BEST_LOCATION"
-            elif allow_alternatives:
+            if allow_alternatives:
+                rec_type = "ALTERNATIVE"
+            elif score >= 85.0 and len(neg_conflicts) == 0:
+                rec_type = "EXACT_MATCH"
+            elif score >= 70.0:
+                rec_type = "CLOSE_MATCH"
+            else:
                 rec_type = "ALTERNATIVE"
 
             item = PropertyRecommendationItemDTO(
@@ -579,7 +669,8 @@ class AIPropertyMatchingEngine:
                 suggested_next_action="Schedule Site Visit" if score >= 80.0 else "Share Property Summary",
                 evidence_references={
                     "property_code": prop.property_code,
-                    "confidence_guidance": guidance
+                    "confidence_guidance": guidance,
+                    "negative_conflicts": neg_conflicts,
                 }
             )
             items.append(item)
@@ -601,7 +692,21 @@ class AIPropertyMatchingEngine:
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        return PropertyRecommendationResponseDTO(
+        no_match_reasons: List[str] = []
+        if len(items) == 0:
+            if len(candidates) == 0:
+                no_match_reasons.append(f"No properties found matching status '{target_status}' in tenant inventory.")
+            elif rejected_count > 0:
+                reasons_summary = set()
+                for cand in candidates:
+                    _, cand_rejections = self.evaluate_hard_constraints(
+                        prop=cand, lead=lead, req=req, allow_alternatives=False, flexibility_pct=0.0
+                    )
+                    for cr in cand_rejections[:2]:
+                        reasons_summary.add(cr)
+                no_match_reasons = list(reasons_summary)[:4]
+
+        resp = PropertyRecommendationResponseDTO(
             recommendation_id=str(uuid.uuid4()),
             lead_id=str(lead.id),
             organization_id=str(broker_uuid),
@@ -610,8 +715,17 @@ class AIPropertyMatchingEngine:
             filtered_candidates_count=rejected_count,
             recommendation_mode="controlled_alternatives" if allow_alternatives else "deterministic_ranking",
             execution_duration_ms=duration_ms,
+            no_match_reasons=no_match_reasons,
             items=paged_items
         )
+
+        # Save to cache with tenant tag
+        try:
+            await cache.set(cache_key, resp.model_dump(), ttl=600, tags=[f"tenant:{broker_uuid}:matches"])
+        except Exception:
+            pass
+
+        return resp
 
     # ─────────────────────────────────────────────────────────────────────────
     # 5. Direction B: Property → Leads (Reverse Matching)
@@ -819,12 +933,31 @@ class AIPropertyMatchingEngine:
         self.db.add(audit)
 
         await self.db.commit()
-        return {
-            "status": "success",
-            "message": f"Property '{prop.title}' successfully shortlisted for lead '{lead.name}'",
-            "match_score": score,
-            "interest_status": "SHORTLISTED"
-        }
+        return ShortlistActionResponseDTO(
+            status="success",
+            message=f"Property '{prop.title}' successfully shortlisted for lead '{lead.name}'",
+            match_score=score,
+            interest_status="SHORTLISTED"
+        )
+
+    async def shortlist_property(
+        self,
+        lead_id: str | uuid.UUID,
+        broker: Broker,
+        property_id: Optional[str | uuid.UUID] = None,
+        dto: Optional[ShortlistRequestDTO] = None,
+        req: Optional[ShortlistRequestDTO] = None,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Alias for shortlist_property_for_lead supporting dto or req."""
+        target_dto = dto or req
+        prop_id = property_id or (target_dto.property_id if target_dto else None)
+        return await self.shortlist_property_for_lead(
+            lead_id=lead_id,
+            property_id=prop_id,
+            broker=broker,
+            dto=target_dto,
+        )
 
     async def recommend_property_to_lead(
         self,
@@ -984,6 +1117,328 @@ class AIPropertyMatchingEngine:
             "property_id": str(prop_uuid),
             "feedback": feedback
         }
+
+    async def remove_property_from_shortlist(
+        self,
+        lead_id: str | uuid.UUID,
+        property_id: str | uuid.UUID,
+        broker: Broker,
+    ) -> Dict[str, Any]:
+        """
+        Removes a property from the customer's shortlist.
+        Enforces tenant isolation and records AuditLog.
+        """
+        lead_uuid = uuid.UUID(str(lead_id))
+        prop_uuid = uuid.UUID(str(property_id))
+        broker_uuid = uuid.UUID(str(broker.id))
+
+        stmt = select(LeadPropertyInterest).where(
+            and_(
+                LeadPropertyInterest.lead_id == lead_uuid,
+                LeadPropertyInterest.property_id == prop_uuid,
+                LeadPropertyInterest.organization_id == broker_uuid,
+            )
+        )
+        interest = (await self.db.execute(stmt)).scalars().first()
+        if not interest:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shortlist item not found for lead.")
+
+        interest.status = "REMOVED"
+        audit = AuditLog(
+            organization_id=broker_uuid,
+            actor_id=broker_uuid,
+            actor_type="user",
+            action="match.shortlist_removed",
+            resource_type="lead_property_interest",
+            resource_id=f"{lead_uuid}:{prop_uuid}",
+            new_values={"status": "REMOVED"},
+        )
+        self.db.add(audit)
+        await self.db.commit()
+        return {
+            "status": "success",
+            "message": "Property successfully removed from shortlist.",
+            "lead_id": str(lead_uuid),
+            "property_id": str(prop_uuid),
+        }
+
+    async def get_lead_shortlist(
+        self,
+        lead_id: str | uuid.UUID,
+        broker: Broker,
+        status_filter: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> PropertyShortlistResponseDTO:
+        """
+        Retrieves the paginated list of properties shortlisted or saved for a lead.
+        Enforces tenant isolation.
+        """
+        lead_uuid = uuid.UUID(str(lead_id))
+        broker_uuid = uuid.UUID(str(broker.id))
+
+        # Verify lead
+        lead_stmt = select(Lead).where(
+            and_(Lead.id == lead_uuid, Lead.broker_id == broker_uuid, Lead.deleted_at.is_(None))
+        )
+        lead = (await self.db.execute(lead_stmt)).scalars().first()
+        if not lead:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+
+        query = (
+            select(LeadPropertyInterest, PropertyListing)
+            .join(PropertyListing, PropertyListing.id == LeadPropertyInterest.property_id)
+            .where(
+                and_(
+                    LeadPropertyInterest.lead_id == lead_uuid,
+                    LeadPropertyInterest.organization_id == broker_uuid,
+                    PropertyListing.deleted_at.is_(None),
+                )
+            )
+        )
+        if status_filter and status_filter.lower() != "all":
+            query = query.where(LeadPropertyInterest.status == status_filter.upper())
+        else:
+            query = query.where(LeadPropertyInterest.status.in_(["SHORTLISTED", "INTERESTED", "LIKED"]))
+
+        query = query.order_by(desc(LeadPropertyInterest.match_score), desc(LeadPropertyInterest.updated_at))
+        rows = list((await self.db.execute(query)).all())
+        total_count = len(rows)
+        paged_rows = rows[offset : offset + limit]
+
+        items: List[PropertyShortlistItemDTO] = []
+        for interest, prop in paged_rows:
+            items.append(
+                PropertyShortlistItemDTO(
+                    interest_id=str(interest.id),
+                    lead_id=str(interest.lead_id),
+                    property_id=str(prop.id),
+                    property_title=prop.title,
+                    property_code=prop.property_code,
+                    price=float(prop.price or 0.0),
+                    currency=prop.currency_code or "INR",
+                    bedrooms=prop.bedrooms,
+                    bathrooms=prop.bathrooms,
+                    area_sqft=float(prop.area_value or getattr(prop, "built_up_area_sqft", 0) or 0),
+                    locality=prop.locality,
+                    city=prop.city,
+                    status=interest.status,
+                    interest_level=interest.interest_level or "high",
+                    match_score=interest.match_score,
+                    confidence=interest.confidence,
+                    reasons=interest.reasons or [],
+                    mismatches=interest.mismatches or [],
+                    notes=interest.notes,
+                    created_at=interest.created_at.isoformat() if interest.created_at else None,
+                    updated_at=interest.updated_at.isoformat() if interest.updated_at else None,
+                )
+            )
+
+        return PropertyShortlistResponseDTO(
+            lead_id=str(lead_uuid),
+            organization_id=str(broker_uuid),
+            total_count=total_count,
+            items=items,
+        )
+
+    async def record_property_interaction(
+        self,
+        lead_id: Optional[str | uuid.UUID] = None,
+        property_id: Optional[str | uuid.UUID] = None,
+        broker: Optional[Broker] = None,
+        dto: Optional[PropertyInteractionRequestDTO] = None,
+        req: Optional[PropertyInteractionRequestDTO] = None,
+        **kwargs: Any,
+    ) -> PropertyInteractionResponseDTO:
+        """
+        Records customer-property interaction across lifecycle (VIEWED, LIKED, SHORTLISTED, REJECTED, VISITED).
+        Persists structured rejection reasons to both LeadPropertyInterest and MemoryPropertyFeedback.
+        """
+        target_dto = dto or req
+        if not target_dto:
+            raise ValueError("PropertyInteractionRequestDTO is required")
+        target_lead = lead_id or target_dto.lead_id
+        target_prop = property_id or target_dto.property_id
+        target_broker = broker or kwargs.get("broker")
+
+        lead_uuid = uuid.UUID(str(target_lead))
+        prop_uuid = uuid.UUID(str(target_prop))
+        broker_uuid = uuid.UUID(str(target_broker.id))
+
+        # Verify lead & property
+        lead = (await self.db.execute(select(Lead).where(
+            and_(Lead.id == lead_uuid, Lead.broker_id == broker_uuid, Lead.deleted_at.is_(None))
+        ))).scalars().first()
+        prop = (await self.db.execute(select(PropertyListing).where(
+            and_(PropertyListing.id == prop_uuid, PropertyListing.broker_id == broker_uuid, PropertyListing.deleted_at.is_(None))
+        ))).scalars().first()
+
+        if not lead or not prop:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead or Property not found in current organization.")
+
+        action = target_dto.interaction_type.upper().strip()
+        status_map = {
+            "SHORTLISTED": "SHORTLISTED",
+            "LIKED": "LIKED",
+            "REJECTED": "REJECTED",
+            "DISMISSED": "DISMISSED",
+            "VIEWED": "VIEWED",
+            "VISITED": "VISITED",
+            "VISIT_REQUESTED": "VISIT_REQUESTED",
+            "APPOINTMENT_REQUESTED": "VISIT_REQUESTED",
+            "INQUIRED": "INTERESTED",
+        }
+        target_status = status_map.get(action, "INTERESTED")
+
+        # Fetch or initialize LeadPropertyInterest
+        stmt = select(LeadPropertyInterest).where(
+            and_(
+                LeadPropertyInterest.lead_id == lead_uuid,
+                LeadPropertyInterest.property_id == prop_uuid,
+                LeadPropertyInterest.organization_id == broker_uuid,
+            )
+        )
+        interest = (await self.db.execute(stmt)).scalars().first()
+
+        req = RequirementNormalizer.normalize(lead=lead)
+        score, breakdown, reasons, mismatches = self.calculate_compatibility_score(prop, lead, req)
+        conf, _ = self.evaluate_confidence(lead, prop)
+
+        notes_payload = target_dto.notes or target_dto.feedback or ""
+        if target_dto.rejection_reason:
+            notes_payload = f"Rejection: {target_dto.rejection_reason}. {notes_payload}".strip()
+
+        if not interest:
+            interest = LeadPropertyInterest(
+                organization_id=broker_uuid,
+                lead_id=lead_uuid,
+                property_id=prop_uuid,
+                status=target_status,
+                match_score=score,
+                deterministic_score=score,
+                confidence=conf,
+                reasons=reasons,
+                mismatches=mismatches,
+                score_breakdown=breakdown.model_dump(),
+                notes=notes_payload or f"Interaction: {action}",
+                source_of_match="customer_interaction",
+                last_viewed_at=datetime.now(timezone.utc) if action == "VIEWED" else None,
+                visit_count=1 if action == "VISITED" else 0,
+            )
+            self.db.add(interest)
+        else:
+            interest.status = target_status
+            if action == "VIEWED":
+                interest.last_viewed_at = datetime.now(timezone.utc)
+            elif action == "VISITED":
+                interest.visit_count = (interest.visit_count or 0) + 1
+            if notes_payload:
+                interest.notes = f"{interest.notes or ''} | {notes_payload}".strip(" | ")
+
+        # If rejection, persist to MemoryPropertyFeedback (Part 1 foundation)
+        if action == "REJECTED" or target_dto.rejection_reason:
+            feedback = MemoryPropertyFeedback(
+                organization_id=str(broker_uuid),
+                lead_id=str(lead_uuid),
+                property_id=str(prop_uuid),
+                feedback_type=action,
+                rejection_reason_code=(target_dto.rejection_reason or "OTHER").upper(),
+                feedback_notes=target_dto.notes or target_dto.feedback,
+                interest_score=0.1,
+            )
+            self.db.add(feedback)
+
+        # Audit Log
+        audit = AuditLog(
+            organization_id=broker_uuid,
+            actor_id=broker_uuid,
+            actor_type="user",
+            action=f"interaction.{action.lower()}",
+            resource_type="lead_property_interest",
+            resource_id=f"{lead_uuid}:{prop_uuid}",
+            new_values={"status": target_status, "rejection_reason": target_dto.rejection_reason},
+        )
+        self.db.add(audit)
+        await self.db.commit()
+
+        return PropertyInteractionResponseDTO(
+            status="success",
+            lead_id=str(lead_uuid),
+            property_id=str(prop_uuid),
+            interaction_type=action,
+            interest_status=target_status,
+            rejection_reason=target_dto.rejection_reason,
+            message=f"Interaction '{action}' recorded successfully.",
+        )
+
+    async def explain_property_match(
+        self,
+        lead_id: str | uuid.UUID,
+        property_id: str | uuid.UUID,
+        broker: Broker,
+    ) -> MatchExplanationDTO:
+        """
+        Produces detailed, explainable match breakdown for future AI and sales agents.
+        """
+        lead_uuid = uuid.UUID(str(lead_id))
+        prop_uuid = uuid.UUID(str(property_id))
+        broker_uuid = uuid.UUID(str(broker.id))
+
+        lead = (await self.db.execute(select(Lead).where(
+            and_(Lead.id == lead_uuid, Lead.broker_id == broker_uuid, Lead.deleted_at.is_(None))
+        ))).scalars().first()
+        prop = (await self.db.execute(select(PropertyListing).where(
+            and_(PropertyListing.id == prop_uuid, PropertyListing.broker_id == broker_uuid, PropertyListing.deleted_at.is_(None))
+        ))).scalars().first()
+
+        if not lead or not prop:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead or Property not found.")
+
+        req = RequirementNormalizer.normalize(lead=lead)
+        (
+            score, breakdown, reasons, mismatches,
+            matched, partial, unmatched, neg_conflicts, unknown
+        ) = self.calculate_compatibility_score_detailed(prop, lead, req)
+        conf, _ = self.evaluate_confidence(lead, prop)
+
+        rec_type = "EXACT_MATCH" if score >= 85.0 and len(neg_conflicts) == 0 else "CLOSE_MATCH" if score >= 70.0 else "ALTERNATIVE"
+
+        talking_points = [
+            f"Property is listed at ₹{prop.price:,.0f} with {prop.bedrooms} BHK in {prop.locality or prop.city}."
+        ]
+        if matched:
+            talking_points.append(f"Direct matches: {', '.join(matched[:2])}.")
+        if partial:
+            talking_points.append(f"Acceptable trade-offs: {', '.join(partial[:2])}.")
+        if unknown:
+            talking_points.append(f"Unverified aspects to confirm: {', '.join(unknown[:2])}.")
+
+        summary_parts = []
+        if matched:
+            summary_parts.append(f"Matches: {'; '.join(matched[:3])}")
+        if partial:
+            summary_parts.append(f"Partial fit: {'; '.join(partial[:2])}")
+        if unmatched:
+            summary_parts.append(f"Unmatched: {'; '.join(unmatched[:2])}")
+        if neg_conflicts:
+            summary_parts.append(f"Conflicts: {'; '.join(neg_conflicts[:2])}")
+        deterministic_summary = ". ".join(summary_parts) if summary_parts else f"Property scored {score}% compatibility."
+
+        return MatchExplanationDTO(
+            property_id=str(prop_uuid),
+            lead_id=str(lead_uuid),
+            match_score=score,
+            confidence=conf,
+            recommendation_type=rec_type,
+            matched_criteria=matched,
+            partial_criteria=partial,
+            unmatched_criteria=unmatched,
+            negative_conflicts=neg_conflicts,
+            unknown_criteria=unknown,
+            score_breakdown=breakdown,
+            talking_points=talking_points,
+            deterministic_summary=deterministic_summary,
+        )
 
     async def compare_properties(
         self,

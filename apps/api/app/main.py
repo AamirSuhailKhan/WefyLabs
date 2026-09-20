@@ -100,9 +100,6 @@ from app.modules.recommendation.router import router as recommendation_router
 # ─── Volume 2 Part 8 — AI Follow-Up & Autonomous Lead Nurturing Engine ─────────
 from app.modules.follow_up.router import router as enterprise_follow_up_router
 
-# ─── Volume 2 Part 9 — Calendar, Meeting & Scheduling Intelligence Engine ───────
-from app.modules.calendar.router import router as calendar_router
-
 # ─── Volume 2 Part 10 — CRM Intelligence & Autonomous Sales Operations Engine ──
 from app.modules.crm_intelligence.router import router as crm_intelligence_router
 
@@ -114,6 +111,8 @@ from app.modules.workflow.router import router as workflow_automation_router
 
 # ─── Volume 2 Part 13 — AI Memory & Customer Intelligence Engine ──────────────
 from app.modules.memory.router import router as ai_memory_router
+from app.modules.customer_intelligence.router import router as customer_intelligence_router
+from app.modules.property_intelligence.router import router as property_intelligence_router
 
 # Configure global structured JSON logging
 configure_structured_logging()
@@ -266,6 +265,12 @@ app.include_router(identity_resolution_router)
 app.include_router(lead_intelligence_router)
 app.include_router(ai_agent_router, prefix=settings.API_V1_STR)
 
+# ─── Core Product Part 1 — Customer Intelligence & Conversation Foundation ─────
+app.include_router(customer_intelligence_router, prefix=settings.API_V1_STR)
+
+# ─── Core Product Part 2 — Property Intelligence & Grounded Retrieval ─────────
+app.include_router(property_intelligence_router, prefix=settings.API_V1_STR)
+
 # ─── Volume 2 Part 6 — Omnichannel Communication Engine v2 ────────────────────
 app.include_router(omnichannel_router, prefix=settings.API_V1_STR)
 app.include_router(crm_enterprise_router, prefix=settings.API_V1_STR)
@@ -308,9 +313,6 @@ app.include_router(recommendation_router, prefix=settings.API_V1_STR)
 
 # ─── Volume 2 Part 8 — AI Follow-Up & Autonomous Lead Nurturing Engine ─────────
 app.include_router(enterprise_follow_up_router, prefix=settings.API_V1_STR)
-
-# ─── Volume 2 Part 9 — Calendar, Meeting & Scheduling Intelligence Engine ───────
-app.include_router(calendar_router, prefix=settings.API_V1_STR)
 
 # ─── Volume 2 Part 10 — CRM Intelligence & Autonomous Sales Operations Engine ──
 app.include_router(crm_intelligence_router)

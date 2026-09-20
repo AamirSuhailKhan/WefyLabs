@@ -160,15 +160,31 @@ def extract_negative_preferences(text: str) -> Dict[str, Any]:
     return neg
 
 
-def generate_clarification_questions(lead: Lead, req: Optional[NormalizedRequirementsDTO] = None) -> List[str]:
+def generate_clarification_questions(
+    lead: Optional[Any] = None,
+    req: Optional[NormalizedRequirementsDTO] = None
+) -> List[str]:
     """
     Generates tailored, professional clarification questions to improve match quality for incomplete leads.
     """
     questions: List[str] = []
 
-    has_budget = bool(lead.budget_max or lead.budget_min or (req and req.max_budget))
-    has_location = bool((lead.preferred_locations and len(lead.preferred_locations) > 0) or (req and req.location))
-    has_bhk = bool(lead.property_type and any(k in lead.property_type.lower() for k in ("bhk", "bedroom", "bed")))
+    if isinstance(lead, NormalizedRequirementsDTO):
+        req = lead
+        lead = None
+
+    has_budget = bool(
+        (lead and (lead.budget_max or lead.budget_min))
+        or (req and (req.max_budget or req.min_budget))
+    )
+    has_location = bool(
+        (lead and lead.preferred_locations and len(lead.preferred_locations) > 0)
+        or (req and req.location)
+    )
+    has_bhk = bool(
+        (lead and lead.property_type and any(k in lead.property_type.lower() for k in ("bhk", "bedroom", "bed")))
+        or (req and (req.min_bedrooms or req.max_bedrooms or req.property_type))
+    )
 
     if not has_budget:
         questions.append("What is your target budget or maximum price comfort range?")
@@ -239,19 +255,35 @@ class RequirementNormalizer:
         intelligence: Optional[ProspectIntelligence] = None,
         override_budget: Optional[float] = None,
         override_currency: Optional[str] = None,
+        requirement_profile: Optional[Any] = None,
     ) -> NormalizedRequirementsDTO:
         """
         Builds canonical NormalizedRequirementsDTO.
-        Gives precedence to structured ProspectIntelligence, falling back to Lead entity attributes.
+        Gives precedence to explicit RequirementProfileDTO (Part 1 canonical foundation),
+        then structured ProspectIntelligence, falling back to Lead entity attributes.
         """
         prop_reqs = intelligence.property_requirements if intelligence else {}
         budget_info = intelligence.budget if intelligence else {}
 
         # 1. Property Type & Bedrooms
-        raw_pt = prop_reqs.get("property_type") or lead.property_type
+        raw_pt = None
+        if requirement_profile and getattr(requirement_profile, "property_types", None):
+            pts = getattr(requirement_profile, "property_types")
+            raw_pt = pts[0] if pts else None
+        if not raw_pt:
+            raw_pt = prop_reqs.get("property_type") or lead.property_type
         norm_pt = normalize_property_type(raw_pt)
 
-        beds = prop_reqs.get("bedrooms")
+        beds = None
+        if requirement_profile and getattr(requirement_profile, "bhk", None):
+            bhk_list = getattr(requirement_profile, "bhk")
+            if bhk_list:
+                try:
+                    beds = int(bhk_list[0])
+                except (ValueError, TypeError):
+                    pass
+        if beds is None:
+            beds = prop_reqs.get("bedrooms")
         if beds is None and lead.property_type:
             beds = extract_bedrooms_from_text(lead.property_type)
 
@@ -260,12 +292,28 @@ class RequirementNormalizer:
         baths = prop_reqs.get("bathrooms") or 1
 
         # 2. Budget & Currency with Indian Notation Support
-        curr = override_currency or budget_info.get("currency") or getattr(lead, "budget_currency", None) or "INR"
+        curr = (
+            override_currency
+            or (getattr(requirement_profile, "currency", None) if requirement_profile else None)
+            or budget_info.get("currency")
+            or getattr(lead, "budget_currency", None)
+            or "INR"
+        )
         if not curr or curr == "UNKNOWN":
             curr = "INR"
 
-        raw_b_min = budget_info.get("budget_min") or lead.budget_min or 0.0
-        raw_b_max = budget_info.get("budget_max") or lead.budget_max or 0.0
+        raw_b_min = (
+            (getattr(requirement_profile, "budget_min", None) if requirement_profile else None)
+            or budget_info.get("budget_min")
+            or lead.budget_min
+            or 0.0
+        )
+        raw_b_max = (
+            (getattr(requirement_profile, "budget_max", None) if requirement_profile else None)
+            or budget_info.get("budget_max")
+            or lead.budget_max
+            or 0.0
+        )
 
         b_min, _ = parse_indian_budget(raw_b_min)
         b_max, _ = parse_indian_budget(raw_b_max)
@@ -278,18 +326,38 @@ class RequirementNormalizer:
 
         # 3. Location & Communities
         loc = prop_reqs.get("location")
-        pref_areas: List[str] = list(prop_reqs.get("preferred_areas") or [])
+        pref_areas: List[str] = []
+        if requirement_profile and getattr(requirement_profile, "locations", None):
+            pref_areas = list(getattr(requirement_profile, "locations"))
+        if not pref_areas and prop_reqs.get("preferred_areas"):
+            pref_areas = list(prop_reqs.get("preferred_areas"))
         if not pref_areas and lead.preferred_locations:
             pref_areas = list(lead.preferred_locations)
 
-        # 4. Negative Preferences from Lead Notes
+        # 4. Negative Preferences from Lead Notes and RequirementProfile
         notes_str = " ".join([str(n.get("content", "")) if isinstance(n, dict) else str(n) for n in (lead.notes or [])])
         neg_prefs = extract_negative_preferences(notes_str)
         excluded_areas = list(neg_prefs.get("excluded_locations", []))
 
+        if requirement_profile and getattr(requirement_profile, "negative_preferences", None):
+            for np_item in getattr(requirement_profile, "negative_preferences"):
+                np_desc = np_item.get("description", "") if isinstance(np_item, dict) else str(np_item)
+                parsed_np = extract_negative_preferences(np_desc)
+                if parsed_np.get("exclude_ground_floor"):
+                    neg_prefs["exclude_ground_floor"] = True
+                if parsed_np.get("require_furnished"):
+                    neg_prefs["require_furnished"] = True
+                if parsed_np.get("parking_mandatory"):
+                    neg_prefs["parking_mandatory"] = True
+                for excl in parsed_np.get("excluded_locations", []):
+                    if excl not in excluded_areas:
+                        excluded_areas.append(excl)
+
         # 5. Transaction Intent
         intent = "BUY"
-        if intelligence and intelligence.transaction_intent and intelligence.transaction_intent != "UNKNOWN":
+        if requirement_profile and getattr(requirement_profile, "transaction_type", None):
+            intent = getattr(requirement_profile, "transaction_type").upper()
+        elif intelligence and intelligence.transaction_intent and intelligence.transaction_intent != "UNKNOWN":
             intent = intelligence.transaction_intent
         elif lead.transaction_type:
             lt = lead.transaction_type.upper()
@@ -298,33 +366,35 @@ class RequirementNormalizer:
 
         # 6. Purpose
         purpose = "end_user"
-        if intelligence and intelligence.purpose and intelligence.purpose != "UNKNOWN":
+        if requirement_profile and getattr(requirement_profile, "purpose", None):
+            purpose = getattr(requirement_profile, "purpose")
+        elif intelligence and intelligence.purpose and intelligence.purpose != "UNKNOWN":
             purpose = "investment" if intelligence.purpose in ("INVESTMENT", "RENTAL_YIELD") else "end_user"
         elif intent == "INVEST":
             purpose = "investment"
 
         # 7. Timeline & Financing
         timeline = "immediate"
-        if intelligence and intelligence.timeline and intelligence.timeline != "UNKNOWN":
+        if requirement_profile and getattr(requirement_profile, "timeline", None):
+            timeline = getattr(requirement_profile, "timeline").lower()
+        elif intelligence and intelligence.timeline and intelligence.timeline != "UNKNOWN":
             timeline = intelligence.timeline.lower()
         elif lead.timeline:
             timeline = lead.timeline.lower()
 
         financing_req = False
-        if intelligence and intelligence.financing:
+        if requirement_profile and getattr(requirement_profile, "financing_required", None):
+            financing_req = str(getattr(requirement_profile, "financing_required")).lower() in ("true", "yes", "mortgage")
+        elif intelligence and intelligence.financing:
             financing_req = intelligence.financing in ("MORTGAGE", "FINANCING_REQUIRED")
         elif lead.loan_status in ("in_process", "needed"):
             financing_req = True
 
-        amenities = list(prop_reqs.get("amenities") or [])
-
-        # Field-level Provenance Tracking
-        provenance = {
-            "budget": "explicit_crm" if (lead.budget_max or lead.budget_min) else "ai_inferred" if intelligence else "missing",
-            "property_type": "explicit_crm" if lead.property_type else "ai_inferred" if prop_reqs.get("property_type") else "missing",
-            "location": "explicit_crm" if lead.preferred_locations else "ai_inferred" if loc else "missing",
-            "negative_preferences": "extracted_from_notes" if neg_prefs.get("exclude_ground_floor") or excluded_areas else "none",
-        }
+        amenities: List[str] = []
+        if requirement_profile and getattr(requirement_profile, "amenities", None):
+            amenities = list(getattr(requirement_profile, "amenities"))
+        if not amenities and prop_reqs.get("amenities"):
+            amenities = list(prop_reqs.get("amenities"))
 
         return NormalizedRequirementsDTO(
             property_type=norm_pt,

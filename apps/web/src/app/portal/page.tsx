@@ -1,28 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { CustomerTimelineTracker } from '@/components/portal/CustomerTimelineTracker';
-import { Home, Sparkles, MessageSquare, PhoneCall, Download, ShieldCheck, Heart, Calculator, Send } from 'lucide-react';
+import { Home, Sparkles, MessageSquare, PhoneCall, Download, ShieldCheck, Heart, Calculator, ExternalLink } from 'lucide-react';
 import { useRegion } from '@/lib/i18n/region-context';
 import { useBroker, getInitials } from '@/lib/auth-context';
 import { formatCurrency } from '@/lib/i18n/currency';
+import { getOrganizationId } from '@/lib/api-client';
 
 export default function CustomerPortalPage() {
   const { region } = useRegion();
   const { broker } = useBroker();
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
 
-  const buyerName = "Client Account";
+  const buyerName = broker?.name || 'Client';
   const buyerInitials = getInitials(buyerName);
-  const agentName = broker?.name || "Senior Realty Consultant";
+  const agentName = broker?.name || 'Senior Realty Consultant';
+  // Organization ID from auth context — used to route to the right AI agent
+  const orgId = getOrganizationId() || 'default';
 
-  const handleAskAI = () => {
-    if (!aiQuestion.trim()) return;
-    setAiAnswer(
-      "**AI Property Advisor:** For AED 2,850,000 with a 20% down payment (AED 570,000), your monthly mortgage EMI is approx. **AED 11,450/month** (25 years @ 4.25% interest). The Land Department registration fee is 4% (AED 114,000)."
-    );
-  };
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] p-6 space-y-8 max-w-6xl mx-auto">
@@ -34,7 +30,7 @@ export default function CustomerPortalPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold font-mono text-[#1A1A1A]">Welcome to Customer Portal</h1>
-            <p className="text-xs text-gray-500 font-sans">Customer Portal • Buyer Account (#22222222)</p>
+            <p className="text-xs text-gray-500 font-sans">Customer Portal • Buyer Account</p>
           </div>
         </div>
 
@@ -55,37 +51,36 @@ export default function CustomerPortalPage() {
 
       {/* AI Property Advisor & Mortgage Calculator Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* AI Property Assistant */}
+        {/* AI Property Chat — redirect to real AI agent */}
         <div className="bg-white border border-[#D4D0C8] rounded-3xl p-5 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-[#F0EDE8] pb-3">
             <Sparkles className="w-4 h-4 text-amber-500 fill-amber-300" />
-            <h3 className="text-sm font-bold font-mono text-[#1A1A1A]">Ask AI Property Assistant</h3>
+            <h3 className="text-sm font-bold font-mono text-[#1A1A1A]">AI Property Advisor</h3>
           </div>
 
           <p className="text-xs text-gray-600 font-sans">
-            Get instant answers regarding mortgage estimations, Land Department legal fees, and title deed transfer steps.
+            Chat with our AI advisor to find properties, get pricing information, schedule visits, and compare options — all from verified inventory.
           </p>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={aiQuestion}
-              onChange={(e) => setAiQuestion(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
-              placeholder="e.g., What is my monthly mortgage EMI and DLD transfer fee?"
-              className="flex-1 px-3.5 py-2 bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl text-xs focus:outline-none"
-            />
-            <button onClick={handleAskAI} className="btn-lime px-4 py-2 text-xs flex items-center gap-1">
-              <Send className="w-3.5 h-3.5" />
-              <span>Ask AI</span>
-            </button>
-          </div>
-
-          {aiAnswer && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 whitespace-pre-wrap font-sans">
-              {aiAnswer}
+          <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-[9px] font-black">AI</span>
+              </div>
+              <p className="text-xs text-slate-600">
+                &ldquo;Hello! I can help you find your perfect property, check availability, compare options, and book a visit. What are you looking for?&rdquo;
+              </p>
             </div>
-          )}
+            <Link
+              href={`/portal/${orgId}/chat`}
+              id="open-ai-chat-btn"
+              className="flex items-center justify-center gap-2 w-full py-2.5 bg-gradient-to-r from-violet-600 to-indigo-700 text-white text-xs font-bold rounded-xl hover:shadow-lg hover:shadow-violet-500/20 transition-all"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Start AI Property Chat
+              <ExternalLink className="w-3 h-3 opacity-60" />
+            </Link>
+          </div>
         </div>
 
         {/* Documents & Downloads Widget */}
@@ -93,31 +88,16 @@ export default function CustomerPortalPage() {
           <div className="flex items-center justify-between border-b border-[#F0EDE8] pb-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <h3 className="text-sm font-bold font-mono text-[#1A1A1A]">Verified Deal Documents</h3>
+              <h3 className="text-sm font-bold font-mono text-[#1A1A1A]">Your Deal Documents</h3>
             </div>
-            <span className="text-xs font-mono text-gray-500">3 Files</span>
           </div>
 
-          <div className="space-y-2">
-            <div className="p-3 rounded-2xl border border-[#D4D0C8] bg-[#FAF7F2] flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold font-mono text-[#1A1A1A]">Signed Reservation Form (MOU)</h4>
-                <p className="text-[10px] text-gray-500 font-sans">Verified on Jul 28, 2026</p>
-              </div>
-              <button className="p-2 text-gray-700 hover:text-black">
-                <Download className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3 rounded-2xl border border-[#D4D0C8] bg-[#FAF7F2] flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold font-mono text-[#1A1A1A]">Bank Loan Pre-Approval Letter</h4>
-                <p className="text-[10px] text-gray-500 font-sans">Verified on Jul 30, 2026</p>
-              </div>
-              <button className="p-2 text-gray-700 hover:text-black">
-                <Download className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="p-6 rounded-2xl border border-dashed border-[#D4D0C8] bg-[#FAF7F2] text-center space-y-2">
+            <Download className="w-6 h-6 text-gray-400 mx-auto" />
+            <p className="text-xs font-medium text-gray-700">No documents yet</p>
+            <p className="text-[11px] text-gray-500 font-sans max-w-xs mx-auto">
+              Verified agreements, booking receipts, and property brochures shared by your advisor will be available here.
+            </p>
           </div>
         </div>
       </div>

@@ -51,7 +51,9 @@ class PromptBuilder:
         Returns list of {role, content} dicts.
         """
         system_template = await self._load_template(db, ctx.organization_id)
-        system_content = self._fill_template(system_template, ctx, strategy)
+        # Resolve the human-readable org name (not raw UUID)
+        org_name = await self._get_org_name(db, ctx.organization_id)
+        system_content = self._fill_template(system_template, ctx, strategy, org_name=org_name)
 
         messages: List[Dict[str, str]] = [_msg("system", system_content)]
 
@@ -122,11 +124,31 @@ class PromptBuilder:
         # Built-in default
         return SALES_AGENT_SYSTEM_PROMPT
 
+    async def _get_org_name(self, db: AsyncSession, organization_id: str) -> str:
+        """
+        Resolve organization_id to a human-readable organization name.
+        Falls back to the UUID string if not found.
+        """
+        try:
+            from app.models.organization import Organization
+            result = await db.execute(
+                select(Organization).where(Organization.id == organization_id)
+            )
+            org = result.scalar_one_or_none()
+            if org:
+                name = getattr(org, "name", None) or getattr(org, "company_name", None)
+                if name:
+                    return str(name)
+        except Exception:
+            pass
+        return str(organization_id)  # graceful fallback
+
     def _fill_template(
         self,
         template: str,
         ctx: AgentContext,
         strategy: ConversationStrategy,
+        org_name: Optional[str] = None,
     ) -> str:
         """Fill all template variables from context and strategy."""
 
@@ -171,7 +193,7 @@ class PromptBuilder:
 
         variables = {
             "agent_name": ctx.agent_name,
-            "org_name": ctx.organization_id,  # replaced with org name in production
+            "org_name": org_name or ctx.organization_id,  # use resolved name, not UUID
             "strategy_name": strategy.display_name,
             "tone_directive": strategy.tone_directive,
             "intro_hook": strategy.intro_hook,

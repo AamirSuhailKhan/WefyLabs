@@ -46,7 +46,9 @@ class ScoreBreakdownDTO(BaseModel):
 class RequirementCoverageDTO(BaseModel):
     """Explicit requirement fulfillment analysis."""
     matched: List[str] = Field(default_factory=list)
+    partial: List[str] = Field(default_factory=list)
     unmet: List[str] = Field(default_factory=list)
+    negative_conflicts: List[str] = Field(default_factory=list)
     unknown: List[str] = Field(default_factory=list)
 
 
@@ -79,6 +81,37 @@ class PropertyRecommendationItemDTO(BaseModel):
     suggested_next_action: str = "Schedule Viewing"
     evidence_references: Dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def compatibility_score(self) -> float:
+        return self.match_score
+
+    @property
+    def match_label(self) -> str:
+        return self.recommendation_type
+
+    @property
+    def is_alternative(self) -> bool:
+        return self.recommendation_type == "ALTERNATIVE"
+
+    @property
+    def property_title(self) -> str:
+        return self.title
+
+    @property
+    def property_code(self) -> Optional[str]:
+        return self.evidence_references.get("property_code") or self.unit_number
+
+
+class ShortlistActionResponseDTO(BaseModel):
+    """Response DTO for shortlist addition action."""
+    status: str = "success"
+    message: str = ""
+    match_score: Optional[float] = 0.0
+    interest_status: str = "SHORTLISTED"
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
 
 class PropertyRecommendationRequestDTO(BaseModel):
     """Input payload for generating recommendations."""
@@ -100,7 +133,12 @@ class PropertyRecommendationResponseDTO(BaseModel):
     filtered_candidates_count: int
     recommendation_mode: str = "hybrid_matching"
     execution_duration_ms: int = 0
+    no_match_reasons: List[str] = Field(default_factory=list)
     items: List[PropertyRecommendationItemDTO] = Field(default_factory=list)
+
+    @property
+    def recommendations(self) -> List[PropertyRecommendationItemDTO]:
+        return self.items
 
 
 class PropertyComparisonRequestDTO(BaseModel):
@@ -171,10 +209,11 @@ class MatchingDashboardDTO(BaseModel):
 
 class ShortlistRequestDTO(BaseModel):
     """Payload to shortlist a property for a lead."""
-    lead_id: str
-    property_id: str
+    lead_id: Optional[Any] = None
+    property_id: Any
     notes: Optional[str] = None
     interest_level: str = "high"
+    interest_type: Optional[str] = None
 
 
 class RecommendRequestDTO(BaseModel):
@@ -191,11 +230,18 @@ class RequirementExtractionRequestDTO(BaseModel):
 
 
 class RequirementExtractionResponseDTO(BaseModel):
-    """Structured requirements extracted from natural text."""
-    extracted_requirements: Dict[str, Any]
-    confidence: float
+    """Normalized structured requirements extracted from raw text."""
+    normalized: Optional[NormalizedRequirementsDTO] = None
+    extracted_requirements: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = 1.0
     provenance: str = "AI_EXTRACTED"
-    summary: str
+    summary: str = ""
+    detected_locations: List[str] = Field(default_factory=list)
+    detected_bhk: Optional[int] = None
+    budget_range: Optional[Dict[str, float]] = None
+    extracted_tags: List[str] = Field(default_factory=list)
+    clarification_questions: List[str] = Field(default_factory=list)
+    extraction_source: str = "heuristic_regex"
 
 
 class MatchFeedbackRequestDTO(BaseModel):
@@ -212,3 +258,76 @@ class MatchCompareRequestDTO(BaseModel):
     lead_id: Optional[str] = None
 
 
+# ─── Canonical Part 3 Shortlist & Interaction DTOs ───────────────────────────
+
+class PropertyShortlistItemDTO(BaseModel):
+    """Item in customer's property shortlist."""
+    property_id: Any
+    property_title: str
+    property_code: Optional[str] = None
+    locality: Optional[str] = None
+    city: Optional[str] = None
+    price: float = 0.0
+    currency: str = "INR"
+    bedrooms: Optional[int] = 1
+    bathrooms: Optional[int] = None
+    area_sqft: Optional[float] = None
+    property_type: Optional[str] = "apartment"
+    status: Optional[str] = "available"
+    interest_status: Optional[str] = "SHORTLISTED"
+    interest_id: Optional[str] = None
+    lead_id: Optional[str] = None
+    interest_level: Optional[str] = "high"
+    match_score: Optional[float] = 0.0
+    confidence: Optional[float] = 1.0
+    reasons: List[str] = Field(default_factory=list)
+    mismatches: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PropertyShortlistResponseDTO(BaseModel):
+    """Response envelope for lead shortlist."""
+    lead_id: str
+    organization_id: str
+    total_count: int
+    items: List[PropertyShortlistItemDTO] = Field(default_factory=list)
+
+
+class PropertyInteractionRequestDTO(BaseModel):
+    """Payload to record customer-property interaction."""
+    lead_id: Any
+    property_id: Any
+    interaction_type: str = Field(..., description="VIEWED | LIKED | SHORTLISTED | REJECTED | DISMISSED | VISITED | INQUIRED | APPOINTMENT_REQUESTED")
+    rejection_reason: Optional[str] = Field(None, description="PRICE_TOO_HIGH | LOCATION | SIZE | BHK | FLOOR | AMENITIES | POSSESSION | FURNISHING | DEVELOPER | OTHER")
+    notes: Optional[str] = None
+    feedback: Optional[str] = None
+
+
+class PropertyInteractionResponseDTO(BaseModel):
+    """Response envelope for customer-property interaction."""
+    status: str = "success"
+    lead_id: str
+    property_id: str
+    interaction_type: str
+    interest_status: str
+    rejection_reason: Optional[str] = None
+    message: str
+
+
+class MatchExplanationDTO(BaseModel):
+    """Structured, explainable evaluation facts for a lead ↔ property match."""
+    property_id: Any
+    lead_id: Any
+    match_score: float
+    confidence: float
+    recommendation_type: str
+    matched_criteria: List[str] = Field(default_factory=list)
+    partial_criteria: List[str] = Field(default_factory=list)
+    unmatched_criteria: List[str] = Field(default_factory=list)
+    negative_conflicts: List[str] = Field(default_factory=list)
+    unknown_criteria: List[str] = Field(default_factory=list)
+    score_breakdown: ScoreBreakdownDTO
+    talking_points: List[str] = Field(default_factory=list)
+    deterministic_summary: str = ""

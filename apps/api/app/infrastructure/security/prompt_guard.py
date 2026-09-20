@@ -1,34 +1,154 @@
 import re
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
+# ─── Max field lengths for LLM context sanitization ──────────────────────────
+_MAX_USER_INPUT_CHARS = 1000
+_MAX_CONTEXT_FIELD_CHARS = 500
+_TRUNCATION_MARKER = " [TRUNCATED]"
+
+# ─── Injection Pattern Battery ────────────────────────────────────────────────
+# Patterns are case-insensitive (matched against lowercased input).
 PROMPT_INJECTION_PATTERNS = [
+    # Classic instruction overrides
     r"ignore (all )?previous instructions",
     r"disregard (all )?prior (prompts|instructions)",
+    r"forget (all )?previous instructions",
+    r"disregard (everything|anything) (above|before)",
+    # System role/block abuse
     r"system prompt",
-    r"you are now a",
-    r"override your instructions",
-    r"act as an unrestrained",
+    r"<system>",
+    r"\[system\]",
+    r"system:",
+    # Persona / role override
+    r"you are now (a|an)",
+    r"act as (a|an|admin|root|superuser|god)",
+    r"pretend (you are|to be)",
+    r"roleplay as",
+    r"from now on (you are|act)",
+    # Explicit jailbreak phrases
     r"jailbreak",
     r"DAN mode",
     r"developer mode",
+    r"unrestricted mode",
+    r"god mode",
+    # Override / bypass language
+    r"override your instructions",
+    r"bypass (your )?(safety|filter|restrictions|guidelines)",
+    r"act as an unrestrained",
+    r"disable (your )?(safety|guidelines|restrictions)",
+    # Token / delimiter smuggling
+    r"\[INST\]",
+    r"<\|im_start\|>",
+    r"<\|im_end\|>",
+    r"<\|endoftext\|>",
+    r"###\s*(instruction|system|human|assistant)",
 ]
+
+# ─── Price claim pattern — for grounding output validation ────────────────────
+# Matches monetary amounts that could be hallucinated property prices.
+_PRICE_CLAIM_PATTERN = re.compile(
+    r"(?:₹|rs\.?|inr|usd|\$|price[s]?\s*(?:is|are|of|:)|costs?\s+(?:around|about|roughly)?\s*)\s*[\d,\.]+",
+    re.IGNORECASE,
+)
+
+# Matches a property reference ID as used in WefyLabs (UUID or numeric ID in context)
+_PROPERTY_REF_PATTERN = re.compile(
+    r"(?:property_id|prop_id|listing_id|id)\s*[=:]?\s*['\"]?[\w\-]{4,}",
+    re.IGNORECASE,
+)
+
 
 def validate_prompt_injection(user_input: str) -> Tuple[bool, str]:
     """
     Analyzes incoming user message strings for prompt injection attempts,
-    delimiter abuse, and system instruction overrides.
+    delimiter abuse, role override patterns, and system instruction overrides.
+
     Returns (is_safe: bool, sanitized_text: str).
+    Safe text is also stripped of control characters and truncated to
+    `_MAX_USER_INPUT_CHARS` characters.
     """
     if not user_input:
         return True, ""
 
     input_lower = user_input.lower()
     for pattern in PROMPT_INJECTION_PATTERNS:
-        if re.search(pattern, input_lower):
-            clean_text = "[Filtered message containing prompt injection attack]"
-            return False, clean_text
+        if re.search(pattern, input_lower, re.IGNORECASE):
+            return False, "[Filtered message containing prompt injection attack]"
 
-    # Strip dangerous control characters and markdown block escapes
-    clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', user_input)
-    clean = clean.replace("```", "").replace("system:", "").replace("assistant:", "").strip()
-    return True, clean[:1000]
+    # Strip dangerous Unicode control characters (\x00–\x08, \x0b, \x0c, \x0e–\x1f)
+    # These can be used to smuggle hidden instructions invisible to human reviewers.
+    clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', user_input)
+    # Remove LLM delimiter tokens that could re-inject structure into a prompt
+    clean = (
+        clean
+        .replace("```", "")
+        .replace("system:", "")
+        .replace("assistant:", "")
+        .replace("<|endoftext|>", "")
+        .strip()
+    )
+    if len(clean) > _MAX_USER_INPUT_CHARS:
+        clean = clean[:_MAX_USER_INPUT_CHARS] + _TRUNCATION_MARKER
+    return True, clean
+
+
+def sanitize_for_llm_context(context: Dict[str, str], max_chars: int = _MAX_CONTEXT_FIELD_CHARS) -> Dict[str, str]:
+    """
+    Sanitizes a dictionary of context fields before they are injected into an
+    LLM prompt. Each string value is:
+      1. Stripped of control characters.
+      2. Truncated to `max_chars` with a [TRUNCATED] marker.
+      3. Checked for injection patterns — if matched, the field is replaced with
+         a safe placeholder so the rest of the context remains usable.
+
+    Returns a new dictionary with sanitized values.
+    """
+    sanitized: Dict[str, str] = {}
+    for key, value in context.items():
+        if not isinstance(value, str):
+            sanitized[key] = value
+            continue
+        is_safe, clean = validate_prompt_injection(value)
+        if not is_safe:
+            sanitized[key] = f"[{key}: FIELD FILTERED — injection pattern detected]"
+            continue
+        # Apply field-level max length separately from the user input cap
+        if len(clean) > max_chars:
+            clean = clean[:max_chars] + _TRUNCATION_MARKER
+        sanitized[key] = clean
+    return sanitized
+
+
+def validate_grounding_output(llm_response: str, known_property_ids: Optional[List[str]] = None) -> Tuple[bool, str]:
+    """
+    Checks whether an LLM response contains price claims that are NOT anchored
+    to a known property ID from the current retrieval context.
+
+    This guards against hallucinated property prices being presented to customers.
+
+    Args:
+        llm_response: The raw text generated by the LLM.
+        known_property_ids: List of property IDs that were legitimately
+            injected into the context for this turn. Pass `[]` or `None`
+            if no properties were provided.
+
+    Returns:
+        (is_grounded: bool, reason: str)
+        `is_grounded=True` means no unanchored price claims were detected.
+    """
+    if not llm_response:
+        return True, "empty_response"
+
+    has_price_claim = bool(_PRICE_CLAIM_PATTERN.search(llm_response))
+    if not has_price_claim:
+        return True, "no_price_claims"
+
+    # A price claim exists — check if any known property ID is referenced
+    if not known_property_ids:
+        return False, "price_claim_without_any_property_context"
+
+    for pid in known_property_ids:
+        if pid and pid in llm_response:
+            return True, "price_anchored_to_known_property"
+
+    return False, "price_claim_without_matching_property_id_in_response"

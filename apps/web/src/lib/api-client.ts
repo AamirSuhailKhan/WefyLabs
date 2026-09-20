@@ -1,5 +1,5 @@
 import { 
-  Lead, LeadDetail, LeadListResponse, Broker, AdminStats, PipelineStage, LeadNote, LeadTag, Task, Conversation,
+  Lead, LeadDetail, LeadListResponse, Broker, LeadNote, LeadTag, Task, Conversation,
   CalendarSlotSearchResponse, CalendarBookingRequest, CalendarBookingResponse, MeetingPreparationBrief,
   MeetingNoShowPrediction, MeetingOutcome, ViewingItineraryResponse, CalendarConflict,
   PriorityItem, TodayScheduleItem, InventoryIntelligence, DailyBriefing, CommandCenterSummary,
@@ -37,94 +37,31 @@ export const removeToken = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('wefylabs_token');
     localStorage.removeItem('beetlelabs_token');
+    localStorage.removeItem('wefylabs_org_id');
+    localStorage.removeItem('beetlelabs_org_id');
   }
 };
 
-// Fallback Mock Data for resilient frontend rendering if backend API is offline
-const MOCK_LEADS: Lead[] = [
-  {
-    id: 'demo-lead-1',
-    broker_id: 'demo-broker-1',
-    phone: '+919876543210',
-    name: 'Rajesh Kumar',
-    source: 'whatsapp_forward',
-    score: 'hot',
-    score_confidence: 0.94,
-    budget_min: 4000000,
-    budget_max: 5000000,
-    property_type: '2bhk',
-    transaction_type: 'buy',
-    preferred_locations: ['Koramangala', 'HSR Layout'],
-    timeline: '3_months',
-    loan_status: 'not_started',
-    status: 'qualified',
-    stage_id: 'stg-contacted',
-    stage_name: 'contacted',
-    pipeline_stage: 'contacted',
-    notes: [
-      { id: 'note-1', content: 'Wants south-facing 2BHK in Koramangala. Flexible up to 55L if ready to move.', color_tag: 'blue', created_at: new Date().toISOString() }
-    ],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'demo-lead-2',
-    broker_id: 'demo-broker-1',
-    phone: '+919812345678',
-    name: 'Priya Ananth',
-    source: 'facebook',
-    score: 'warm',
-    score_confidence: 0.78,
-    budget_min: 7500000,
-    budget_max: 9000000,
-    property_type: '3bhk',
-    transaction_type: 'buy',
-    preferred_locations: ['Indiranagar', 'Whitefield'],
-    timeline: '3_months',
-    loan_status: 'in_process',
-    status: 'qualified',
-    stage_id: 'stg-viewing',
-    stage_name: 'viewing',
-    pipeline_stage: 'viewing',
-    notes: [
-      { id: 'note-2', content: 'NRI client based in Dubai. Prefers gated community with pool.', color_tag: 'purple', created_at: new Date().toISOString() }
-    ],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'demo-lead-3',
-    broker_id: 'demo-broker-1',
-    phone: '+919988776655',
-    name: 'Amitabh V',
-    source: 'google',
-    score: 'cold',
-    score_confidence: 0.65,
-    budget_min: 2000000,
-    budget_max: 2500000,
-    property_type: '1bhk',
-    transaction_type: 'rent',
-    preferred_locations: ['Electronic City'],
-    timeline: '6_months',
-    loan_status: 'not_needed',
-    status: 'qualified',
-    stage_id: 'stg-new',
-    stage_name: 'new',
-    pipeline_stage: 'new',
-    notes: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+export const getOrganizationId = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('wefylabs_org_id') || localStorage.getItem('beetlelabs_org_id') || '';
   }
-];
+  return '';
+};
 
-const MOCK_STAGES: PipelineStage[] = [
-  { id: 'stg-new', broker_id: 'b1', name: 'new', order_index: 0, color: '#6B7280', is_default: 'true', created_at: '' },
-  { id: 'stg-contacted', broker_id: 'b1', name: 'contacted', order_index: 1, color: '#3B82F6', is_default: 'true', created_at: '' },
-  { id: 'stg-viewing', broker_id: 'b1', name: 'viewing', order_index: 2, color: '#EAB308', is_default: 'true', created_at: '' },
-  { id: 'stg-negotiating', broker_id: 'b1', name: 'negotiating', order_index: 3, color: '#F97316', is_default: 'true', created_at: '' },
-  { id: 'stg-won', broker_id: 'b1', name: 'closed_won', order_index: 4, color: '#22C55E', is_default: 'true', created_at: '' },
-  { id: 'stg-lost', broker_id: 'b1', name: 'closed_lost', order_index: 5, color: '#EF4444', is_default: 'true', created_at: '' }
-];
+export const setOrganizationId = (orgId: string): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('wefylabs_org_id', orgId);
+    localStorage.setItem('beetlelabs_org_id', orgId);
+  }
+};
+
+export const removeOrganizationId = (): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('wefylabs_org_id');
+    localStorage.removeItem('beetlelabs_org_id');
+  }
+};
 
 function formatFieldLabel(field: string): string {
   const parts = field.split('.').filter(p => p !== 'body');
@@ -234,6 +171,7 @@ export async function fetcher<T>(endpoint: string, options?: RequestInit): Promi
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${base}${cleanEndpoint}`;
   const token = getToken();
+  const orgId = getOrganizationId();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -242,6 +180,10 @@ export async function fetcher<T>(endpoint: string, options?: RequestInit): Promi
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (orgId && !headers['X-WefyLabs-Organization-Id']) {
+    headers['X-WefyLabs-Organization-Id'] = orgId;
   }
 
   try {
@@ -422,18 +364,7 @@ export const api = {
   },
 
   // Brokers
-  getBrokerProfile: () => fetcher<Broker>('/brokers/me').catch(() => ({
-    id: 'demo-broker-1',
-    email: 'broker@wefylabs.com',
-    phone: '+919876543210',
-    name: 'Authenticated Broker',
-    agency_name: 'Unassigned Agency',
-    city: 'Location Unspecified',
-    whatsapp_number: '+919876543210',
-    subscription_status: 'active',
-    onboarding_status: 'ONBOARDED',
-    created_at: new Date().toISOString()
-  })),
+  getBrokerProfile: () => fetcher<Broker>('/brokers/me'),
 
   updateBrokerProfile: (data: Partial<Broker>) => fetcher<Broker>('/brokers/me', {
     method: 'PATCH',
@@ -796,15 +727,9 @@ export const api = {
     fetcher<any>('/whatsapp/simulate', {
       method: 'POST',
       body: JSON.stringify(data)
-    }).catch(() => ({
-      lead_id: 'demo-lead-1',
-      reply_message: 'Thank you! We received your details on budget and preferred location.',
-      lead_status: 'qualified',
-      score: 'hot'
-    })),
+    }),
 
   // Admin Stats
-  getAdminStats: () => fetcher<AdminStats>('/admin/stats'),
 
   // Billing & Payments
   billing: {
@@ -2323,6 +2248,457 @@ export interface QualificationConversationStateData {
 export const apiClient = api;
 
 
+// ─── AI Sales Agent API Client ───────────────────────────────────────────────
+// Wires to /api/v1/ai-agent/v1/* endpoints
 
+export interface AISendMessageRequest {
+  lead_id: string;
+  organization_id: string;
+  channel?: string;
+  content: string;
+  sender_phone?: string;
+  sender_name?: string;
+  metadata?: Record<string, unknown>;
+}
 
+export interface AISendMessageResponse {
+  session_id: string;
+  lead_id: string;
+  content: string;
+  channel: string;
+  turn_index: number;
+  current_state: string;
+  decision_type: string;
+  escalated: boolean;
+  escalation_id?: string | null;
+  tool_results?: Array<{ tool: string; success: boolean; result: unknown }> | null;
+  safety_violations?: string[] | null;
+  was_blocked: boolean;
+}
 
+export interface AIConversationTurn {
+  id: string;
+  session_id: string;
+  turn_index: number;
+  from_state: string;
+  to_state: string;
+  customer_message?: string | null;
+  agent_response?: string | null;
+  trigger?: string | null;
+  transition_reason?: string | null;
+  tool_calls?: Array<any> | null;
+  escalated?: boolean | null;
+  created_at: string;
+}
+
+export interface AIQualificationProfile {
+  session_id: string;
+  lead_id: string;
+  organization_id: string;
+  completion_pct: number;
+  is_qualified: boolean;
+  fields_collected: number;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  budget_currency?: string | null;
+  property_type?: string | null;
+  bedrooms?: number | null;
+  preferred_locations?: string[] | null;
+  purpose?: string | null;
+  timeline?: string | null;
+  nationality?: string | null;
+  family_size?: number | null;
+  is_cash_buyer?: boolean | null;
+  mortgage_status?: string | null;
+}
+
+export interface AIShortlistItem {
+  property_id: string;
+  name: string;
+  type?: string | null;
+  bedrooms?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  location?: string | null;
+  status: string;
+  notes?: string | null;
+  source_verified: boolean;
+}
+
+export interface AIShortlistResponse {
+  lead_id: string;
+  items: AIShortlistItem[];
+  total: number;
+  source_verified: boolean;
+}
+
+export interface AIAvailableSlot {
+  date: string;
+  time: string;
+  confirmed: boolean;
+  note?: string;
+}
+
+export interface AIAvailableSlotsResponse {
+  slots: AIAvailableSlot[];
+  calendar_connected: boolean;
+  source_verified: boolean;
+  note?: string;
+}
+
+export interface AIPropertyComparison {
+  id: string;
+  name: string;
+  type?: string | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  area_sqft?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  location?: string | null;
+  city?: string | null;
+  status?: string | null;
+  possession?: string | null;
+  amenities?: string[];
+  developer?: string | null;
+  source_verified: boolean;
+}
+
+export interface AIComparisonResponse {
+  properties: AIPropertyComparison[];
+  total: number;
+  missing_ids: string[];
+  source_verified: boolean;
+}
+
+export interface AIEscalateRequest {
+  reason: string;
+  priority?: string;
+  notes?: string;
+}
+
+export interface AIHumanReplyRequest {
+  content: string;
+  agent_name?: string;
+  resolve_escalation?: boolean;
+  resolution_notes?: string;
+}
+
+/** Send a message to the AI Sales Agent (REST fallback) */
+export async function aiSendMessage(dto: AISendMessageRequest): Promise<AISendMessageResponse> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: 'web', ...dto }),
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`AI message failed: ${resp.status} ${err}`);
+  }
+  return resp.json();
+}
+
+/** Get session status */
+export async function aiGetSession(sessionId: string): Promise<unknown> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}`);
+  if (!resp.ok) throw new Error(`Session not found: ${sessionId}`);
+  return resp.json();
+}
+
+/** Get conversation history for a session */
+export async function aiGetHistory(sessionId: string, limit = 50): Promise<AIConversationTurn[]> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/history?limit=${limit}`);
+  if (!resp.ok) throw new Error(`History fetch failed: ${sessionId}`);
+  return resp.json();
+}
+
+/** Get buyer qualification profile for a session */
+export async function aiGetQualification(sessionId: string): Promise<AIQualificationProfile> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/qualification`);
+  if (!resp.ok) throw new Error(`Qualification not found: ${sessionId}`);
+  return resp.json();
+}
+
+/** Get the buyer's shortlist for a session */
+export async function aiGetShortlist(
+  sessionId: string,
+  statusFilter?: string
+): Promise<AIShortlistResponse> {
+  const base = getApiBase();
+  const qs = statusFilter ? `?status_filter=${statusFilter}` : '';
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/shortlist${qs}`);
+  if (!resp.ok) throw new Error(`Shortlist fetch failed: ${sessionId}`);
+  return resp.json();
+}
+
+/** Add a property to the shortlist */
+export async function aiAddToShortlist(
+  sessionId: string,
+  propertyId: string,
+  status = 'shortlisted',
+  notes?: string
+): Promise<{ success: boolean; property_id: string; status: string }> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/shortlist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ property_id: propertyId, status, notes }),
+  });
+  if (!resp.ok) throw new Error(`Shortlist add failed`);
+  const data = await resp.json();
+  if (!data.success) throw new Error(data.error || 'Shortlist add failed');
+  return data;
+}
+
+/** Get available viewing slots */
+export async function aiGetAvailableSlots(
+  orgId: string,
+  propertyId?: string
+): Promise<AIAvailableSlotsResponse> {
+  const base = getApiBase();
+  const qs = propertyId ? `?property_id=${propertyId}` : '';
+  const resp = await fetch(`${base}/ai-agent/v1/slots/${orgId}${qs}`);
+  if (!resp.ok) throw new Error(`Slots fetch failed`);
+  return resp.json();
+}
+
+/** Compare multiple properties side-by-side */
+export async function aiCompareProperties(
+  sessionId: string,
+  propertyIds: string[]
+): Promise<AIComparisonResponse> {
+  const base = getApiBase();
+  const qs = propertyIds.map(id => `property_ids=${id}`).join('&');
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/comparison?${qs}`);
+  if (!resp.ok) throw new Error(`Comparison fetch failed`);
+  return resp.json();
+}
+
+/** Force escalate a session to a human agent */
+export async function aiForceEscalate(
+  sessionId: string,
+  dto: AIEscalateRequest
+): Promise<unknown> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/escalate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dto),
+  });
+  if (!resp.ok) throw new Error(`Escalation failed`);
+  return resp.json();
+}
+
+/** Send a human agent reply into an escalated session */
+export async function aiHumanReply(
+  sessionId: string,
+  dto: AIHumanReplyRequest
+): Promise<unknown> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/sessions/${sessionId}/human-reply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dto),
+  });
+  if (!resp.ok) throw new Error(`Human reply failed`);
+  return resp.json();
+}
+
+/**
+ * Create a WebSocket connection to the AI agent streaming chat endpoint.
+ * Falls back to REST if WebSocket is not available.
+ *
+ * Usage:
+ *   const ws = aiCreateChatWebSocket(orgId, leadId);
+ *   ws.onmessage = (e) => { const msg = JSON.parse(e.data); ... };
+ *   ws.send(JSON.stringify({ content: 'Hello' }));
+ */
+export function aiCreateChatWebSocket(
+  organizationId: string,
+  leadId: string
+): WebSocket | null {
+  try {
+    const base = getApiBase();
+    const wsBase = base.replace(/^http/, 'ws');
+    const url = `${wsBase}/ai-agent/v1/ws/chat/${organizationId}/${leadId}`;
+    return new WebSocket(url);
+  } catch {
+    return null;
+  }
+}
+
+export interface AIEscalationItem {
+  id: string;
+  session_id: string;
+  lead_id: string;
+  organization_id: string;
+  reason: string;
+  status: string;
+  priority: string;
+  assigned_to?: string | null;
+  notes?: string | null;
+  lead_name?: string | null;
+  lead_phone?: string | null;
+  briefing?: {
+    summary?: string;
+    key_facts?: Record<string, any>;
+    recommended_action?: string;
+    escalation_trigger?: string;
+  } | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+/** Get list of escalations for an organization */
+export async function aiGetEscalations(
+  organizationId: string,
+  statusFilter?: string,
+  priority?: string
+): Promise<AIEscalationItem[]> {
+  const base = getApiBase();
+  const params = new URLSearchParams({ organization_id: organizationId });
+  if (statusFilter) params.append('status', statusFilter);
+  if (priority) params.append('priority', priority);
+  const resp = await fetch(`${base}/ai-agent/v1/escalations?${params.toString()}`);
+  if (!resp.ok) throw new Error('Failed to fetch escalations');
+  return resp.json();
+}
+
+/** Get AI decision logs for a session */
+export async function aiGetDecisions(sessionId: string): Promise<unknown[]> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/decisions?session_id=${sessionId}`);
+  if (!resp.ok) throw new Error(`Failed to fetch decisions for session ${sessionId}`);
+  return resp.json();
+}
+
+/** Get tool execution logs for a session */
+export async function aiGetToolExecutions(sessionId: string): Promise<unknown[]> {
+  const base = getApiBase();
+  const resp = await fetch(`${base}/ai-agent/v1/tools/executions?session_id=${sessionId}`);
+  if (!resp.ok) throw new Error(`Failed to fetch tool executions for session ${sessionId}`);
+  return resp.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Core Product Part 1 — Canonical Customer Intelligence & Memory API Hooks
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface IdentityResolutionRequest {
+  phone?: string;
+  email?: string;
+  lead_id?: string;
+  name?: string;
+}
+
+export interface IdentityResolutionResponse {
+  match_status: 'EXACT_MATCH' | 'POSSIBLE_MATCH' | 'NO_MATCH';
+  confidence: number;
+  customer_id?: string;
+  identity_id?: string;
+  matched_by?: string;
+  candidate_details?: Record<string, any>;
+  explanation: string;
+}
+
+export interface CustomerRequirementProfile {
+  customer_id: string;
+  transaction_type?: string;
+  budget_min?: number;
+  budget_max?: number;
+  currency: string;
+  locations: string[];
+  property_types: string[];
+  bhk: any[];
+  area_min?: number;
+  area_max?: number;
+  amenities: string[];
+  furnishing?: string;
+  possession_preference?: string;
+  timeline?: string;
+  purpose?: string;
+  financing_required?: string;
+  urgency?: string;
+  positive_preferences: Array<{ key: string; value: any; provenance: string; confidence: number }>;
+  negative_preferences: Array<{ key: string; description: string; provenance: string; confidence: number }>;
+  provenance_map: Record<string, string>;
+  last_updated_at?: string;
+}
+
+export interface BoundedMemoryResponse {
+  customer_id: string;
+  conversation_id?: string;
+  current_turn?: Record<string, any>;
+  current_session: Record<string, any>;
+  customer_memory: Record<string, any>;
+  crm_memory: Record<string, any>;
+  formatted_prompt_context: string;
+}
+
+export const customerIntelligenceApi = {
+  async resolveIdentity(request: IdentityResolutionRequest): Promise<IdentityResolutionResponse> {
+    const base = getApiBase();
+    const token = getToken();
+    const resp = await fetch(`${base}/customers/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(request)
+    });
+    if (!resp.ok) throw new Error('Failed to resolve customer identity');
+    return resp.json();
+  },
+
+  async getCustomerProfile(customerId: string): Promise<CustomerRequirementProfile> {
+    const base = getApiBase();
+    const token = getToken();
+    const resp = await fetch(`${base}/customers/${customerId}/profile`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+    if (!resp.ok) throw new Error(`Failed to fetch customer profile for ${customerId}`);
+    return resp.json();
+  },
+
+  async updateRequirements(
+    customerId: string,
+    update: Record<string, any>
+  ): Promise<CustomerRequirementProfile> {
+    const base = getApiBase();
+    const token = getToken();
+    const resp = await fetch(`${base}/customers/${customerId}/requirements`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(update)
+    });
+    if (!resp.ok) throw new Error(`Failed to update requirements for customer ${customerId}`);
+    return resp.json();
+  },
+
+  async getBoundedMemory(
+    customerId: string,
+    conversationId?: string
+  ): Promise<BoundedMemoryResponse> {
+    const base = getApiBase();
+    const token = getToken();
+    const url = new URL(`${base}/customers/${customerId}/memory`);
+    if (conversationId) url.searchParams.append('conversation_id', conversationId);
+    const resp = await fetch(url.toString(), {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+    if (!resp.ok) throw new Error(`Failed to fetch bounded memory for customer ${customerId}`);
+    return resp.json();
+  }
+};

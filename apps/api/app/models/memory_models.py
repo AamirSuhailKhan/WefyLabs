@@ -154,6 +154,14 @@ class MemoryPropertyFeedback(Base, TimestampMixin):
     feedback_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     interest_score: Mapped[float] = mapped_column(Float, default=0.50, nullable=False)
 
+    @property
+    def reaction(self) -> str:
+        return self.feedback_type
+
+    @property
+    def objection_category(self) -> Optional[str]:
+        return self.rejection_reason_code
+
 
 class MemoryAuditLog(Base, TimestampMixin):
     """

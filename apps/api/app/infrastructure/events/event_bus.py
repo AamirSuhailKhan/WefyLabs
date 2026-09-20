@@ -45,8 +45,19 @@ class StandardDomainEvents:
     PROPERTY_SHARED = "PropertyShared"
     PIPELINE_CHANGED = "PipelineChanged"
     STAGE_CHANGED = "StageChanged"
-    WEBHOOK_RECEIVED = "WebhookReceived"
     AI_QUALIFICATION_COMPLETED = "AIQualificationCompleted"
+    # Canonical Part 1 Customer Intelligence Events
+    CONVERSATION_CREATED = "conversation.created"
+    MESSAGE_RECEIVED = "message.received"
+    MESSAGE_CREATED = "message.created"
+    CUSTOMER_REQUIREMENT_UPDATED = "customer.requirement_updated"
+    CUSTOMER_PREFERENCE_UPDATED = "customer.preference_updated"
+    # Canonical Part 2 Property Intelligence Events
+    PROPERTY_CREATED = "property.created"
+    PROPERTY_UPDATED = "property.updated"
+    PROPERTY_PRICE_CHANGED = "property.price_changed"
+    PROPERTY_AVAILABILITY_CHANGED = "property.availability_changed"
+    PROPERTY_ARCHIVED = "property.archived"
 
 class DomainEventBus:
     """

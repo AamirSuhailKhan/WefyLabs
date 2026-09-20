@@ -112,6 +112,8 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     interested_leads: Mapped[List["LeadPropertyInterest"]] = relationship("LeadPropertyInterest", back_populates="property_listing", cascade="all, delete-orphan")
 
     def __init__(self, *args, **kwargs):
+        if "location" in kwargs and "locality" not in kwargs:
+            kwargs["locality"] = kwargs.pop("location")
         if "currency" in kwargs and "currency_code" not in kwargs:
             kwargs["currency_code"] = kwargs.pop("currency")
         if "built_up_area_sqft" in kwargs and "area_value" not in kwargs:
@@ -122,6 +124,14 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
             except (ZeroDivisionError, ValueError):
                 pass
         super().__init__(*args, **kwargs)
+
+    @property
+    def location(self) -> Optional[str]:
+        return self.address or self.locality
+
+    @location.setter
+    def location(self, val: str):
+        self.locality = val
 
     @property
     def currency(self) -> str:
@@ -214,6 +224,14 @@ class LeadPropertyInterest(Base, TimestampMixin):
     @property
     def final_score(self) -> float:
         return self.match_score
+
+    @property
+    def interaction_type(self) -> str:
+        return self.status
+
+    @interaction_type.setter
+    def interaction_type(self, val: str):
+        self.status = val
 
     __table_args__ = (
         UniqueConstraint("organization_id", "lead_id", "property_id", name="uq_org_lead_property"),

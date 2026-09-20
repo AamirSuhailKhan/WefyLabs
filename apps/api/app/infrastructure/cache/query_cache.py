@@ -73,3 +73,24 @@ class AsyncQueryCacheService:
     def clear(cls) -> None:
         _memory_cache_store.clear()
         _tag_index.clear()
+
+
+class QueryCacheWrapper:
+    async def get(self, key: str) -> Optional[Any]:
+        return AsyncQueryCacheService.get(key)
+
+    async def set(self, key: str, data: Any, ttl_seconds: int = 300, tags: Optional[List[str]] = None) -> None:
+        AsyncQueryCacheService.set(key, data, ttl_seconds=ttl_seconds, tags=tags)
+
+    async def invalidate(self, key: str) -> None:
+        AsyncQueryCacheService.invalidate(key)
+
+    async def invalidate_by_tag(self, tag: str) -> None:
+        AsyncQueryCacheService.invalidate_tag(tag)
+
+
+_query_cache_instance = QueryCacheWrapper()
+
+
+def get_query_cache() -> QueryCacheWrapper:
+    return _query_cache_instance

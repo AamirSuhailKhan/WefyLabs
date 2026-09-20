@@ -1,11 +1,12 @@
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional
 import logging
 
 logger = logging.getLogger("beetlelabs.dependencies")
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.models.broker import Broker
+from app.models.organization import OrganizationMember
 
 security = HTTPBearer()
 optional_security = HTTPBearer(auto_error=False)
@@ -120,6 +122,97 @@ async def get_optional_broker(
         return await get_current_broker(credentials=credentials, db=db)
     except HTTPException:
         return None
+
+
+async def require_super_admin(
+    broker: Broker = Depends(get_current_broker),
+) -> Broker:
+    """Allow platform operations only for an explicit server-side allowlist.
+
+    Tenant membership roles are intentionally insufficient here: a tenant owner
+    must never become a platform operator merely by owning an organization.
+    Empty configuration denies access, which is the safe launch default.
+    """
+    allowed_emails = {
+        email.strip().casefold()
+        for email in settings.SUPER_ADMIN_EMAILS
+        if email and email.strip()
+    }
+    if not broker.email or broker.email.casefold() not in allowed_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super-admin access is required.",
+        )
+    return broker
+
+
+@dataclass(frozen=True)
+class TenantContext:
+    """A tenant selected from the authenticated principal's memberships."""
+
+    organization_id: str
+
+
+async def get_current_tenant(
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db),
+    requested_organization_id: Optional[str] = Header(
+        default=None, alias="X-WefyLabs-Organization-Id"
+    ),
+) -> TenantContext:
+    """Resolve tenant context server-side and validate any workspace selection.
+
+    A client header can select among memberships but never grants access by
+    itself. Single-membership users remain backward compatible; users in more
+    than one organization must select an organization explicitly.
+    """
+    result = await db.execute(
+        select(OrganizationMember.organization_id).where(
+            OrganizationMember.broker_id == current_broker.id
+        )
+    )
+    organization_ids = [str(value) for value in result.scalars().all()]
+
+    if not organization_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ORGANIZATION_MEMBERSHIP_REQUIRED",
+                "message": "No organization membership is available for this account.",
+            },
+        )
+
+    if requested_organization_id:
+        try:
+            selected_organization_id = str(uuid.UUID(requested_organization_id))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "INVALID_ORGANIZATION_CONTEXT",
+                    "message": "The organization context must be a valid UUID.",
+                },
+            ) from exc
+        if selected_organization_id not in organization_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "ORGANIZATION_ACCESS_DENIED",
+                    "message": "You do not belong to the selected organization.",
+                },
+            )
+        return TenantContext(organization_id=selected_organization_id)
+
+    if len(organization_ids) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ORGANIZATION_CONTEXT_REQUIRED",
+                "message": "Select an organization before accessing this resource.",
+            },
+        )
+
+    return TenantContext(organization_id=organization_ids[0])
 
 async def require_active_subscription(
     broker: Broker = Depends(get_current_broker),

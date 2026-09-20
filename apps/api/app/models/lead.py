@@ -34,6 +34,7 @@ class Lead(Base):
         index=True
     )
     phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(
         String(50),
@@ -147,3 +148,32 @@ class Lead(Base):
     @property
     def organization_id(self) -> str:
         return str(self.broker_id)
+
+    def to_canonical_dict(self) -> Dict[str, Any]:
+        """Canonical representation of customer identity and CRM state."""
+        return {
+            "customer_id": str(self.id),
+            "organization_id": str(self.broker_id),
+            "name": self.name,
+            "phone": self.phone,
+            "email": self.email,
+            "source": self.source,
+            "status": self.status,
+            "pipeline_stage": self.pipeline_stage,
+            "score": self.score,
+            "score_confidence": self.score_confidence,
+            "transaction_type": self.transaction_type,
+            "budget_min": self.budget_min,
+            "budget_max": self.budget_max,
+            "budget_currency": self.budget_currency or "INR",
+            "property_type": self.property_type,
+            "preferred_locations": self.preferred_locations or [],
+            "timeline": self.timeline,
+            "loan_status": self.loan_status,
+            "country_code": self.country_code,
+            "locale": self.locale,
+            "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
+            "qualified_at": self.qualified_at.isoformat() if self.qualified_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

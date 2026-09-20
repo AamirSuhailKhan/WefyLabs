@@ -45,7 +45,9 @@ class DecisionResult:
 # ─── Escalation Detector ─────────────────────────────────────────────────────
 
 _HUMAN_REQUEST_KEYWORDS = [
-    "talk to human", "speak to agent", "real person", "human agent",
+    "talk to human", "talk to a human", "speak to a human", "speak to human",
+    "speak to agent", "speak to an agent", "real person", "human agent",
+    "talk to someone", "speak with someone",
     "transfer me", "connect me", "i want to speak", "call me",
     "your manager", "supervisor",
 ]

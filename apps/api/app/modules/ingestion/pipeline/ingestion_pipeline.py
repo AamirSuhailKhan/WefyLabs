@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.lead import Lead
+from app.models.broker import Broker
+from app.models.organization import OrganizationMember
 from app.models.ingestion_models import OriginalPayload, IngestionLog
 from app.models.infrastructure_models import TimelineEvent
 from app.modules.ingestion.connectors.connector_factory import get_connector
@@ -100,13 +102,27 @@ class LeadIngestionPipeline:
 
         # 5. Record Timeline & Audit Log
         await self._record_timeline(lead, source, is_new)
-        await self.audit_service.log(AuditCreateDTO(
+        actor_uuid = None
+        if user_id and user_id != "system":
+            try:
+                actor_uuid = uuid.UUID(str(user_id))
+            except (ValueError, AttributeError):
+                actor_uuid = None
+
+        org_uuid_audit = None
+        if organization_id:
+            try:
+                org_uuid_audit = uuid.UUID(str(organization_id))
+            except (ValueError, AttributeError):
+                org_uuid_audit = None
+
+        await self.audit_service.record(AuditCreateDTO(
             action="lead.ingested",
             resource_type="lead",
             resource_id=str(lead.id),
-            actor_id=user_id if user_id != "system" else None,
+            actor_id=actor_uuid,
             actor_type="system" if user_id == "system" else "user",
-            organization_id=organization_id,
+            organization_id=org_uuid_audit,
             changes={"source": source, "is_new": is_new, "ingestion_id": ingestion_id},
             request_id=ingestion_id,
         ))
@@ -147,8 +163,23 @@ class LeadIngestionPipeline:
         except Exception:
             org_uuid = uuid.uuid4()
 
+        # Resolve target broker for lead ownership & DB FK integrity
+        broker_stmt = select(Broker.id).where(Broker.id == org_uuid)
+        target_broker_id = (await self.db.execute(broker_stmt)).scalars().first()
+
+        if not target_broker_id:
+            member_stmt = (
+                select(OrganizationMember.broker_id)
+                .where(OrganizationMember.organization_id == org_uuid)
+                .order_by(OrganizationMember.role.asc())
+            )
+            target_broker_id = (await self.db.execute(member_stmt)).scalars().first()
+
+        if not target_broker_id:
+            target_broker_id = org_uuid
+
         # Check existing lead by phone
-        stmt = select(Lead).where(Lead.broker_id == org_uuid, Lead.phone == dto.phone, Lead.deleted_at.is_(None))
+        stmt = select(Lead).where(Lead.broker_id == target_broker_id, Lead.phone == dto.phone, Lead.deleted_at.is_(None))
         lead = (await self.db.execute(stmt)).scalars().first()
 
         if lead:
@@ -164,7 +195,7 @@ class LeadIngestionPipeline:
         else:
             notes_payload = [{"text": n, "added_at": datetime.now(timezone.utc).isoformat()} for n in dto.notes]
             lead = Lead(
-                broker_id=org_uuid,
+                broker_id=target_broker_id,
                 phone=dto.phone,
                 name=dto.name,
                 source=dto.source if dto.source in ('whatsapp_forward', 'facebook', 'google', 'manual') else 'manual',

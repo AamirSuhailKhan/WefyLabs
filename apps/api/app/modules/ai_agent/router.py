@@ -113,7 +113,10 @@ async def process_inbound_message(
         sender_name=dto.sender_name,
         metadata=dto.metadata
     )
-    outgoing: OutgoingMessage = await manager.process(db, incoming)
+    try:
+        outgoing: OutgoingMessage = await manager.process(db, incoming)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Conversation access denied") from exc
     return MessageResponseDTO(
         session_id=outgoing.session_id,
         lead_id=outgoing.lead_id,
@@ -431,3 +434,99 @@ async def list_supported_channels():
         ],
         "note": "All active channels share the same ConversationManager engine.",
     }
+
+
+# ─── 15. GET /sessions/{session_id}/shortlist ─────────────────────────────────
+
+class AddShortlistDTO(BaseModel):
+    property_id: str
+    status: str = Field(default="shortlisted",
+                        description="shortlisted | liked | rejected | visit_requested")
+    notes: Optional[str] = None
+
+
+@router.get("/sessions/{session_id}/shortlist")
+async def get_session_shortlist(
+    session_id: str,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get buyer's shortlisted properties for this session."""
+    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="AgentSession not found")
+
+    from app.modules.ai_agent.tool_executor.services import ShortlistService
+    svc = ShortlistService(db)
+    return await svc.get(
+        lead_id=session.lead_id,
+        organization_id=session.organization_id,
+        status_filter=status_filter,
+    )
+
+
+@router.post("/sessions/{session_id}/shortlist")
+async def add_to_session_shortlist(
+    session_id: str,
+    dto: AddShortlistDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Add or update a property in the buyer's shortlist."""
+    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="AgentSession not found")
+
+    from app.modules.ai_agent.tool_executor.services import ShortlistService
+    svc = ShortlistService(db)
+    data = await svc.add(
+        lead_id=session.lead_id,
+        property_id=dto.property_id,
+        status=dto.status,
+        organization_id=session.organization_id,
+        notes=dto.notes,
+    )
+    await db.commit()
+    return data
+
+
+# ─── 16. GET /sessions/{session_id}/comparison ───────────────────────────────
+
+@router.get("/sessions/{session_id}/comparison")
+async def compare_session_properties(
+    session_id: str,
+    property_ids: List[str] = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Compare multiple properties side-by-side with verified data."""
+    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="AgentSession not found")
+
+    from app.modules.ai_agent.tool_executor.services import ComparisonService
+    svc = ComparisonService(db)
+    return await svc.compare(
+        property_ids=property_ids[:4],  # Hard limit: 4 max
+        organization_id=session.organization_id,
+    )
+
+
+# ─── 17. GET /slots/{organization_id} ────────────────────────────────────────
+
+@router.get("/slots/{organization_id}")
+async def get_viewing_slots(
+    organization_id: str,
+    property_id: Optional[str] = Query(None),
+    days_ahead: int = Query(7, le=30),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get available property viewing time slots (subject to calendar configuration)."""
+    from app.modules.ai_agent.tool_executor.services import CalendarSlotService
+    svc = CalendarSlotService(db)
+    return await svc.get_available_slots(
+        organization_id=organization_id,
+        property_id=property_id,
+        days_ahead=days_ahead,
+    )

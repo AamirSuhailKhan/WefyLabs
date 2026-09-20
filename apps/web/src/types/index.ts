@@ -127,15 +127,6 @@ export interface LeadListResponse {
   pages?: number;
 }
 
-export interface AdminStats {
-  total_brokers: number;
-  active_brokers: number;
-  total_leads: number;
-  qualified_leads: number;
-  hot_leads: number;
-  mrr_inr: number;
-}
-
 // ─── Calendar & Scheduling Intelligence Engine Types ─────────────────────────
 export interface CalendarTimeSlot {
   start_utc: string;

@@ -43,6 +43,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
   const [isTyping, setIsTyping] = useState(false);
   const [showScore, setShowScore] = useState(false);
   const [scoreData, setScoreData] = useState<{ score: string; confidence: number; reasoning: string } | null>(null);
+  const [isOfflineScript, setIsOfflineScript] = useState(false);
   const [customInput, setCustomInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -88,6 +89,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
         lead_phone: phoneInput,
         message: text
       });
+      setIsOfflineScript(false);
 
       setTimeout(() => {
         setIsTyping(false);
@@ -120,6 +122,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
       }, 900);
     } catch (e) {
       setIsTyping(false);
+      setIsOfflineScript(true);
       if (nextStep < CONVERSATION_FLOW.length) {
         const botMsg: Message = {
           id: Date.now() + 1,
@@ -132,9 +135,9 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
       } else {
         setShowScore(true);
         setScoreData({
-          score: 'hot',
-          confidence: 0.94,
-          reasoning: 'High intent buyer looking for 2BHK to buy in < 3 months in Koramangala. Call immediately.'
+          score: 'warm',
+          confidence: 0.85,
+          reasoning: '[Offline Demo Script] Simulated conversation flow. Connect live WhatsApp Cloud API in settings for real qualification.'
         });
       }
     }
@@ -154,6 +157,7 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
     setIsTyping(false);
     setShowScore(false);
     setScoreData(null);
+    setIsOfflineScript(false);
   };
 
   return (
@@ -168,8 +172,8 @@ export default function WhatsAppSimulator({ fullWidth = false }: { fullWidth?: b
             <div>
               <div className="text-sm font-semibold text-white">WefyLabs AI Assistant</div>
               <div className="text-xs text-blue-400 flex items-center gap-1.5 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                WhatsApp Live Simulator
+                <span className={`w-2 h-2 rounded-full ${isOfflineScript ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'}`} />
+                {isOfflineScript ? 'Interactive Demo Script' : 'WhatsApp Live Simulator'}
               </div>
             </div>
           </div>

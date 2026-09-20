@@ -6,12 +6,13 @@ rescheduling, cancellations, multi-property itineraries, AI briefs, outcomes, an
 """
 
 import uuid
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.dependencies import get_db, get_current_broker
+from app.dependencies import TenantContext, get_current_tenant, get_db, get_current_broker
 from app.models.broker import Broker
 from app.models.calendar_models import Meeting
 from app.modules.calendar.service import SchedulingOrchestratorService
@@ -23,61 +24,82 @@ from app.modules.calendar.dto.calendar_schemas import (
 )
 
 router = APIRouter(prefix="/calendar", tags=["Calendar, Meeting & Scheduling Intelligence Engine"])
+logger = logging.getLogger(__name__)
+
+
+async def _get_tenant_meeting(
+    db: AsyncSession, meeting_id: str, tenant: TenantContext
+) -> Meeting:
+    """Load a meeting only when it belongs to the authenticated tenant.
+
+    Returning 404 for a foreign record prevents ID enumeration and ensures every
+    meeting operation applies an object-level tenant boundary before invoking
+    the scheduling service.
+    """
+    result = await db.execute(
+        select(Meeting).where(
+            Meeting.id == meeting_id,
+            Meeting.organization_id == tenant.organization_id,
+        )
+    )
+    meeting = result.scalar_one_or_none()
+    if meeting is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found.")
+    return meeting
 
 
 @router.post("/slots/search", response_model=SlotSearchResponseDTO)
 async def search_available_slots_endpoint(
     req: SlotSearchRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Finds verified common meeting and viewing slots across broker working hours and property access windows.
     """
     try:
         service = SchedulingOrchestratorService(db)
-        org_id = str(current_broker.organization_id or current_broker.id)
-        return await service.search_available_slots(req, org_id)
+        return await service.search_available_slots(req, tenant.organization_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Calendar slot search failed for broker=%s", current_broker.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar slot search failed. Please retry.")
 
 
 @router.post("/book", response_model=BookingResponseDTO)
 async def book_appointment_endpoint(
     dto: BookingRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Acquires 5-minute collision hold, creates external calendar event, and confirms appointment.
     """
     try:
         service = SchedulingOrchestratorService(db)
-        org_id = str(current_broker.organization_id or current_broker.id)
         broker_id = str(current_broker.id)
-        return await service.book_meeting(dto, org_id, broker_id)
+        return await service.book_meeting(dto, tenant.organization_id, broker_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Calendar booking failed for broker=%s", current_broker.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar booking failed. Please retry.")
 
 
 @router.get("/bookings/{meeting_id}", response_model=BookingResponseDTO)
 async def get_booking_details_endpoint(
     meeting_id: str,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Retrieves appointment details, status, virtual link, and location.
     """
-    stmt = select(Meeting).where(Meeting.id == meeting_id)
-    res = await db.execute(stmt)
-    meeting = res.scalar_one_or_none()
-    if not meeting:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Meeting '{meeting_id}' not found.")
+    meeting = await _get_tenant_meeting(db, meeting_id, tenant)
     return BookingResponseDTO.model_validate(meeting)
 
 
@@ -86,18 +108,21 @@ async def reschedule_booking_endpoint(
     meeting_id: str,
     dto: RescheduleRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Atomically reschedules appointment and updates external calendar events.
     """
     try:
+        await _get_tenant_meeting(db, meeting_id, tenant)
         service = SchedulingOrchestratorService(db)
         return await service.reschedule_meeting(meeting_id, dto)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Calendar reschedule failed for broker=%s meeting=%s", current_broker.id, meeting_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar reschedule failed. Please retry.")
 
 
 @router.post("/bookings/{meeting_id}/cancel")
@@ -105,69 +130,78 @@ async def cancel_booking_endpoint(
     meeting_id: str,
     dto: CancellationRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Cancels appointment and removes external calendar events.
     """
     try:
+        await _get_tenant_meeting(db, meeting_id, tenant)
         service = SchedulingOrchestratorService(db)
         await service.cancel_meeting(meeting_id, dto)
         return {"status": "cancelled", "meeting_id": meeting_id}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Calendar cancellation failed for broker=%s meeting=%s", current_broker.id, meeting_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar cancellation failed. Please retry.")
 
 
 @router.post("/itineraries", response_model=ItineraryResponseDTO)
 async def calculate_viewing_itinerary_endpoint(
     dto: ItineraryRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Optimizes multi-property viewing itinerary and calculates transit travel windows.
     """
     service = SchedulingOrchestratorService(db)
-    org_id = str(current_broker.organization_id or current_broker.id)
-    return await service.calculate_viewing_itinerary(dto, org_id)
+    return await service.calculate_viewing_itinerary(dto, tenant.organization_id)
 
 
 @router.get("/bookings/{meeting_id}/brief", response_model=MeetingPreparationBriefDTO)
 async def get_meeting_brief_endpoint(
     meeting_id: str,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Retrieves or generates the pre-meeting AI preparation brief for the sales agent.
     """
     try:
+        await _get_tenant_meeting(db, meeting_id, tenant)
         service = SchedulingOrchestratorService(db)
         return await service.get_or_generate_brief(meeting_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Calendar meeting brief failed for broker=%s meeting=%s", current_broker.id, meeting_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar meeting brief failed. Please retry.")
 
 
 @router.get("/bookings/{meeting_id}/no-show", response_model=NoShowPredictionDTO)
 async def get_no_show_prediction_endpoint(
     meeting_id: str,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Evaluates no-show propensity and returns preventative confirmation recommendations.
     """
     try:
+        await _get_tenant_meeting(db, meeting_id, tenant)
         service = SchedulingOrchestratorService(db)
         return await service.predict_no_show(meeting_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("No-show prediction failed for broker=%s meeting=%s", current_broker.id, meeting_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No-show prediction failed. Please retry.")
 
 
 @router.post("/bookings/{meeting_id}/outcome", response_model=MeetingOutcomeDTO)
@@ -175,31 +209,34 @@ async def record_meeting_outcome_endpoint(
     meeting_id: str,
     dto: RecordOutcomeRequestDTO,
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Records post-meeting outcome, feedback, and updates CRM pipeline stage.
     """
     try:
+        await _get_tenant_meeting(db, meeting_id, tenant)
         service = SchedulingOrchestratorService(db)
         return await service.record_meeting_outcome(meeting_id, dto)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Meeting outcome failed for broker=%s meeting=%s", current_broker.id, meeting_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Meeting outcome failed. Please retry.")
 
 
 @router.get("/conflicts", response_model=List[CalendarConflictDTO])
 async def list_calendar_conflicts_endpoint(
     db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
     Lists external calendar synchronization conflicts for review.
     """
     service = SchedulingOrchestratorService(db)
-    org_id = str(current_broker.organization_id or current_broker.id)
-    return await service.list_conflicts(org_id)
+    return await service.list_conflicts(tenant.organization_id)
 
 
 # ─── Google Calendar OAuth & Token Management Endpoints ─────────────────────────
@@ -317,4 +354,3 @@ async def reauthorize_google_calendar(
         return GoogleCalendarConnectResponse(auth_url=auth_url, state=state)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
-

@@ -31,7 +31,13 @@ class RBACPermissionEvaluator:
         res = await db.execute(stmt)
         member = res.scalars().first()
 
-        role_name = member.role if member else "agent"
+        # Membership is the authorization boundary. Falling back to an agent
+        # permission set lets an unenrolled authenticated broker mutate CRM
+        # data, which is unsafe during legacy-account migration.
+        if member is None:
+            return []
+
+        role_name = member.role.lower()
 
         # Standard RBAC Permission mappings
         if role_name in ("owner", "admin"):
@@ -49,12 +55,15 @@ class RBACPermissionEvaluator:
                 "audit:view"
             ]
         else:
-            # Sales Agent / Default
-            return [
-                "leads:create", "leads:read", "leads:update",
-                "deals:create", "deals:read", "deals:update",
-                "properties:read"
-            ]
+            if role_name == "agent":
+                return [
+                    "leads:create", "leads:read", "leads:update",
+                    "deals:create", "deals:read", "deals:update",
+                    "properties:read"
+                ]
+            # Unknown roles must not inherit access through a permissive
+            # fallback. This also makes a bad role assignment observable.
+            return []
 
     @classmethod
     async def enforce_permission(

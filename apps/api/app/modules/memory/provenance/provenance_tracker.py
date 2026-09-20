@@ -16,19 +16,29 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 PROVENANCE_HIERARCHY: Dict[str, int] = {
+    "EXPLICIT": 100,
     "CUSTOMER_STATED": 100,
     "AGENT_CONFIRMED": 90,
+    "CRM": 85,
     "CRM_VERIFIED": 85,
+    "IMPORTED": 80,
+    "SYSTEM": 75,
     "BEHAVIORAL_SIGNAL": 60,
+    "INFERRED": 40,
     "AI_INFERRED": 40,
     "UNKNOWN": 10
 }
 
 DEFAULT_CONFIDENCE: Dict[str, float] = {
+    "EXPLICIT": 1.00,
     "CUSTOMER_STATED": 0.98,
     "AGENT_CONFIRMED": 0.90,
+    "CRM": 0.92,
     "CRM_VERIFIED": 0.92,
+    "IMPORTED": 0.85,
+    "SYSTEM": 0.80,
     "BEHAVIORAL_SIGNAL": 0.80,
+    "INFERRED": 0.60,
     "AI_INFERRED": 0.60,
     "UNKNOWN": 0.30
 }

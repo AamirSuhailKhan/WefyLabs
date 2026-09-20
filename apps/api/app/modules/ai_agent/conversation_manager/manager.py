@@ -120,6 +120,22 @@ class ConversationManager:
         # ── Step 2: Restore FSM ──────────────────────────────────────────────
         fsm = await restore_state(db, session_id)
 
+        # Enforce Human Ownership: If session is currently escalated, autonomous AI is suppressed
+        if session.escalated:
+            return OutgoingMessage(
+                session_id=session_id,
+                lead_id=incoming.lead_id,
+                content=(
+                    "You are currently connected with a dedicated human property specialist. "
+                    "They are reviewing your requirements and will respond shortly."
+                ),
+                channel=incoming.channel,
+                turn_index=session.turn_count,
+                current_state=session.current_state,
+                decision_type="HUMAN_ACTIVE",
+                escalated=True,
+            )
+
         # Terminal sessions — return closed message
         if fsm.is_terminal() and session.current_state != State.HUMAN_HANDOFF:
             return OutgoingMessage(
@@ -164,6 +180,30 @@ class ConversationManager:
             current_state=fsm.current_state,
         )
 
+        # Check explicit customer booking confirmation from metadata
+        is_confirmed_action = bool(
+            incoming.metadata and (
+                incoming.metadata.get("intent") in ("book_viewing", "confirm_booking", "confirm_viewing") or
+                incoming.metadata.get("confirmed_action") is True
+            )
+        )
+
+        if is_confirmed_action and incoming.metadata.get("property_id") and incoming.metadata.get("preferred_date"):
+            has_booking_call = any(tc.get("name") == "book_viewing" for tc in (llm_response.tool_calls or []))
+            if not has_booking_call:
+                forced_call = {
+                    "name": "book_viewing",
+                    "arguments": {
+                        "property_id": str(incoming.metadata["property_id"]),
+                        "preferred_date": str(incoming.metadata["preferred_date"]),
+                        "preferred_time": incoming.metadata.get("preferred_time"),
+                        "notes": incoming.metadata.get("notes"),
+                    }
+                }
+                if not llm_response.tool_calls:
+                    llm_response.tool_calls = []
+                llm_response.tool_calls.append(forced_call)
+
         # ── Step 8: Execute Tool Calls ────────────────────────────────────────
         tool_results = []
         if llm_response.tool_calls:
@@ -172,7 +212,17 @@ class ConversationManager:
                 session_id=session_id,
                 turn_index=turn_index,
                 tool_calls=llm_response.tool_calls,
-                context={"lead_data": {"name": ctx.lead_name, "phone": ctx.lead_phone}},
+                # The application, not the model, establishes this security
+                # context. All tool handlers receive tenant and resource scope.
+                context={
+                    "organization_id": ctx.organization_id,
+                    "enforce_tenant_scope": True,
+                    "lead_id": ctx.lead_id,
+                    "session_id": ctx.session_id,
+                    "qualification": ctx.qualification or {},
+                    "lead_data": {"name": ctx.lead_name, "phone": ctx.lead_phone},
+                    "confirmed_action": is_confirmed_action,
+                },
             )
 
             # If LLM called update_qualification, patch QualificationProfile
@@ -317,6 +367,20 @@ class ConversationManager:
         incoming: IncomingMessage,
     ) -> AgentSession:
         """Load existing session or create a new one. Restart-safe."""
+        # A client may never pair an arbitrary lead ID with an arbitrary
+        # organization. Resolve ownership from the canonical CRM record before
+        # creating or resuming a conversation session.
+        from app.models.lead import Lead
+        import uuid as _uuid
+        try:
+            l_uuid = _uuid.UUID(str(incoming.lead_id))
+        except Exception:
+            l_uuid = incoming.lead_id
+        lead_result = await db.execute(select(Lead).where(Lead.id == l_uuid))
+        lead = lead_result.scalar_one_or_none()
+        if not lead or str(lead.broker_id) != str(incoming.organization_id):
+            raise PermissionError("Lead is not available in this organization")
+
         result = await db.execute(
             select(AgentSession).where(AgentSession.session_token == token)
         )

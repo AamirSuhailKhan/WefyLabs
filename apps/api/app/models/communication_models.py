@@ -300,6 +300,8 @@ class ChannelMessage(Base):
     recipient_identifier: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # AI / Agent context
+    sender_type: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
+    # CUSTOMER | AI_AGENT | HUMAN_AGENT | SYSTEM
     sent_by_ai: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sent_by_agent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
@@ -334,6 +336,19 @@ class ChannelMessage(Base):
     delivery_records: Mapped[List["DeliveryStatusRecord"]] = relationship(
         "DeliveryStatusRecord", back_populates="message", cascade="all, delete-orphan"
     )
+
+    @property
+    def resolved_sender_type(self) -> str:
+        """Resolves sender type to canonical spec: CUSTOMER | AI_AGENT | HUMAN_AGENT | SYSTEM."""
+        if self.sender_type:
+            return self.sender_type.upper()
+        if self.direction == "inbound":
+            return "CUSTOMER"
+        if self.sent_by_ai:
+            return "AI_AGENT"
+        if self.sent_by_agent_id or self.sender_id:
+            return "HUMAN_AGENT"
+        return "SYSTEM"
 
     __table_args__ = (
         Index("ix_channel_msg_conv_created", "conversation_id", "created_at"),

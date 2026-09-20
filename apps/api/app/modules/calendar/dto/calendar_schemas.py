@@ -4,7 +4,7 @@ Pydantic v2 Data Transfer Objects for Calendar, Meeting, Viewing & Scheduling In
 
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class TimeSlotDTO(BaseModel):
@@ -88,6 +88,12 @@ class BookingResponseDTO(BaseModel):
     meeting_url: Optional[str] = None
     property_id: Optional[str] = None
 
+    @field_validator("id", "organization_id", "broker_id", "lead_id", mode="before")
+    @classmethod
+    def serialize_identifier(cls, value: object) -> Optional[str]:
+        """Keep the existing string API contract when ORM fields are UUIDs."""
+        return None if value is None else str(value)
+
 
 class RescheduleRequestDTO(BaseModel):
     new_slot_start_utc: datetime
@@ -142,6 +148,27 @@ class RecordOutcomeRequestDTO(BaseModel):
     agreed_next_step: Optional[str] = None
     next_follow_up_date: Optional[datetime] = None
     agent_notes: Optional[str] = None
+
+    @field_validator("buyer_interest_level", mode="before")
+    @classmethod
+    def parse_interest_level(cls, value: Any) -> int:
+        if isinstance(value, str):
+            mapping = {
+                "VERY_HIGH": 5,
+                "HIGH": 4,
+                "MEDIUM": 3,
+                "LOW": 2,
+                "VERY_LOW": 1,
+            }
+            clean_val = value.strip().upper()
+            if clean_val in mapping:
+                return mapping[clean_val]
+            try:
+                parsed = int(value)
+                return max(1, min(5, parsed))
+            except ValueError:
+                return 3
+        return int(value) if value is not None else 3
 
 
 class MeetingOutcomeDTO(BaseModel):

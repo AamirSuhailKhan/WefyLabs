@@ -45,6 +45,10 @@ class AuditService:
         except Exception as exc:
             logger.error(f"[AUDIT WRITE FAILURE] {exc}", exc_info=True)
 
+    async def log(self, dto: AuditCreateDTO) -> None:
+        """Alias for record() ensuring cross-module compatibility."""
+        await self.record(dto)
+
     async def search(self, dto: AuditSearchDTO) -> dict:
         """Search audit logs with pagination."""
         items, total = await self.repo.search(

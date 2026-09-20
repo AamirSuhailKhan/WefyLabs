@@ -21,6 +21,14 @@ class ToolDefinition:
     description: str
     parameters: Dict[str, Any]
     handler_key: str  # Key into ToolExecutor.handlers dict
+    # Machine-readable policy metadata.  The model only sees the function
+    # schema; the executor is the authority that enforces these controls.
+    access: str = "read"  # read | write | external
+    tenant_scoped: bool = True
+    required_permission: str = "ai_agent.use"
+    confirmation_required: bool = False
+    audit_required: bool = True
+    idempotency_required: bool = False
 
 
 # ─── Tool Definitions (JSON Schema for LLM) ──────────────────────────────────
@@ -231,6 +239,101 @@ TOOLS: List[ToolDefinition] = [
             "required": ["reason"],
         },
         handler_key="escalate_to_human",
+    ),
+
+    ToolDefinition(
+        name="get_available_slots",
+        description=(
+            "Get available property viewing time slots for the next 7 days. "
+            "ALWAYS call this before confirming any appointment. "
+            "Returns suggested slots; actual confirmation requires agent approval."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "Property to visit (optional)"},
+                "days_ahead": {"type": "integer", "default": 7,
+                               "description": "How many days ahead to check"},
+            },
+            "required": [],
+        },
+        handler_key="get_available_slots",
+    ),
+
+    ToolDefinition(
+        name="create_shortlist",
+        description=(
+            "Add a property to the customer's shortlist. "
+            "Call when the customer expresses interest or wants to save a property. "
+            "Status can be: shortlisted | liked | rejected | visit_requested."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "property_id": {"type": "string", "description": "Property ID to shortlist"},
+                "status": {"type": "string",
+                           "description": "shortlisted | liked | rejected | visit_requested",
+                           "default": "shortlisted"},
+                "notes": {"type": "string", "description": "Reason for shortlisting or rejection"},
+            },
+            "required": ["property_id"],
+        },
+        handler_key="create_shortlist",
+    ),
+
+    ToolDefinition(
+        name="get_shortlist",
+        description=(
+            "Retrieve the customer's current shortlisted properties. "
+            "Call to show what the customer has saved so far."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "status_filter": {"type": "string",
+                                  "description": "Filter by: shortlisted | liked | rejected | all"},
+            },
+            "required": [],
+        },
+        handler_key="get_shortlist",
+    ),
+
+    ToolDefinition(
+        name="compare_properties",
+        description=(
+            "Retrieve verified data for multiple properties for side-by-side comparison. "
+            "Call when customer says 'compare these' or 'which is better'. "
+            "Returns verified structured attributes only."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "property_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of property IDs to compare (2-4 max)",
+                },
+            },
+            "required": ["property_ids"],
+        },
+        handler_key="compare_properties",
+    ),
+
+    ToolDefinition(
+        name="get_handoff_context",
+        description=(
+            "Generate a structured handoff summary for the human agent. "
+            "Call BEFORE escalating to include customer context, requirements, shortlist, and objections."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "include_shortlist": {"type": "boolean", "default": True},
+                "include_objections": {"type": "boolean", "default": True},
+            },
+            "required": [],
+        },
+        handler_key="get_handoff_context",
     ),
 ]
 

@@ -69,6 +69,11 @@ class QualificationAgent(BaseSpecialistAgent):
     Focused qualification: asks BANT questions in the optimal order
     for the current buyer profile strategy.
     Owned by: state machine states [discovering, qualifying]
+
+    Uses a dedicated LLM call with a qualification-specific prompt to:
+    1. Extract structured buyer facts from the customer's message
+    2. Call update_qualification with the extracted data
+    3. Ask the single most important missing question
     """
     @property
     def agent_name(self) -> str:
@@ -79,12 +84,116 @@ class QualificationAgent(BaseSpecialistAgent):
         return ["discovering", "qualifying"]
 
     async def process(self, ctx: AgentContext, customer_message: str) -> Dict[str, Any]:
-        # TODO: Wire to dedicated LLM call with qualification-specific prompt
-        next_question = (ctx.fields_remaining or [None])[0]
+        """
+        Run a focused qualification LLM pass.
+
+        Returns update_qualification tool call arguments extracted from the
+        customer message, plus a natural next question for any missing field.
+        Falls back gracefully when LLM is unavailable.
+        """
+        import logging
+        _log = logging.getLogger("wefylabs.orchestrator.qualification")
+
+        qual = ctx.qualification or {}
+        collected_facts = {k: v for k, v in qual.items() if v is not None}
+        fields_needed = ctx.fields_remaining or []
+        next_priority = fields_needed[0] if fields_needed else None
+
+        # ── Build qualification extraction prompt ──────────────────────────
+        system_prompt = (
+            "You are a real estate buyer qualification specialist. "
+            "Extract ONLY buyer facts explicitly stated in the customer message. "
+            "Do NOT invent or assume facts not present in the message. "
+            "Return a JSON object with ONLY the fields the customer explicitly mentioned.\n\n"
+            "Fields you may extract: budget_min, budget_max, budget_currency, "
+            "is_cash_buyer, mortgage_status, property_type, bedrooms, bathrooms, "
+            "preferred_locations (array), purpose (invest|end_user|both), "
+            "timeline, nationality, family_size.\n\n"
+            "Respond with ONLY valid JSON. Example:\n"
+            '{"bedrooms": 3, "preferred_locations": ["Noida"], "budget_max": 15000000}\n\n'
+            "If no facts are present, respond with: {}"
+        )
+        user_prompt = (
+            f"Customer message: {customer_message}\n\n"
+            f"Already collected: {collected_facts}\n"
+            f"Extract NEW facts only from the customer message above."
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # ── Call LLM for extraction ────────────────────────────────────────
+        extracted_args: Dict[str, Any] = {}
+        try:
+            from app.modules.ai_agent.llm_router.router import build_router_from_env
+            router = build_router_from_env()
+            llm_resp = await router.route(
+                messages=messages,
+                tools=None,         # Pure extraction pass — no tools needed
+                max_tokens=256,     # Small; just JSON output
+                temperature=0.1,    # Low temperature for deterministic extraction
+            )
+            if llm_resp.success and llm_resp.content:
+                import json
+                # Strip markdown fences if model wrapped in ```json ... ```
+                raw = llm_resp.content.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("```")[1]
+                    if raw.startswith("json"):
+                        raw = raw[4:]
+                extracted_args = json.loads(raw.strip()) or {}
+                _log.debug(f"[QualificationAgent] Extracted: {extracted_args}")
+        except Exception as exc:
+            _log.warning(f"[QualificationAgent] LLM extraction failed: {exc}")
+
+        # ── Build the next qualification question ──────────────────────────
+        FIELD_QUESTIONS: Dict[str, str] = {
+            "budget_min": "What is your minimum budget for this property?",
+            "budget_max": "What is your approximate budget for this property?",
+            "bedrooms": "How many bedrooms are you looking for?",
+            "property_type": "Are you looking for an apartment, villa, or townhouse?",
+            "preferred_locations": "Which areas or localities are you most interested in?",
+            "purpose": "Is this property for your own use or as an investment?",
+            "timeline": "When are you planning to move in or complete the purchase?",
+            "is_cash_buyer": "Are you planning to pay cash or use a home loan?",
+            "mortgage_status": "Have you been pre-approved for a home loan?",
+            "nationality": "May I ask your nationality? It helps with ownership requirements.",
+        }
+
+        # Pick the next question — prefer fields the LLM didn't just extract
+        remaining_after_extraction = [
+            f for f in fields_needed
+            if f not in extracted_args and f in FIELD_QUESTIONS
+        ]
+        next_question = None
+        if remaining_after_extraction:
+            next_question = FIELD_QUESTIONS[remaining_after_extraction[0]]
+        elif next_priority and next_priority in FIELD_QUESTIONS:
+            next_question = FIELD_QUESTIONS[next_priority]
+
+        # ── Determine if qualified after this extraction ───────────────────
+        updated_facts = {**collected_facts, **extracted_args}
+        REQUIRED_FOR_QUALIFICATION = {
+            "budget_max", "property_type", "preferred_locations"
+        }
+        now_qualified = all(updated_facts.get(f) for f in REQUIRED_FOR_QUALIFICATION)
+
+        # ── Construct response text ────────────────────────────────────────
+        if next_question:
+            response_text = next_question
+        elif now_qualified:
+            response_text = (
+                "Thank you! I have enough information to find matching properties for you. "
+                "Let me search our verified inventory now."
+            )
+        else:
+            response_text = "Could you share a bit more about what you're looking for?"
+
         return {
-            "response": f"Thank you! To find the best property for you, {next_question or 'could you share more?'}",
-            "tool_calls": [{"name": "update_qualification", "arguments": {}}],
-            "handoff_to": "property_agent" if ctx.is_qualified else None,
+            "response": response_text,
+            "tool_calls": [{"name": "update_qualification", "arguments": extracted_args}],
+            "handoff_to": "property_agent" if now_qualified else None,
         }
 
 
