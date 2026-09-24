@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class IncidentCreateDTO(BaseModel):
     title: str = Field(..., min_length=5, max_length=255)
     severity: str = Field(default="P2", pattern="^(P0|P1|P2|P3)$")
-    service_affected: str = Field(..., example="database")
+    service_affected: str = Field(..., json_schema_extra={"example": "database"})
     organization_id: Optional[str] = None
     owner_id: Optional[str] = None
     root_cause: Optional[str] = None

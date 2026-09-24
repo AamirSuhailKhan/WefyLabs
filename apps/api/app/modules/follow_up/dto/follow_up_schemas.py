@@ -23,6 +23,8 @@ class FollowUpPolicyDTO(BaseModel):
     min_hours_between_msgs: int = 18
     require_approval_high_value: bool = True
     high_value_threshold_aed: float = 5000000.0
+    # Part 12: truthful per-channel status (enabled/disabled/not-configured).
+    channel_status: Optional[Dict[str, Any]] = None
 
 
 class UpdatePolicyDTO(BaseModel):

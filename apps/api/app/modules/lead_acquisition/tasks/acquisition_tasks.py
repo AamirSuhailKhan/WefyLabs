@@ -111,6 +111,33 @@ if CELERY_AVAILABLE and celery_app:
             args=[organization_id, prospect_id],
         )
 
+    @celery_app.task(
+        name="lead_acquisition.fetch_and_ingest_meta_lead",
+        bind=True,
+        max_retries=3,
+        default_retry_delay=30,
+    )
+    def fetch_and_ingest_meta_lead(
+        self,
+        organization_id: str,
+        source_id: str,
+        leadgen_id: str,
+        event_data: dict,
+    ):
+        """Async task to retrieve Meta lead data from Graph API and ingest."""
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                _async_fetch_and_ingest_meta_lead(organization_id, source_id, leadgen_id, event_data)
+            )
+        except Exception as exc:
+            logger.error(f"[ACQ_TASK] fetch_and_ingest_meta_lead failed: {exc}")
+            raise self.retry(exc=exc)
+        finally:
+            loop.close()
+
 else:
     # No-op stubs when Celery unavailable (test environments)
     def process_acquisition_event(*args, **kwargs):
@@ -121,6 +148,9 @@ else:
 
     def retry_failed_acquisition(*args, **kwargs):
         logger.debug("[ACQ_TASK][STUB] retry_failed_acquisition (Celery unavailable)")
+
+    def fetch_and_ingest_meta_lead(*args, **kwargs):
+        logger.debug("[ACQ_TASK][STUB] fetch_and_ingest_meta_lead (Celery unavailable)")
 
 
 async def _async_process_acquisition_event(
@@ -197,3 +227,58 @@ async def _async_ai_extract(organization_id: str, prospect_id: str) -> None:
 
         await db.commit()
         logger.info(f"[ACQ_TASK] AI extraction complete for prospect {prospect_id}")
+
+
+async def _async_fetch_and_ingest_meta_lead(
+    organization_id: str,
+    source_id: str,
+    leadgen_id: str,
+    event_data: dict,
+) -> None:
+    """Internal async handler for background Meta lead retrieval."""
+    from app.database import AsyncSessionLocal
+    from app.modules.lead_acquisition.services.lead_source_service import LeadSourceService
+    from app.modules.lead_acquisition.connectors.meta_connector import MetaLeadAdsConnector
+    from app.modules.lead_acquisition.services.universal_intake_service import UniversalIntakeService
+    from app.modules.lead_acquisition.dto.acquisition_dto import CanonicalLeadIntakeDTO, UniversalSourceType
+
+    async with AsyncSessionLocal() as db:
+        source_svc = LeadSourceService(db)
+        source = await source_svc.get_source(organization_id, source_id)
+        if not source or not source.configuration:
+            return
+        access_token = source.configuration.get("access_token") or source.configuration.get("access_token_encrypted") or ""
+        if not access_token:
+            return
+
+        connector = MetaLeadAdsConnector()
+        lead_data, err = await connector.retrieve_lead_data(leadgen_id, access_token)
+        if not lead_data:
+            logger.warning(f"[ACQ_TASK] Could not retrieve leadgen_id={leadgen_id}, err={err}")
+            return
+
+        normalized = connector.normalize_lead_payload(lead_data, event_data)
+        dto = CanonicalLeadIntakeDTO(
+            source_type=UniversalSourceType.META,
+            external_source="meta_lead_ads",
+            external_lead_id=leadgen_id,
+            name=normalized.get("name"),
+            phone=normalized.get("phone"),
+            email=normalized.get("email"),
+            message=normalized.get("message"),
+            budget=normalized.get("budget"),
+            property_type=normalized.get("property_type"),
+            preferred_locations=normalized.get("preferred_locations", []),
+            city=normalized.get("city"),
+            timeline=normalized.get("timeline"),
+            source_id=source.id,
+            source_metadata=normalized.get("source_metadata"),
+            utm_source=normalized.get("utm_source", "meta"),
+            utm_medium=normalized.get("utm_medium", "paid_social"),
+            utm_campaign=normalized.get("utm_campaign"),
+            idempotency_key=f"meta:{leadgen_id}",
+        )
+        u_svc = UniversalIntakeService(db)
+        await u_svc.ingest_lead(organization_id=organization_id, dto=dto)
+        logger.info(f"[ACQ_TASK] Successfully ingested Meta lead {leadgen_id} for org {organization_id}")
+

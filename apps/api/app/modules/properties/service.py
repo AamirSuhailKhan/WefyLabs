@@ -145,7 +145,9 @@ class PropertyService:
             resource_id=str(listing.id),
             new_values={"title": listing.title, "price": listing.price, "code": listing.property_code}
         )
+        self.db.add(audit)
         await self.db.commit()
+
         await self.db.refresh(listing)
 
         # Invalidate tenant search and matching cache and emit domain event

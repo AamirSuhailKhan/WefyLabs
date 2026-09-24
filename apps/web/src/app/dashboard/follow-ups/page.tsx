@@ -12,12 +12,41 @@ import { api } from '@/lib/api-client';
 
 export type FollowUpTab = 'today' | 'upcoming' | 'rules' | 'analytics';
 
+type ChannelState = 'ENABLED' | 'DISABLED' | 'CONFIGURED' | 'NOT_CONFIGURED' | 'STAGING' | 'ERROR';
+
+interface ChannelStatusEntry {
+  channel: string;
+  state: ChannelState;
+  enabled: boolean;
+  configured: boolean;
+  implemented: boolean;
+  provider_name?: string | null;
+  reason?: string | null;
+}
+
+interface ChannelStatusSummary {
+  channels: Record<string, ChannelStatusEntry>;
+  sendable_channels: string[];
+}
+
+// Truthful channel states. A channel is only "Live" when its provider is both
+// enabled and actually configured — never because an adapter class exists.
+const CHANNEL_STATE_META: Record<ChannelState, { label: string; className: string; icon: typeof CheckCircle2 }> = {
+  ENABLED: { label: 'Live', className: 'bg-emerald-50 border-emerald-200 text-emerald-800', icon: CheckCircle2 },
+  CONFIGURED: { label: 'Configured', className: 'bg-blue-50 border-blue-200 text-blue-800', icon: CheckCircle2 },
+  STAGING: { label: 'Staging', className: 'bg-amber-50 border-amber-200 text-amber-900', icon: AlertCircle },
+  NOT_CONFIGURED: { label: 'Not configured', className: 'bg-gray-50 border-[#E8E4DC] text-gray-600', icon: AlertCircle },
+  DISABLED: { label: 'Disabled', className: 'bg-rose-50 border-rose-200 text-rose-700', icon: ShieldAlert },
+  ERROR: { label: 'Error', className: 'bg-rose-50 border-rose-200 text-rose-700', icon: ShieldAlert },
+};
+
 export default function FollowUpsPage() {
   const [activeTab, setActiveTab] = useState<FollowUpTab>('today');
   const [summary, setSummary] = useState<any>(null);
   const [briefing, setBriefing] = useState<any>(null);
   const [rules, setRules] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [channelStatus, setChannelStatus] = useState<ChannelStatusSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -40,16 +69,18 @@ export default function FollowUpsPage() {
   const fetchData = async () => {
     try {
       setRefreshing(true);
-      const [sumRes, briefRes, rulesRes, perfRes] = await Promise.all([
+      const [sumRes, briefRes, rulesRes, perfRes, channelRes] = await Promise.all([
         api.followups.getDashboardSummary().catch(() => null),
         api.followups.getDailyBriefing().catch(() => null),
         api.followups.getRules().catch(() => []),
         api.followups.getPerformance().catch(() => null),
+        api.followups.getChannelStatus().catch(() => null),
       ]);
       setSummary(sumRes);
       setBriefing(briefRes);
       setRules(rulesRes || []);
       setAnalytics(perfRes);
+      setChannelStatus(channelRes);
     } catch (e) {
       console.warn('Failed to load follow-up dashboard data', e);
     } finally {
@@ -138,6 +169,12 @@ export default function FollowUpsPage() {
     sla_breaches: 0,
     awaiting_first_contact: 0
   };
+
+  const channelEntries: ChannelStatusEntry[] = Object.values(channelStatus?.channels || {});
+  const sendableChannels = channelStatus?.sendable_channels || [];
+  const blockedChannelNames = channelEntries
+    .filter((c) => c.state !== 'ENABLED')
+    .map((c) => c.channel);
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#1A1A1A]">
@@ -252,6 +289,50 @@ export default function FollowUpsPage() {
             <span className="text-[10px] text-emerald-600">Fresh incoming leads</span>
           </div>
         </div>
+
+        {/* Delivery Channel Availability — truthful, never "adapter exists == live" */}
+        {channelStatus && (
+          <div className="bg-white border border-[#E8E4DC] rounded-2xl p-5 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-[#1A1A1A]" />
+                <h3 className="text-xs font-mono font-bold uppercase">Delivery Channels</h3>
+                <span className="text-[10px] font-mono text-gray-500">
+                  Follow-ups dispatch only on channels that are actually enabled
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-gray-500">
+                {sendableChannels.length} sendable
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {channelEntries.map((channel) => {
+                const meta = CHANNEL_STATE_META[channel.state] || CHANNEL_STATE_META.DISABLED;
+                const Icon = meta.icon;
+                return (
+                  <div
+                    key={channel.channel}
+                    title={channel.reason || meta.label}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-mono ${meta.className}`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="font-bold uppercase">{channel.channel}</span>
+                    <span className="opacity-80">{meta.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {blockedChannelNames.length > 0 && (
+              <p className="text-[10px] font-mono text-gray-500 mt-3">
+                Not dispatching on{' '}
+                <strong className="text-[#1A1A1A]">{blockedChannelNames.join(', ')}</strong> — disabled or
+                unconfigured providers are never used and no delivery status is fabricated.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="flex border-b border-[#E8E4DC] gap-6">

@@ -137,6 +137,15 @@ class PropertyService:
                 "status": listing.status or "available",
                 "units_remaining": 1 if is_available else 0,
                 "source_verified": True,
+                "property": {
+                    "id": str(listing.id),
+                    "title": listing.title,
+                    "price": float(listing.price) if listing.price is not None else None,
+                    "status": listing.status or "available",
+                    "bedrooms": listing.bedrooms,
+                    "city": listing.city,
+                    "area_value": float(listing.area_value) if getattr(listing, "area_value", None) is not None else None,
+                },
             }
         except Exception as exc:
             logger.error(f"PropertyService.check_availability error: {exc}")
@@ -748,11 +757,20 @@ class CalendarSlotService:
             cal_account = result.scalar_one_or_none()
             calendar_connected = cal_account is not None
 
+            import uuid as _uuid
             # Look up broker for the organization
             stmt_broker = select(Broker).where(Broker.organization_id == str(organization_id))
             res_broker = await self.db.execute(stmt_broker)
             broker = res_broker.scalar_one_or_none()
-            broker_id = str(broker.id) if broker else str(organization_id)
+
+            if broker:
+                broker_id = str(broker.id)
+            else:
+                try:
+                    _uuid.UUID(str(organization_id))
+                    broker_id = str(organization_id)
+                except Exception:
+                    broker_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, str(organization_id)))
 
             engine = AvailabilityEngine(self.db)
             slots_data = await engine.calculate_available_slots(

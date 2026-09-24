@@ -137,6 +137,11 @@ class RealDeliveryEngine:
         action_type = decision.action_type
         channel_enum = decision.recommended_channel
         channel_str = channel_enum.value.lower()
+        # Part 12: resolve the canonical channel to a registered provider key so
+        # canonical aliases (e.g. IN_APP/web → webchat) dispatch correctly.
+        from app.modules.communication.channels import Channel as _CanonChannel
+        from app.modules.communication.channels.status import provider_key_for as _provider_key_for
+        provider_key = _provider_key_for(_CanonChannel.normalize(channel_str)) or channel_str
 
         message_text = (
             custom_message
@@ -307,9 +312,9 @@ class RealDeliveryEngine:
             ).inc()
 
             try:
-                provider = self.channel_manager.get_provider(channel_str)
+                provider = self.channel_manager.get_provider(provider_key)
             except ValueError as e:
-                logger.error(f"[RealDeliveryEngine] No provider registered for channel '{channel_str}': {e}")
+                logger.error(f"[RealDeliveryEngine] No provider registered for channel '{channel_str}' (key '{provider_key}'): {e}")
                 return await self._record_failed_execution(
                     decision=decision,
                     lead=lead,
@@ -345,7 +350,7 @@ class RealDeliveryEngine:
                 message_id=outbound_msg_id,
                 conversation_id=str(lead.id),
                 organization_id=org_id,
-                channel=channel_str,
+                channel=provider_key,
                 provider_name=provider.provider_name,
                 recipient_identifier=recipient_id,
                 content=message_text,

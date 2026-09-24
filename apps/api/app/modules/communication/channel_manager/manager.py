@@ -144,11 +144,14 @@ def _build_default_channel_manager() -> ChannelManager:
     manager = ChannelManager()
 
     # WhatsApp Cloud API (Primary Meta Graph API)
+    # STRICT SAFETY: WhatsApp is registered for status reporting only. The
+    # adapter refuses to send unless WHATSAPP_ENABLED is explicitly true.
     manager.register(WhatsAppCloudProvider(
         access_token=getattr(settings, "WHATSAPP_ACCESS_TOKEN", None),
         phone_number_id=getattr(settings, "PHONE_NUMBER_ID", None),
         app_secret=getattr(settings, "WHATSAPP_APP_SECRET", None),
         business_account_id=getattr(settings, "WABA_ID", None),
+        enabled=bool(getattr(settings, "WHATSAPP_ENABLED", False)),
     ))
 
     # Telegram Bot

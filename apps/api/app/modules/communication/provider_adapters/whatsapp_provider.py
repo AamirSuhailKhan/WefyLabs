@@ -58,6 +58,7 @@ class WhatsAppCloudProvider(CommunicationProvider):
         business_account_id: Optional[str] = None,
         api_version: str = _DEFAULT_GRAPH_VERSION,
         http_client: Optional[httpx.AsyncClient] = None,
+        enabled: Optional[bool] = None,
     ):
         self._access_token = (access_token or "").strip()
         self._phone_number_id = (phone_number_id or "").strip()
@@ -66,6 +67,12 @@ class WhatsAppCloudProvider(CommunicationProvider):
         self._api_version = api_version
         self._http_client = http_client
         self._connected = False
+        # Hard kill-switch. ``None`` means "not gated" (legacy direct use); the
+        # runtime ChannelManager always passes the configured flag, whose default
+        # is False, so WhatsApp never sends unless explicitly enabled
+        # (Part 12 §24/§139). Credentials are still required — delivery is never
+        # fabricated.
+        self._enabled = enabled
 
     @property
     def provider_name(self) -> str:
@@ -110,8 +117,15 @@ class WhatsAppCloudProvider(CommunicationProvider):
             return False
         return True
 
+    @property
+    def is_enabled(self) -> bool:
+        """Whether the WhatsApp kill-switch is explicitly on."""
+        return self._enabled is True
+
     async def verify_configuration(self) -> ProviderStatusEnum:
         """Checks configuration without leaking secrets."""
+        if self._enabled is False:
+            return ProviderStatusEnum.DISABLED
         if not self.is_configured():
             return ProviderStatusEnum.CONFIGURATION_REQUIRED
         return ProviderStatusEnum.READY
@@ -161,6 +175,23 @@ class WhatsAppCloudProvider(CommunicationProvider):
         Truthful execution: if unconfigured, strictly returns CONFIGURATION_REQUIRED.
         """
         start_ms = int(time.time() * 1000)
+
+        # 0. Kill-switch: channel disabled by policy. Never send.
+        if self._enabled is False:
+            latency = int(time.time() * 1000) - start_ms
+            logger.warning(
+                f"[WhatsAppProvider] BLOCKED send for msg_id={message.message_id}: "
+                f"channel disabled (WHATSAPP_ENABLED=false)."
+            )
+            return ProviderResponse(
+                success=False,
+                status="blocked",
+                delivery_status=DeliveryStatusEnum.BLOCKED,
+                error_code="CHANNEL_DISABLED",
+                error_message="WhatsApp channel is disabled by configuration.",
+                retryable=False,
+                latency_ms=latency,
+            )
 
         # 1. Configuration check
         if not self.is_configured():

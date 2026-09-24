@@ -146,11 +146,52 @@ async def require_super_admin(
     return broker
 
 
+from contextvars import ContextVar
+
+current_tenant_ctx: ContextVar[Optional["TenantContext"]] = ContextVar("current_tenant_ctx", default=None)
+
+
 @dataclass(frozen=True)
 class TenantContext:
-    """A tenant selected from the authenticated principal's memberships."""
+    """A tenant selected from the authenticated principal's memberships or background task context."""
 
     organization_id: str
+    broker_id: Optional[uuid.UUID] = None
+    user_id: Optional[str] = None
+    role: Optional[str] = None
+    is_background: bool = False
+
+    @classmethod
+    def for_background_task(
+        cls,
+        organization_id: str,
+        broker_id: Optional[uuid.UUID] = None
+    ) -> "TenantContext":
+        """Constructs a validated tenant context for background worker tasks."""
+        if not organization_id:
+            raise ValueError("organization_id is mandatory for background worker tenant context")
+        ctx = cls(
+            organization_id=str(organization_id),
+            broker_id=broker_id,
+            is_background=True
+        )
+        current_tenant_ctx.set(ctx)
+        return ctx
+
+    @classmethod
+    def for_system_operation(cls, organization_id: str) -> "TenantContext":
+        """Constructs a tenant context for internal system operations."""
+        ctx = cls(
+            organization_id=str(organization_id),
+            is_background=True
+        )
+        current_tenant_ctx.set(ctx)
+        return ctx
+
+
+def get_ambient_tenant() -> Optional[TenantContext]:
+    """Retrieve the ambient tenant context from contextvars if set."""
+    return current_tenant_ctx.get()
 
 
 async def get_current_tenant(
@@ -201,7 +242,13 @@ async def get_current_tenant(
                     "message": "You do not belong to the selected organization.",
                 },
             )
-        return TenantContext(organization_id=selected_organization_id)
+        ctx = TenantContext(
+            organization_id=selected_organization_id,
+            broker_id=current_broker.id,
+            user_id=str(current_broker.id)
+        )
+        current_tenant_ctx.set(ctx)
+        return ctx
 
     if len(organization_ids) != 1:
         raise HTTPException(
@@ -212,7 +259,13 @@ async def get_current_tenant(
             },
         )
 
-    return TenantContext(organization_id=organization_ids[0])
+    ctx = TenantContext(
+        organization_id=organization_ids[0],
+        broker_id=current_broker.id,
+        user_id=str(current_broker.id)
+    )
+    current_tenant_ctx.set(ctx)
+    return ctx
 
 async def require_active_subscription(
     broker: Broker = Depends(get_current_broker),

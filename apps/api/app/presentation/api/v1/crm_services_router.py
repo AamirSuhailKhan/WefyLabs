@@ -22,7 +22,7 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 from sqlalchemy.orm import selectinload
@@ -76,8 +76,7 @@ class LeadResponse(BaseModel):
     budget_min: Optional[int] = None
     budget_max: Optional[int] = None
     created_at: Optional[datetime] = None
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TaskCreateRequest(BaseModel):
@@ -110,8 +109,7 @@ class TaskResponse(BaseModel):
     lead: Optional[LeadResponse] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MeetingCreateRequest(BaseModel):
@@ -134,8 +132,7 @@ class MeetingResponse(BaseModel):
     location: Optional[str]
     status: str
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContactCreateRequest(BaseModel):
@@ -156,8 +153,7 @@ class ContactResponse(BaseModel):
     contact_type: str
     company: Optional[str]
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyCreateRequest(BaseModel):
@@ -183,8 +179,7 @@ class NotificationResponse(BaseModel):
     action_url: Optional[str]
     is_read: bool
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLogResponse(BaseModel):
@@ -194,8 +189,7 @@ class AuditLogResponse(BaseModel):
     resource_id: Optional[str]
     ip_address: Optional[str]
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StageResponse(BaseModel):
@@ -206,8 +200,7 @@ class StageResponse(BaseModel):
     color: str
     is_default: str
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StageUpdateRequest(BaseModel):
@@ -225,8 +218,7 @@ class TagResponse(BaseModel):
     name: str
     color: str
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TagAssignRequest(BaseModel):
@@ -244,8 +236,7 @@ class NoteResponse(BaseModel):
     broker_id: Any
     content: str
     created_at: datetime
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─────────────────────── Lead Endpoints ───────────────────────

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -383,6 +384,126 @@ async def _handle_get_handoff_context(args: Dict[str, Any], ctx: Dict[str, Any])
     )
 
 
+# ─── Part 11 Revenue Intelligence & Copilot Handlers ─────────────────────────
+
+def _to_uuid(val: Any) -> Optional[uuid.UUID]:
+    if not val:
+        return None
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except Exception:
+        return uuid.uuid5(uuid.NAMESPACE_DNS, str(val))
+
+
+async def _handle_get_revenue_overview(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.overview.get_overview(org_id)
+    return ToolResult(tool="get_revenue_overview", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_funnel_metrics(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.funnel.get_funnel_summary(org_id)
+    return ToolResult(tool="get_funnel_metrics", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_leakage_summary(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.leakage.get_leakage_report(org_id)
+    return ToolResult(tool="get_leakage_summary", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_source_attribution(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.attribution.get_attribution_report(org_id)
+    return ToolResult(tool="get_source_attribution", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_opportunity_flow(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.learning.get_learning_summary(org_id)
+    return ToolResult(tool="get_opportunity_flow", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_action_effectiveness(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.outcomes.get_outcome_summary(org_id)
+    return ToolResult(tool="get_action_effectiveness", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_outcome_history(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.outcomes.get_outcome_summary(org_id)
+    return ToolResult(tool="get_outcome_history", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_data_quality(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.data_quality.get_data_quality_report(org_id)
+    return ToolResult(tool="get_data_quality", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_lead_revenue_journey(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    lead_id = _to_uuid(args.get("lead_id") or ctx.get("lead_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.journeys.get_lead_journey(org_id, lead_id)
+    return ToolResult(tool="get_lead_revenue_journey", success=data is not None, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_property_conversion_history(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    prop_id = _to_uuid(args.get("property_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.journeys.get_property_journey(org_id, prop_id)
+    return ToolResult(tool="get_property_conversion_history", success=data is not None, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_agent_action_history(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    data = await svc.team.get_team_metrics(org_id)
+    return ToolResult(tool="get_agent_action_history", success=True, result=data, data_source="revenue_intelligence")
+
+
+async def _handle_get_revenue_at_risk(args: Dict[str, Any], ctx: Dict[str, Any]) -> ToolResult:
+    org_id = _to_uuid(ctx.get("organization_id") or ctx.get("broker_id"))
+    from app.modules.revenue_intelligence.service import RevenueIntelligenceService
+    svc = RevenueIntelligenceService(ctx["db"])
+    rep = await svc.leakage.get_leakage_report(org_id)
+    return ToolResult(
+        tool="get_revenue_at_risk",
+        success=True,
+        result={
+            "total_estimated_value_at_risk_estimate": rep.get("total_estimated_value_at_risk_estimate"),
+            "revenue_at_risk_estimate": rep.get("total_estimated_value_at_risk_estimate"),
+            "total_leakage_events": rep.get("total_leakage_events"),
+        },
+        data_source="revenue_intelligence",
+    )
+
+
 # ─── Handler Registry ─────────────────────────────────────────────────────────
 
 _HANDLERS: Dict[str, Callable] = {
@@ -403,6 +524,19 @@ _HANDLERS: Dict[str, Callable] = {
     "get_shortlist":        _handle_get_shortlist,
     "compare_properties":   _handle_compare_properties,
     "get_handoff_context":  _handle_get_handoff_context,
+    # Part 11 Revenue Intelligence & Copilot Tools
+    "get_revenue_overview":             _handle_get_revenue_overview,
+    "get_funnel_metrics":               _handle_get_funnel_metrics,
+    "get_leakage_summary":              _handle_get_leakage_summary,
+    "get_source_attribution":           _handle_get_source_attribution,
+    "get_opportunity_flow":             _handle_get_opportunity_flow,
+    "get_action_effectiveness":         _handle_get_action_effectiveness,
+    "get_outcome_history":              _handle_get_outcome_history,
+    "get_data_quality":                 _handle_get_data_quality,
+    "get_lead_revenue_journey":         _handle_get_lead_revenue_journey,
+    "get_property_conversion_history":  _handle_get_property_conversion_history,
+    "get_agent_action_history":         _handle_get_agent_action_history,
+    "get_revenue_at_risk":              _handle_get_revenue_at_risk,
 }
 
 _READ_TOOLS = {
@@ -410,6 +544,11 @@ _READ_TOOLS = {
     "search_knowledge", "get_lead_context", "get_payment_plan",
     # New read tools
     "get_available_slots", "get_shortlist", "compare_properties", "get_handoff_context",
+    # Part 11 Revenue Copilot read tools
+    "get_revenue_overview", "get_funnel_metrics", "get_leakage_summary",
+    "get_source_attribution", "get_opportunity_flow", "get_action_effectiveness",
+    "get_outcome_history", "get_data_quality", "get_lead_revenue_journey",
+    "get_property_conversion_history", "get_agent_action_history", "get_revenue_at_risk",
 }
 
 

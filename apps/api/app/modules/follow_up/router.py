@@ -18,6 +18,7 @@ from app.models.follow_up_models import (
     FollowUpExecution, FollowUpSequence, FollowUpPolicy, ContactFatigue
 )
 from app.modules.follow_up.service import FollowUpOrchestratorService
+from app.modules.communication.channels import ChannelNotSendableError
 from app.modules.follow_up.dto.follow_up_schemas import (
     FollowUpPolicyDTO, UpdatePolicyDTO, SequenceDTO, CreateSequenceDTO,
     FollowUpExecutionDTO, FollowUpEvaluationResponseDTO, LeadFollowUpStatusDTO,
@@ -55,6 +56,52 @@ async def evaluate_lead_followup_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(val_err))
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Evaluation failed: {exc}")
+
+
+# NOTE: static routes (/policies, /channels/status) MUST be declared before the
+# parametrized "/{lead_id}" route, otherwise Starlette matches "policies" as a lead_id.
+@router.get("/policies", response_model=FollowUpPolicyDTO)
+async def get_organization_policy_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Retrieves the organization follow-up policy, autonomy levels, quiet hours, and the
+    truthful per-channel status (which channels are actually enabled/configured).
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    policy = await service.get_or_create_policy(org_id)
+    dto = FollowUpPolicyDTO.model_validate(policy)
+    dto.channel_status = await service.get_channel_status()
+    return dto
+
+
+@router.patch("/policies", response_model=FollowUpPolicyDTO)
+async def update_organization_policy_endpoint(
+    dto: UpdatePolicyDTO,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Updates the organization follow-up policy, autonomy levels, quiet hours, and frequency limits.
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    policy = await service.update_policy(org_id, dto)
+    return FollowUpPolicyDTO.model_validate(policy)
+
+
+@router.get("/channels/status")
+async def get_followup_channel_status_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Returns the truthful per-channel availability that follow-up channel selection uses.
+    """
+    service = FollowUpOrchestratorService(db)
+    return await service.get_channel_status()
 
 
 @router.get("/{lead_id}", response_model=LeadFollowUpStatusDTO)
@@ -158,6 +205,28 @@ async def cancel_followup_execution_endpoint(
     return {"status": "cancelled", "execution_id": execution_id}
 
 
+@router.post("/{execution_id}/dispatch")
+async def dispatch_followup_execution_endpoint(
+    execution_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Dispatches a scheduled follow-up execution through the Communication Hub.
+
+    The Hub enforces channel availability and canonical channel vocabulary, so this
+    never contacts a provider directly and never sends on a disabled channel.
+    """
+    service = FollowUpOrchestratorService(db)
+    org_id = str(current_broker.organization_id or current_broker.id)
+    try:
+        return await service.dispatch_execution(execution_id, org_id)
+    except ChannelNotSendableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.to_dict())
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 @router.post("/{lead_id}/pause")
 async def pause_lead_followups_endpoint(
     lead_id: str,
@@ -207,35 +276,6 @@ async def resume_lead_followups_endpoint(
         await service.lifecycle_manager.transition_lead(lead, "ENGAGING", reason="Broker Resumed AI")
 
     return {"status": "resumed", "lead_id": lead_id, "state": "ENGAGING"}
-
-
-@router.get("/policies", response_model=FollowUpPolicyDTO)
-async def get_organization_policy_endpoint(
-    db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
-):
-    """
-    Retrieves the organization follow-up policy, autonomy levels, and quiet hours.
-    """
-    service = FollowUpOrchestratorService(db)
-    org_id = str(current_broker.organization_id or current_broker.id)
-    policy = await service.get_or_create_policy(org_id)
-    return FollowUpPolicyDTO.model_validate(policy)
-
-
-@router.patch("/policies", response_model=FollowUpPolicyDTO)
-async def update_organization_policy_endpoint(
-    dto: UpdatePolicyDTO,
-    db: AsyncSession = Depends(get_db),
-    current_broker: Broker = Depends(get_current_broker)
-):
-    """
-    Updates the organization follow-up policy, autonomy levels, quiet hours, and frequency limits.
-    """
-    service = FollowUpOrchestratorService(db)
-    org_id = str(current_broker.organization_id or current_broker.id)
-    policy = await service.update_policy(org_id, dto)
-    return FollowUpPolicyDTO.model_validate(policy)
 
 
 @router.get("/analytics", response_model=FollowUpAnalyticsDTO)

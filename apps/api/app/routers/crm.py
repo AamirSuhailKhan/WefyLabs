@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Broker, Lead, PipelineStage, LeadNote, LeadTag, LeadTagAssignment, Task
@@ -45,8 +45,7 @@ class StageResponse(BaseModel):
     is_default: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class StageUpdate(BaseModel):
     stage_name: str
@@ -61,8 +60,7 @@ class NoteResponse(BaseModel):
     content: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TagCreate(BaseModel):
     name: str
@@ -75,8 +73,7 @@ class TagResponse(BaseModel):
     color: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Endpoints: Pipeline Stages ---

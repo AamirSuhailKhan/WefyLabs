@@ -52,6 +52,10 @@ class EnterpriseSettings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # WhatsApp Meta Cloud Direct / 360Dialog
+    # STRICT SAFETY POLICY: WhatsApp remains hard-disabled until explicitly
+    # enabled here AND the adapter code supports the channel. This flag is the
+    # single source of truth for the WhatsApp kill-switch (Part 12 §24/§139).
+    WHATSAPP_ENABLED: bool = False
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
     PHONE_NUMBER_ID: Optional[str] = None
     WABA_ID: Optional[str] = None
@@ -59,6 +63,24 @@ class EnterpriseSettings(BaseSettings):
     WHATSAPP_API_KEY: str = "wa-placeholder"
     DIALOG360_API_KEY: str = "d360_key_placeholder"
     DIALOG360_API_BASE: str = "https://waba.360dialog.io/v1"
+
+    # ─── Channel Enablement (Part 12 — Communication Hub) ─────────────────────
+    # Per-channel kill switches. A channel sends only when its provider is
+    # configured AND the channel is enabled here. Channels not implemented yet
+    # (VOICE, social) default to disabled.
+    EMAIL_ENABLED: bool = True
+    WEBCHAT_ENABLED: bool = True
+    SMS_ENABLED: bool = False
+    TELEGRAM_ENABLED: bool = True
+    VOICE_ENABLED: bool = False
+    INSTAGRAM_ENABLED: bool = False
+    FACEBOOK_ENABLED: bool = False
+
+    # ─── Follow-Up Hub Dispatch (Part 12) ─────────────────────────────────────
+    # The scheduled follow-up dispatcher (follow_up.dispatch_due_executions) is
+    # registered and scheduled but inert until this flag is turned on, so enabling
+    # the beat schedule can never cause a surprise mass-send of queued rows.
+    FOLLOWUP_HUB_DISPATCH_ENABLED: bool = False
 
     # Email SMTP (Brevo Free via SMTP / Generic SMTP)
     SMTP_HOST: Optional[str] = None

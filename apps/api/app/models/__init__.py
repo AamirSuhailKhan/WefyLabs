@@ -476,3 +476,154 @@ __all__ = __all__ + [
     "RevenueFeedbackLog",
 ]
 
+# ─── Part 11 — Revenue Intelligence Layer ──────────────────────────────────────
+from app.models.revenue_intelligence_models import (
+    RevenueFunnelSnapshot,
+    RevenueLeakageEvent,
+)
+
+__all__ = __all__ + [
+    "RevenueFunnelSnapshot",
+    "RevenueLeakageEvent",
+]
+
+# ─── Part 17 — Enterprise Production Runtime (Transactional Outbox) ─────────
+from app.models.outbox_models import (
+    OutboxEvent,
+    OutboxStatus,
+)
+
+__all__ = __all__ + [
+    "OutboxEvent",
+    "OutboxStatus",
+]
+
+
+# ─── Part 18 — Real Estate Deal, Booking & Transaction OS ────────────────────
+from app.models.deal_models import (
+    DealStage,
+    Deal,
+    DealStageHistory,
+    DealOffer,
+    DealReservation,
+    DealBooking,
+    DealCommission,
+    DealClosing,
+    DealPostSale,
+    DealDocument,
+    DealApprovalRequest,
+    DealCommercialAuditLog,
+)
+
+__all__ = __all__ + [
+    "DealStage",
+    "Deal",
+    "DealStageHistory",
+    "DealOffer",
+    "DealReservation",
+    "DealBooking",
+    "DealCommission",
+    "DealClosing",
+    "DealPostSale",
+    "DealDocument",
+    "DealApprovalRequest",
+    "DealCommercialAuditLog",
+]
+
+# ─── Part 19 — Real Estate Supply, Project, Unit Inventory & Channel Partner Network OS ─
+from app.models.inventory_models import (
+    # Status enums
+    DeveloperStatus,
+    ProjectStatus,
+    UnitInventoryStatus,
+    ChannelPartnerStatus,
+    ChannelPartnerTier,
+    PriceBookStatus,
+    # Domain entities
+    RealEstateDeveloper,
+    RealEstateProject,
+    ProjectPhase,
+    ProjectBuilding,
+    ProjectFloor,
+    ProjectUnit,
+    ProjectUnitStatusLog,
+    ProjectPriceBook,
+    PriceBookEntry,
+    ProjectMedia,
+    ChannelPartner,
+    ChannelPartnerProjectAgreement,
+    ChannelPartnerCommission,
+    InventoryAvailabilitySnapshot,
+)
+
+__all__ = __all__ + [
+    # Enums
+    "DeveloperStatus",
+    "ProjectStatus",
+    "UnitInventoryStatus",
+    "ChannelPartnerStatus",
+    "ChannelPartnerTier",
+    "PriceBookStatus",
+    # Entities
+    "RealEstateDeveloper",
+    "RealEstateProject",
+    "ProjectPhase",
+    "ProjectBuilding",
+    "ProjectFloor",
+    "ProjectUnit",
+    "ProjectUnitStatusLog",
+    "ProjectPriceBook",
+    "PriceBookEntry",
+    "ProjectMedia",
+    "ChannelPartner",
+    "ChannelPartnerProjectAgreement",
+    "ChannelPartnerCommission",
+    "InventoryAvailabilitySnapshot",
+]
+
+# ─── Part 20 — Real Estate Marketing, Listing Distribution & Demand Generation OS ─
+from app.models.marketing_models import (
+    # Status constants
+    CampaignObjective,
+    CampaignStatus,
+    ListingPublicationStatus,
+    AssetStatus,
+    AssetType,
+    DistributionChannel,
+    ApprovalDecision,
+    LaunchStatus,
+    # Domain entities
+    MarketingCampaign,
+    CampaignApproval,
+    CampaignAuditLog,
+    MarketingAsset,
+    PropertyListingPublication,
+    ListingDistribution,
+    LandingPage,
+    TrackingLink,
+    CampaignEvent,
+    ProjectLaunch,
+    CampaignListingLink,
+)
+
+__all__ = __all__ + [
+    "CampaignObjective",
+    "CampaignStatus",
+    "ListingPublicationStatus",
+    "AssetStatus",
+    "AssetType",
+    "DistributionChannel",
+    "ApprovalDecision",
+    "LaunchStatus",
+    "MarketingCampaign",
+    "CampaignApproval",
+    "CampaignAuditLog",
+    "MarketingAsset",
+    "PropertyListingPublication",
+    "ListingDistribution",
+    "LandingPage",
+    "TrackingLink",
+    "CampaignEvent",
+    "ProjectLaunch",
+    "CampaignListingLink",
+]

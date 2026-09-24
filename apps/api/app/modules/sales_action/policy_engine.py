@@ -60,10 +60,16 @@ class SalesActionPolicyEngine:
         fatigue_reason: Optional[str] = None,
         is_dormant_candidate: bool = False,
         previous_executions: Optional[List[FollowUpExecution]] = None,
+        default_channel: Optional[CommunicationChannel] = None,
     ) -> SalesActionDecisionDTO:
         """
         Executes strict, audited priority ordering to produce an immutable SalesActionDecisionDTO.
+
+        ``default_channel`` is the availability-resolved outbound channel supplied by
+        the caller (Part 12). It replaces the historical hardcoded WhatsApp default so
+        the engine never recommends a disabled channel.
         """
+        comm_channel = default_channel or CommunicationChannel.WHATSAPP
         eval_time = datetime.now(timezone.utc)
         prev_execs = previous_executions or []
         facts = active_facts_summary or {}
@@ -135,7 +141,7 @@ class SalesActionPolicyEngine:
                 reason=consent_blocked_reason or f"Outreach blocked: consent is {consent_status.value}.",
                 priority=90.0,
                 confidence=1.0,
-                recommended_channel=CommunicationChannel.WHATSAPP,
+                recommended_channel=comm_channel,
                 automation_allowed=False,
                 human_approval_required=False,
                 blocked_reason=consent_blocked_reason or f"Consent {consent_status.value}",
@@ -155,7 +161,7 @@ class SalesActionPolicyEngine:
                 reason=f"Lead is in terminal lifecycle state '{stage}'. Automated sales outreach stopped.",
                 priority=0.0,
                 confidence=1.0,
-                recommended_channel=CommunicationChannel.WHATSAPP,
+                recommended_channel=comm_channel,
                 automation_allowed=False,
                 human_approval_required=False,
                 customer_timezone=customer_timezone,
@@ -173,7 +179,7 @@ class SalesActionPolicyEngine:
                 reason=fatigue_reason or "Maximum consecutive unanswered follow-ups reached. Marking dormant.",
                 priority=80.0,
                 confidence=0.95,
-                recommended_channel=CommunicationChannel.WHATSAPP,
+                recommended_channel=comm_channel,
                 automation_allowed=True,
                 human_approval_required=False,
                 customer_timezone=customer_timezone,
@@ -190,7 +196,7 @@ class SalesActionPolicyEngine:
                 reason=fatigue_reason or "Communication fatigue threshold exceeded.",
                 priority=40.0,
                 confidence=0.90,
-                recommended_channel=CommunicationChannel.WHATSAPP,
+                recommended_channel=comm_channel,
                 automation_allowed=False,
                 human_approval_required=False,
                 blocked_reason=fatigue_reason,
@@ -220,6 +226,7 @@ class SalesActionPolicyEngine:
                     customer_timezone=customer_timezone,
                     timing_reason=timing_reason,
                     consent_status=consent_status,
+                default_channel=comm_channel,
                 )
 
             # Check for recently completed viewing in last 48h
@@ -242,6 +249,7 @@ class SalesActionPolicyEngine:
                         customer_timezone=customer_timezone,
                         timing_reason=timing_reason,
                         consent_status=consent_status,
+                default_channel=comm_channel,
                     )
 
         # ── 6. Priority 6: Qualified Lead $\to$ Offer Viewing or Property Recommendations ────
@@ -265,6 +273,7 @@ class SalesActionPolicyEngine:
                     customer_timezone=customer_timezone,
                     timing_reason=timing_reason,
                     consent_status=consent_status,
+                default_channel=comm_channel,
                 )
 
         if qual_state == "QUALIFIED":
@@ -284,6 +293,7 @@ class SalesActionPolicyEngine:
                     customer_timezone=customer_timezone,
                     timing_reason=timing_reason,
                     consent_status=consent_status,
+                default_channel=comm_channel,
                 )
 
         # If lead has matching properties and hasn't received recommendations yet
@@ -303,6 +313,7 @@ class SalesActionPolicyEngine:
                 customer_timezone=customer_timezone,
                 timing_reason=timing_reason,
                 consent_status=consent_status,
+                default_channel=comm_channel,
             )
 
         # ── 7. Priority 7: Missing Qualification Information ──────────────────
@@ -323,6 +334,7 @@ class SalesActionPolicyEngine:
                 customer_timezone=customer_timezone,
                 timing_reason=timing_reason,
                 consent_status=consent_status,
+                default_channel=comm_channel,
             )
 
         # ── 8. Priority 8: Follow-Up on Prior Unanswered Actions ─────────────
@@ -346,6 +358,7 @@ class SalesActionPolicyEngine:
                         customer_timezone=customer_timezone,
                         timing_reason=timing_reason,
                         consent_status=consent_status,
+                default_channel=comm_channel,
                     )
 
         # If general inquiry was sent > 24h ago with no reply
@@ -366,6 +379,7 @@ class SalesActionPolicyEngine:
                     customer_timezone=customer_timezone,
                     timing_reason=timing_reason,
                     consent_status=consent_status,
+                default_channel=comm_channel,
                 )
 
         # ── 9. Default Fallback: NO ACTION ───────────────────────────────────
@@ -377,7 +391,7 @@ class SalesActionPolicyEngine:
             reason="No sales action currently required. Lead state is up to date.",
             priority=10.0,
             confidence=0.90,
-            recommended_channel=CommunicationChannel.WHATSAPP,
+            recommended_channel=comm_channel,
             automation_allowed=False,
             human_approval_required=False,
             customer_timezone=customer_timezone,
@@ -402,8 +416,10 @@ class SalesActionPolicyEngine:
         timing_reason: Optional[str],
         consent_status: ConsentStatus,
         required_facts: Optional[List[str]] = None,
+        default_channel: Optional[CommunicationChannel] = None,
     ) -> SalesActionDecisionDTO:
         """Helper to assemble SalesActionDecisionDTO with governance guards."""
+        comm_channel = default_channel or CommunicationChannel.WHATSAPP
         req_approval, approval_reason, _ = HumanApprovalGuard.evaluate_approval_requirement(
             lead=lead,
             policy=policy,
@@ -438,7 +454,7 @@ class SalesActionPolicyEngine:
             reason=reason,
             priority=priority,
             confidence=confidence,
-            recommended_channel=CommunicationChannel.WHATSAPP,
+            recommended_channel=comm_channel,
             automation_allowed=automation_allowed,
             human_approval_required=req_approval,
             blocked_reason=blocked_reason,

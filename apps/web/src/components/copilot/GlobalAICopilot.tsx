@@ -401,12 +401,12 @@ export function GlobalAICopilot() {
 
   return (
     <>
-      {/* Floating Trigger Button */}
+      {/* Floating Trigger Button (z-30 so modals at z-50 take priority) */}
       {!isOpen && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 bg-[#1A1A1A] hover:bg-black text-white border border-gray-800 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group font-mono text-xs font-bold"
+          className="fixed bottom-6 right-6 z-30 flex items-center gap-2.5 px-4 py-2.5 bg-[#1A1A1A] hover:bg-black text-white border border-[#3A3A3A] rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group font-mono text-xs font-bold"
           aria-label="Open WefyLabs AI Copilot"
         >
           <WefyLabsIcon size={14} theme="dark" />
@@ -415,11 +415,17 @@ export function GlobalAICopilot() {
         </button>
       )}
 
-      {/* Slide-out Drawer */}
+      {/* Slide-out Drawer / Bottom Sheet */}
       {isOpen && (
-        <div
-          className="fixed bottom-4 right-4 z-50 w-96 sm:w-[440px] h-[640px] max-h-[90vh] bg-[#F3EFEA] border border-[#D4D0C8] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300"
-        >
+        <>
+          {/* Mobile backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-xs z-40 sm:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+          <div
+            className="fixed bottom-0 sm:bottom-4 right-0 sm:right-4 z-40 w-full sm:w-[440px] h-[85vh] sm:h-[640px] max-h-[92vh] bg-[#FAF7F2] border border-[#D4D0C8] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300"
+          >
           {/* Drawer Header */}
           <div className="p-3.5 bg-[#1A1A1A] text-white flex items-center justify-between border-b border-gray-800 shrink-0">
             <div className="flex items-center gap-2.5">
@@ -765,6 +771,7 @@ export function GlobalAICopilot() {
             </button>
           </div>
         </div>
+        </>
       )}
     </>
   );

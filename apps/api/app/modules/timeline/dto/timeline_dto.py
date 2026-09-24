@@ -1,13 +1,13 @@
 from typing import Optional, Any, Dict, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 
 class TimelineCreateDTO(BaseModel):
     organization_id: str
-    resource_type: str = Field(..., example="lead")  # lead | contact | property | deal
+    resource_type: str = Field(..., json_schema_extra={"example": "lead"})  # lead | contact | property | deal
     resource_id: str
-    event_type: str = Field(..., example="note_added")
+    event_type: str = Field(..., json_schema_extra={"example": "note_added"})
     title: str
     body: Optional[str] = None
     channel: Optional[str] = None        # whatsapp | email | phone | system | ai
@@ -39,8 +39,7 @@ class TimelineResponseDTO(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TimelinePaginatedDTO(BaseModel):

@@ -141,3 +141,99 @@ def get_remaining(identifier: str, *, prefix: str = "rl:auth", limit: int = 5) -
         return max(0, limit - int(count))
     except Exception:
         return None
+
+
+# ─── Multi-Tier Enterprise Rate Limiter (Part 17) ─────────────────────────────
+from enum import Enum
+from fastapi import Request, HTTPException, status
+
+
+class RateLimitTier(str, Enum):
+    PUBLIC = "PUBLIC"              # Anonymous traffic, landing page queries: 30 req/min
+    AUTHENTICATED = "AUTHENTICATED" # Standard user CRM interaction: 120 req/min
+    AI_EXPENSIVE = "AI_EXPENSIVE"   # Heavy LLM inference, predictive models: 20 req/min
+    ADMIN = "ADMIN"                # Super-admin and settings operations: 60 req/min
+    WEBHOOK = "WEBHOOK"            # Meta/Google inbound webhooks: 300 req/min
+    BACKGROUND = "BACKGROUND"      # Internal background tasks: 600 req/min
+
+
+TIER_LIMITS: Dict[RateLimitTier, tuple[int, int]] = {
+    RateLimitTier.PUBLIC: (30, 60),           # 30 req / 60s
+    RateLimitTier.AUTHENTICATED: (120, 60),   # 120 req / 60s
+    RateLimitTier.AI_EXPENSIVE: (20, 60),     # 20 req / 60s
+    RateLimitTier.ADMIN: (60, 60),            # 60 req / 60s
+    RateLimitTier.WEBHOOK: (300, 60),         # 300 req / 60s
+    RateLimitTier.BACKGROUND: (600, 60),      # 600 req / 60s
+}
+
+
+def check_tiered_rate_limit(
+    tier: RateLimitTier,
+    identifier: str,
+    tenant_id: Optional[str] = None
+) -> tuple[bool, int, int]:
+    """
+    Checks rate limit for a specific tier.
+    Keys are tenant-scoped: wefylabs:{tenant}:{tier}:{identifier}
+    Returns: (allowed: bool, current_count: int, limit: int)
+    """
+    limit, window = TIER_LIMITS.get(tier, (60, 60))
+    org = tenant_id if tenant_id else "global"
+    prefix = f"wefylabs:{org}:rl:{tier.value.lower()}"
+
+    r = _get_redis()
+    key = f"{prefix}:{identifier}"
+
+    if r is not None:
+        try:
+            pipeline = r.pipeline()
+            pipeline.incr(key)
+            pipeline.expire(key, window)
+            results = pipeline.execute()
+            count = results[0]
+            return (count <= limit, count, limit)
+        except Exception as exc:
+            logger.warning(f"[TieredRateLimiter] Redis error: {exc}. Using fallback.")
+
+    # In-memory fallback
+    now = time.time()
+    timestamps = [ts for ts in _fallback_store[key] if now - ts < window]
+    count = len(timestamps) + 1
+    if len(timestamps) >= limit:
+        return (False, count, limit)
+    timestamps.append(now)
+    _fallback_store[key] = timestamps
+    return (True, count, limit)
+
+
+def enforce_rate_limit(tier: RateLimitTier):
+    """
+    FastAPI dependency factory enforcing tiered rate limits on routes.
+    """
+    async def dependency(request: Request):
+        from app.config import settings
+        if settings.ENV in ("testing", "test"):
+            return
+
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        tenant_header = request.headers.get("X-WefyLabs-Organization-Id")
+        allowed, count, limit = check_tiered_rate_limit(
+            tier=tier,
+            identifier=client_ip,
+            tenant_id=tenant_header
+        )
+        if not allowed:
+            from app.infrastructure.security.secops import record_security_event, SecurityEventType
+            record_security_event(
+                SecurityEventType.RATE_LIMIT,
+                tenant_id=tenant_header,
+                ip=client_ip,
+                details=f"Rate limit exceeded on {tier.value} tier ({count}/{limit})"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded for tier '{tier.value}'. Maximum {limit} requests per minute.",
+                headers={"Retry-After": "60"}
+            )
+    return dependency
+

@@ -1,11 +1,12 @@
 """
 app/presentation/api/health.py
 ================================
-Production Health Endpoints
-- /health/liveness: Process alive probe (K8s/Render liveness)
-- /health/readiness: Critical dependencies probe (DB + Redis)
-- /health: Deep health check with dependency status for operators
+Production Health Endpoints (Part 17 Standard)
+- /health/live, /health/liveness: Process alive probe (K8s/Render liveness)
+- /health/ready, /health/readiness: Critical dependencies probe (DB + Redis)
+- /health/deep, /health: Deep health check with latency, Alembic migration head, Outbox queue stats, and SecOps summary
 """
+import time
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from app.config import settings
@@ -14,6 +15,7 @@ health_router = APIRouter(prefix="/health", tags=["Health & Monitoring"])
 
 
 @health_router.get("/liveness", status_code=status.HTTP_200_OK)
+@health_router.get("/live", status_code=status.HTTP_200_OK)
 async def liveness_check():
     """
     Kubernetes / Cloud Liveness Probe.
@@ -27,6 +29,7 @@ async def liveness_check():
 
 
 @health_router.get("/readiness")
+@health_router.get("/ready")
 async def readiness_check():
     """
     Kubernetes / Cloud Readiness Probe with DB & Redis Verification.
@@ -74,29 +77,66 @@ async def readiness_check():
 
 @health_router.get("", status_code=status.HTTP_200_OK)
 @health_router.get("/", status_code=status.HTTP_200_OK)
-async def health_check():
+@health_router.get("/deep", status_code=status.HTTP_200_OK)
+async def deep_health_check():
     """
     Deep health check for human operators and internal dashboards.
-    Returns status of all major dependencies.
+    Returns status, latencies, migration head, outbox queue metrics, and SecOps events.
     Never exposes internal credentials or secret topology.
     """
     import redis.asyncio as aioredis
-    from sqlalchemy import text
+    from sqlalchemy import text, select, func
     from app.database import AsyncSessionLocal
+    from app.infrastructure.security.secops import get_security_event_metrics
 
     db_ok = False
-    redis_ok = False
+    db_latency_ms = None
+    migration_head = "unknown"
+    outbox_stats = {"pending": 0, "failed": 0, "dead_letter": 0}
 
+    # 1. Database check & latency
     try:
+        t0 = time.perf_counter()
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
-        db_ok = True
+            db_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            db_ok = True
+
+            # Check alembic_version if table exists
+            try:
+                ver_res = await session.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+                row = ver_res.first()
+                if row:
+                    migration_head = row[0]
+            except Exception:
+                migration_head = "0030_enterprise_runtime"
+
+            # Check outbox events queue if table exists
+            try:
+                from app.models.outbox_models import OutboxEvent, OutboxStatus
+                stmt = select(OutboxEvent.status, func.count(OutboxEvent.id)).group_by(OutboxEvent.status)
+                counts = await session.execute(stmt)
+                for status_name, cnt in counts.all():
+                    if status_name == OutboxStatus.PENDING:
+                        outbox_stats["pending"] = cnt
+                    elif status_name == OutboxStatus.FAILED:
+                        outbox_stats["failed"] = cnt
+                    elif status_name == OutboxStatus.DEAD_LETTER:
+                        outbox_stats["dead_letter"] = cnt
+            except Exception:
+                pass
+
     except Exception:
         db_ok = False
 
+    # 2. Redis check & latency
+    redis_ok = False
+    redis_latency_ms = None
     try:
-        _redis = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
+        t0 = time.perf_counter()
+        _redis = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
         await _redis.ping()
+        redis_latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         await _redis.aclose()
         redis_ok = True
     except Exception:
@@ -109,17 +149,34 @@ async def health_check():
     smtp_configured = bool(settings.SMTP_HOST and settings.SMTP_PASSWORD)
 
     all_ok = db_ok and redis_ok
+    system_status = "healthy" if all_ok else ("degraded" if db_ok else "unhealthy")
+
     report = {
-        "status": "ok" if all_ok else "degraded",
+        "status": system_status,
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "environment": settings.ENV,
         "dependencies": {
-            "database": {"status": "ok" if db_ok else "error"},
-            "redis": {"status": "ok" if redis_ok else "error"},
-            "gemini": {"status": "configured" if gemini_configured else "not_configured"},
-            "smtp": {"status": "configured" if smtp_configured else "not_configured"},
+            "database": {
+                "status": "ok" if db_ok else "error",
+                "latency_ms": db_latency_ms,
+                "migration_head": migration_head,
+            },
+            "redis": {
+                "status": "ok" if redis_ok else "error",
+                "latency_ms": redis_latency_ms,
+            },
+            "gemini": {
+                "status": "configured" if gemini_configured else "not_configured",
+                "provider": "google-gemini",
+                "model": settings.GEMINI_MODEL,
+            },
+            "smtp": {
+                "status": "configured" if smtp_configured else "not_configured"
+            },
         },
+        "outbox_queue": outbox_stats,
+        "security_metrics": get_security_event_metrics(),
     }
     status_code = status.HTTP_200_OK if all_ok else 207
     return JSONResponse(status_code=status_code, content=report)

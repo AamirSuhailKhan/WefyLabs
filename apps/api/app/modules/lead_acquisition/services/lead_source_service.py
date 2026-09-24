@@ -66,6 +66,13 @@ class LeadSourceService:
         )
         return (await self.db.execute(stmt)).scalars().first()
 
+    async def get_source_by_id(self, source_id: str) -> Optional[LeadSource]:
+        """Get a source by ID (for webhook token lookup)."""
+        stmt = select(LeadSource).where(
+            and_(LeadSource.id == source_id, LeadSource.is_active.is_(True))
+        )
+        return (await self.db.execute(stmt)).scalars().first()
+
     async def list_sources(
         self, organization_id: str, channel: Optional[str] = None, status: Optional[str] = None
     ) -> List[LeadSource]:

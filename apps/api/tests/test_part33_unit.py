@@ -152,7 +152,9 @@ class TestAlembicMigrationSafety:
         heads = script.get_heads()
 
         assert len(heads) == 1, f"Expected exactly 1 Alembic head, found {len(heads)}: {heads}"
-        assert heads[0] == "0026_revenue_autopilot"
+        # The head moves forward as new parts add migrations, so assert the
+        # invariant (a single, well-formed head) rather than a hardcoded revision.
+        assert heads[0] and heads[0][0].isdigit(), f"Unexpected head revision: {heads[0]}"
 
 
 # ─── 5. Guardrails: Razorpay TEST Mode & WhatsApp Disabled ─────────────────────

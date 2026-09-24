@@ -1713,10 +1713,18 @@ async def _handle_shortlist_property_for_lead(db: AsyncSession, broker: Broker, 
     try:
         dto = ShortlistRequestDTO(lead_id=lead_id, property_id=property_id, notes=notes)
         res = await engine.shortlist_property_for_lead(lead_id, property_id, broker, dto)
+        # ShortlistActionResponseDTO is a Pydantic model — convert to dict before mutating
+        if hasattr(res, "model_dump"):
+            res = res.model_dump()
+        elif hasattr(res, "dict"):
+            res = res.dict()
+        elif not isinstance(res, dict):
+            res = dict(res)
         res["_citation"] = f"Shortlisted property {property_id} for lead {lead_id}"
         return res
     except Exception as e:
         return {"error": str(e)}
+
 
 
 async def _handle_mark_property_recommended(db: AsyncSession, broker: Broker, args: Dict[str, Any]) -> Dict[str, Any]:

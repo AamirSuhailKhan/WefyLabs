@@ -61,15 +61,35 @@ class DeliveryEngine:
         template_variables: Optional[Dict[str, str]] = None,
         content_structured: Optional[Dict[str, Any]] = None,
         priority: int = 5,
+        idempotency_key: Optional[str] = None,
     ) -> ChannelMessage:
         """
         Create ChannelMessage + OutboundQueue entry.
         Returns ChannelMessage immediately; delivery is async.
+
+        ``idempotency_key`` — when supplied (e.g. by a retried Celery task or a
+        scheduled dispatcher) a second call with the same key returns the already
+        persisted message instead of creating a duplicate send. When omitted a
+        random key is generated, preserving the previous behaviour.
         """
+        if idempotency_key:
+            existing_stmt = select(ChannelMessage).where(
+                ChannelMessage.organization_id == conversation.organization_id,
+                ChannelMessage.idempotency_key == idempotency_key,
+            )
+            existing = (await db.execute(existing_stmt)).scalars().first()
+            if existing is not None:
+                logger.info(
+                    f"[DeliveryEngine] Idempotent hit for key={idempotency_key} "
+                    f"msg_id={existing.id} — returning existing message."
+                )
+                return existing
+        else:
+            idempotency_key = hashlib.sha256(
+                f"out:{conversation.id}:{uuid.uuid4()}".encode()
+            ).hexdigest()[:64]
+
         provider = self._channel_manager.get_provider(channel)
-        idempotency_key = hashlib.sha256(
-            f"out:{conversation.id}:{uuid.uuid4()}".encode()
-        ).hexdigest()[:64]
 
         # ─── Create ChannelMessage ────────────────────────────────────────────
         msg = ChannelMessage(

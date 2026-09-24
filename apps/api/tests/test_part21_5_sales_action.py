@@ -823,15 +823,20 @@ async def test_duplicate_execution_protection(db_session: AsyncSession):
     broker = Broker(id=uuid.uuid4(), name="Agent Dan", email=f"dan_{uuid.uuid4()}@example.com")
     org_id = str(broker.id)
     lead = Lead(id=uuid.uuid4(), broker_id=broker.id, name="Dan Buyer", phone="+971509990099", status="active")
+    # Part 12: the engine now selects an *available* channel (WhatsApp is disabled),
+    # so consent must be recorded for the channel that will actually be used.
     consent = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="WHATSAPP", status="OPTED_IN")
-    db_session.add_all([broker, lead, consent])
+    consent_email = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="EMAIL", status="OPTED_IN")
+    consent_inapp = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="IN_APP", status="OPTED_IN")
+    db_session.add_all([broker, lead, consent, consent_email, consent_inapp])
     await db_session.commit()
 
     service = SalesActionDomainService(db_session)
     res = await service.execute_sales_action("act-1", str(lead.id), org_id, custom_message="Test Msg", broker=broker)
 
     assert res.status in (SalesActionStatus.SENT, SalesActionStatus.COMPLETED, SalesActionStatus.FAILED)
-    assert res.channel == "WHATSAPP"
+    # The disabled WhatsApp channel must never be the selected delivery channel.
+    assert res.channel != "WHATSAPP"
 
 
 @pytest.mark.asyncio
@@ -1064,8 +1069,11 @@ async def test_api_approve_and_execute_sales_action(db_session: AsyncSession):
     broker = Broker(id=uuid.uuid4(), name="Exec Agent", email=f"exec_{uuid.uuid4()}@example.com")
     org_id = str(broker.id)
     lead = Lead(id=uuid.uuid4(), broker_id=broker.id, name="Exec Prospect", phone="+971509990155")
+    # Part 12: consent for the available channel(s) the engine may select.
     consent = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="WHATSAPP", status="OPTED_IN")
-    db_session.add_all([broker, lead, consent])
+    consent_email = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="EMAIL", status="OPTED_IN")
+    consent_inapp = CommunicationConsent(lead_id=str(lead.id), organization_id=org_id, channel="IN_APP", status="OPTED_IN")
+    db_session.add_all([broker, lead, consent, consent_email, consent_inapp])
     await db_session.commit()
 
     async def override_get_db():

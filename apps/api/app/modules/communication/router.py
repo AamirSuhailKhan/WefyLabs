@@ -57,6 +57,12 @@ from app.modules.communication.media_handler.media_service import MediaHandler
 from app.modules.communication.presence.presence_service import PresenceService
 from app.modules.communication.monitoring.comm_monitor import CommunicationMonitor
 from app.modules.communication.provider_config_service import ProviderConfigurationService
+from app.modules.communication.channels.enums import Channel
+from app.modules.communication.channels.gate import (
+    ChannelNotSendableError,
+    ensure_channel_sendable,
+)
+from app.modules.communication.channels.status import provider_key_for
 
 router = APIRouter(prefix="/communication/v2", tags=["Omnichannel Communication Engine v2"])
 
@@ -77,7 +83,7 @@ _provider_config_service = ProviderConfigurationService(_channel_manager)
 # ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 class SendMessageDTO(BaseModel):
-    channel: str = Field(description="whatsapp | telegram | email | webchat | sms")
+    channel: str = Field(description="web | email | sms | telegram (whatsapp: DISABLED / not live)")
     recipient_identifier: str = Field(description="Phone number, email, or session ID")
     content: str
     message_type: str = Field(default="text")
@@ -264,11 +270,12 @@ async def send_message(
 ):
     org_id = str(current_broker.organization_id or current_broker.id)
     conv = await _get_conversation_or_404(db, conversation_id, org_id)
+    resolved_channel = await _authorize_outbound_channel(body.channel)
 
     msg = await _delivery_engine.enqueue(
         conversation=conv,
         content=body.content,
-        channel=body.channel,
+        channel=resolved_channel,
         recipient_identifier=body.recipient_identifier,
         db=db,
         message_type=body.message_type,
@@ -295,12 +302,13 @@ async def human_reply(
 ):
     org_id = str(current_broker.organization_id or current_broker.id)
     conv = await _get_conversation_or_404(db, conversation_id, org_id)
+    resolved_channel = await _authorize_outbound_channel(body.channel)
 
     # Verify human is in control (or allow agent override)
     msg = await _delivery_engine.enqueue(
         conversation=conv,
         content=body.content,
-        channel=body.channel,
+        channel=resolved_channel,
         recipient_identifier=body.recipient_identifier,
         db=db,
         sent_by_ai=False,
@@ -818,6 +826,16 @@ async def inbound_webhook(
 
 
 # ─── Internal Helpers ────────────────────────────────────────────────────────
+
+async def _authorize_outbound_channel(channel: str) -> str:
+    """Gate an outbound send on channel enablement; return the provider key."""
+    canonical = Channel.normalize(channel)
+    try:
+        await ensure_channel_sendable(canonical)
+    except ChannelNotSendableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.to_dict())
+    return provider_key_for(canonical) or channel
+
 
 async def _get_conversation_or_404(
     db: AsyncSession, conversation_id: str, org_id: str

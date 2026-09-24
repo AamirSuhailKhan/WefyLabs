@@ -33,6 +33,44 @@ function ScorePill({ score }: { score: string }) {
   );
 }
 
+function SourceBadge({ source }: { source?: string }) {
+  const s = (source || 'manual').toLowerCase();
+  let label = 'Manual';
+  let cls = 'bg-[#F5F0EB] text-[#4A4A4A] border-[#D4D0C8]';
+
+  if (s.includes('web') || s.includes('site') || s.includes('form')) {
+    label = '🌐 Website';
+    cls = 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]';
+  } else if (s.includes('ai') || s.includes('chat') || s.includes('agent')) {
+    label = '🤖 AI Chat';
+    cls = 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]';
+  } else if (s.includes('csv') || s.includes('import') || s.includes('batch')) {
+    label = '📁 CSV Import';
+    cls = 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]';
+  } else if (s.includes('meta') || s.includes('facebook') || s.includes('ad') || s.includes('campaign')) {
+    label = '📢 Paid Ad';
+    cls = 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]';
+  } else if (s.includes('webhook') || s.includes('api')) {
+    label = '⚡ API/Webhook';
+    cls = 'bg-[#EEF2FF] text-[#4338CA] border-[#C7D2FE]';
+  } else if (s.includes('referral')) {
+    label = '🤝 Referral';
+    cls = 'bg-[#FAE8FF] text-[#86198F] border-[#F5D0FE]';
+  } else if (s.includes('email')) {
+    label = '✉️ Email';
+    cls = 'bg-[#CCFBF1] text-[#0F766E] border-[#99F6E4]';
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded border ${cls}`}
+      style={{ fontFamily: 'JetBrains Mono, monospace' }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState('');
@@ -238,9 +276,13 @@ export default function LeadsPage() {
                     transition={{ duration: 0.25, delay: i * 0.02 }}
                     className={`grid grid-cols-[2fr_1.5fr_1fr_1.5fr_2fr_1.5fr_1fr_auto] px-4 py-4 gap-2 items-center hover:bg-[#F5F0EB]/50 transition-colors border-b border-[#F0EDE8] ${i === leads.length - 1 ? 'border-b-0' : ''}`}
                   >
-                    <span className="text-[14px] font-semibold text-[#1A1A1A] truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <Link
+                      href={`/leads/${lead.id}`}
+                      className="text-[14px] font-semibold text-[#1A1A1A] hover:text-[#0D9488] transition-colors truncate"
+                      style={{ fontFamily: 'Inter, sans-serif' }}
+                    >
                       {lead.name || 'New Lead'}
-                    </span>
+                    </Link>
                     <span className="text-[13px] text-[#4A4A4A]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {lead.phone}
                     </span>
@@ -259,9 +301,9 @@ export default function LeadsPage() {
                     >
                       {lead.pipeline_stage || lead.stage_name || 'new'}
                     </span>
-                    <span className="text-[12px] text-[#6B6B6B]" style={{ fontFamily: 'Inter, sans-serif' }}>
-                      {lead.source}
-                    </span>
+                    <div>
+                      <SourceBadge source={lead.source} />
+                    </div>
                     <div className="flex items-center gap-2">
                       <a href={`tel:${lead.phone}`} title="Call" className="text-[#0D9488] hover:text-[#0F766E] transition-colors">
                         <Phone className="w-4 h-4" />

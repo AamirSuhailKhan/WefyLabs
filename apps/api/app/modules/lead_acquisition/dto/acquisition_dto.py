@@ -238,6 +238,8 @@ class PublicLeadCaptureDTO(BaseModel):
     website_url_hp: Optional[str] = None
     custom_fields: Optional[Dict[str, Any]] = None
 
+    model_config = {"populate_by_name": True}
+
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: Optional[str]) -> Optional[str]:
@@ -451,3 +453,211 @@ class ProspectImportDTO(BaseModel):
 
 class ProspectRejectDTO(BaseModel):
     reason: str = Field(..., min_length=1, max_length=255)
+
+
+# ─── Canonical Universal Lead Intake DTOs (Part 9) ───────────────────────────
+
+class UniversalSourceType:
+    WEBSITE = "WEBSITE"
+    PUBLIC_AI = "PUBLIC_AI"
+    MANUAL = "MANUAL"
+    CSV = "CSV"
+    API = "API"
+    WEBHOOK = "WEBHOOK"
+    EMAIL = "EMAIL"
+    META = "META"
+    GOOGLE = "GOOGLE"
+    PORTAL = "PORTAL"
+    REFERRAL = "REFERRAL"
+    PAID_AD = "PAID_AD"
+    ORGANIC = "ORGANIC"
+    AI_AGENT = "AI_AGENT"
+    OTHER = "OTHER"
+
+    @classmethod
+    def all_values(cls) -> set[str]:
+        return {
+            cls.WEBSITE, cls.PUBLIC_AI, cls.MANUAL, cls.CSV,
+            cls.API, cls.WEBHOOK, cls.EMAIL, cls.META,
+            cls.GOOGLE, cls.PORTAL, cls.REFERRAL, cls.PAID_AD,
+            cls.ORGANIC, cls.AI_AGENT, cls.OTHER
+        }
+
+
+class CanonicalLeadIntakeDTO(BaseModel):
+    """
+    Universal Lead Intake Contract for WefyLabs Revenue Growth Layer (Part 9).
+    Single authoritative contract ingested from:
+      - Web forms & widgets
+      - Public AI conversation experience
+      - Internal manual lead creation
+      - CSV bulk imports
+      - Authenticated REST API
+      - External webhooks (Meta, Google, Portals)
+    """
+    source_type: str = Field(
+        default=UniversalSourceType.WEBSITE,
+        description="Controlled source taxonomy: WEBSITE|PUBLIC_AI|MANUAL|CSV|API|WEBHOOK|EMAIL|META|GOOGLE|PORTAL|REFERRAL|OTHER"
+    )
+    external_source: Optional[str] = Field(
+        default=None,
+        description="Underlying origin identifier, e.g. 'website_form', 'meta_lead_ads', 'csv_importer'"
+    )
+    external_lead_id: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        description="External lead ID / submission ID from provider for idempotency tracking"
+    )
+    name: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=255)
+    message: Optional[str] = Field(default=None, max_length=4000)
+
+    # Real-estate requirements
+    property_type: Optional[str] = Field(default=None, max_length=100)
+    transaction_type: Optional[str] = Field(default=None, max_length=50)
+    property_interest: Optional[str] = Field(default=None, max_length=255)
+    property_id: Optional[str] = Field(default=None, max_length=36)
+    budget: Optional[Union[str, int, float, Decimal]] = None
+    budget_min: Optional[Union[str, int, float, Decimal]] = None
+    budget_max: Optional[Union[str, int, float, Decimal]] = None
+    currency: Optional[str] = Field(default="INR", max_length=3)
+    city: Optional[str] = Field(default=None, max_length=100)
+    preferred_locations: Optional[List[str]] = Field(default_factory=list)
+    timeline: Optional[str] = Field(default=None, max_length=50)
+    raw_requirements: Optional[Union[str, Dict[str, Any]]] = None
+    requirements: Optional[Dict[str, Any]] = None
+
+    # Source Attribution & UTM parameters
+    landing_page: Optional[str] = Field(default=None, max_length=2000)
+    referrer: Optional[str] = Field(default=None, max_length=2000)
+    utm_source: Optional[str] = Field(default=None, max_length=255)
+    utm_medium: Optional[str] = Field(default=None, max_length=255)
+    utm_campaign: Optional[str] = Field(default=None, max_length=255)
+    utm_term: Optional[str] = Field(default=None, max_length=255)
+    utm_content: Optional[str] = Field(default=None, max_length=255)
+
+    # Association & Context
+    campaign_id: Optional[str] = None
+    source_id: Optional[str] = None
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Active conversation ID if lead was captured from a conversational AI experience"
+    )
+    assigned_broker_id: Optional[str] = Field(
+        default=None,
+        description="Optional pre-assigned broker UUID (subject to tenant verification)"
+    )
+
+    # Consent
+    consent: Optional[Union[bool, Dict[str, Any]]] = None
+    marketing_consent: bool = False
+    email_consent: bool = False
+    whatsapp_consent: bool = False
+    sms_consent: bool = False
+
+    # Security & Idempotency
+    idempotency_key: Optional[str] = Field(default=None, max_length=255)
+    source_metadata: Optional[Dict[str, Any]] = None
+
+    @field_validator("source_type")
+    @classmethod
+    def validate_source_type(cls, v: str) -> str:
+        upper = (v or "OTHER").strip().upper()
+        if upper not in UniversalSourceType.all_values():
+            return UniversalSourceType.OTHER
+        return upper
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_norm(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            clean = v.strip().lower()
+            return clean if clean else None
+        return None
+
+    def validate_contact_present(self) -> bool:
+        """Enforces that at least one of phone or email is provided."""
+        has_phone = bool(self.phone and self.phone.strip())
+        has_email = bool(self.email and self.email.strip())
+        return has_phone or has_email
+
+
+class CanonicalLeadIntakeResultDTO(BaseModel):
+    """Universal result contract for all lead ingestion operations."""
+    status: str = Field(description="ACCEPTED | DUPLICATE | REJECTED | FAILED")
+    lead_id: str
+    customer_id: str
+    event_id: str
+    is_duplicate: bool = False
+    is_new_lead: bool = True
+    identity_outcome: str = Field(
+        description="NEW_LEAD | UPDATE_EXISTING_LEAD | LINKED_TO_EXISTING_CUSTOMER | DUPLICATE_SOURCE_EVENT | POSSIBLE_DUPLICATE"
+    )
+    attribution_id: Optional[str] = None
+    assigned_broker_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    message: str = "Lead processed successfully"
+    activations: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[datetime] = None
+
+
+# ─── Reconciliation & Backfill DTOs (Part 13) ────────────────────────────────
+
+class ReconciliationRequestDTO(BaseModel):
+    provider: str = Field(..., description="meta|google")
+    source_id: Optional[str] = None
+    form_id: Optional[str] = None
+    since_hours: int = Field(default=24, ge=1, le=168)
+
+
+class ReconciliationResponseDTO(BaseModel):
+    status: str
+    provider: str
+    reconciled_count: int
+    missing_count: int
+    recovered_count: int
+    details: Optional[Dict[str, Any]] = None
+
+
+class BackfillRequestDTO(BaseModel):
+    provider: str = Field(..., description="meta|google")
+    source_id: str
+    form_id: Optional[str] = None
+    start_time: datetime
+    end_time: datetime
+    limit: int = Field(default=100, ge=1, le=500)
+    dry_run: bool = False
+
+
+class BackfillResponseDTO(BaseModel):
+    status: str
+    provider: str
+    processed_count: int
+    dry_run: bool
+    window: Dict[str, Any]
+
+
+class ProviderConnectDTO(BaseModel):
+    provider: str = Field(..., description="meta|google")
+    name: Optional[str] = None
+    page_id: Optional[str] = None
+    form_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    ad_account_id: Optional[str] = None
+    access_token: Optional[str] = None
+    app_secret: Optional[str] = None
+    developer_token: Optional[str] = None
+    google_key: Optional[str] = None
+    verify_token: Optional[str] = None
+    webhook_url_token: Optional[str] = None
+
+
+class ProviderStatusDTO(BaseModel):
+    provider: str
+    status: str
+    is_configured: bool
+    note: Optional[str] = None
+    last_verified_at: Optional[datetime] = None
+
+

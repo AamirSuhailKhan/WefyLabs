@@ -335,6 +335,80 @@ TOOLS: List[ToolDefinition] = [
         },
         handler_key="get_handoff_context",
     ),
+
+    # ── Part 11 Revenue Intelligence & Copilot Tools ─────────────────────────
+    ToolDefinition(
+        name="get_revenue_overview",
+        description="Get high-level revenue figures including confirmed revenue, active pipeline, and revenue at risk.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_revenue_overview",
+    ),
+    ToolDefinition(
+        name="get_funnel_metrics",
+        description="Get stage-by-stage counts, conversion rates, and pipeline values for the revenue funnel.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_funnel_metrics",
+    ),
+    ToolDefinition(
+        name="get_leakage_summary",
+        description="Get operational revenue leakage items, dropped leads, and value-at-risk analysis.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_leakage_summary",
+    ),
+    ToolDefinition(
+        name="get_source_attribution",
+        description="Get lead source and channel attribution report showing conversion yield per source.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_source_attribution",
+    ),
+    ToolDefinition(
+        name="get_opportunity_flow",
+        description="Get learning loop summary showing highest-performing opportunity types and conversion rates.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_opportunity_flow",
+    ),
+    ToolDefinition(
+        name="get_action_effectiveness",
+        description="Get action effectiveness metrics showing positive vs negative outcomes of revenue actions.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_action_effectiveness",
+    ),
+    ToolDefinition(
+        name="get_outcome_history",
+        description="Get historical outcome distribution and true win rates from feedback logs and deals.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_outcome_history",
+    ),
+    ToolDefinition(
+        name="get_data_quality",
+        description="Get data health score and audit of missing sources, budgets, or outcomes.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_data_quality",
+    ),
+    ToolDefinition(
+        name="get_lead_revenue_journey",
+        description="Get unified chronological revenue journey for an individual lead.",
+        parameters={"type": "object", "properties": {"lead_id": {"type": "string", "description": "Lead UUID"}}, "required": ["lead_id"]},
+        handler_key="get_lead_revenue_journey",
+    ),
+    ToolDefinition(
+        name="get_property_conversion_history",
+        description="Get conversion history, appointments, and deals for a specific property listing.",
+        parameters={"type": "object", "properties": {"property_id": {"type": "string", "description": "Property UUID"}}, "required": ["property_id"]},
+        handler_key="get_property_conversion_history",
+    ),
+    ToolDefinition(
+        name="get_agent_action_history",
+        description="Get operational activity metrics and closed deals per sales representative.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_agent_action_history",
+    ),
+    ToolDefinition(
+        name="get_revenue_at_risk",
+        description="Get total estimated revenue at risk from stalled and lost opportunities.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        handler_key="get_revenue_at_risk",
+    ),
 ]
 
 # LLM function-calling format (OpenAI-compatible)

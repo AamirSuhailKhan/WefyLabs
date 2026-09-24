@@ -46,6 +46,7 @@ from app.modules.ai_agent.handoff.handoff_service import HandoffService
 from app.modules.ai_agent.memory_adapter.summary_writer import SummaryWriter
 from app.modules.ai_agent.memory_adapter.long_term import bulk_write_facts
 from app.modules.ai_agent.seeder import seed_default_agent_configuration
+from app.modules.ai_agent.workforce.orchestrator import WorkforceOrchestrator
 
 
 # ─── DTOs ─────────────────────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ class ConversationManager:
         self.safety_guard = ResponseSafetyGuard()
         self.handoff_service = HandoffService()
         self.summary_writer = SummaryWriter()
+        self.workforce_orchestrator = WorkforceOrchestrator()
 
     async def process(
         self,

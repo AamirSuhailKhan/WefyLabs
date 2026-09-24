@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from app.modules.communication.provider_adapters.base_provider import (
     CommunicationProvider, InboundMessageDTO, OutboundMessageDTO,
-    ProviderResponse, ProviderDeliveryStatus
+    ProviderResponse, ProviderDeliveryStatus, ProviderStatusEnum
 )
 
 _TG_API_BASE = "https://api.telegram.org/bot"

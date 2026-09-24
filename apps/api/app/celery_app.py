@@ -28,6 +28,8 @@ celery_app = Celery(
         "app.modules.autonomous_loop.workers.loop_tasks",
         # Part 35 — AI Real Estate Revenue Autopilot workers
         "app.modules.revenue_autopilot.tasks",
+        # Part 12 — Follow-Up dispatch through the Communication Hub
+        "app.modules.follow_up.tasks",
     ]
 )
 
@@ -153,6 +155,8 @@ celery_app.conf.update(
         "app.tasks.followup_tasks.escalate_stale_lead": {"queue": "lead_queue"},
         "app.tasks.followup_tasks.process_followup_rule": {"queue": "lead_queue"},
         "app.tasks.followup_tasks.send_daily_briefing": {"queue": "daily-brief"},
+        # ── Part 12 — Follow-Up dispatch through the Communication Hub ──────
+        "follow_up.dispatch_due_executions": {"queue": "lead_queue"},
     },
     beat_schedule={
         # ── Existing schedules (unchanged) ────────────────────────────────
@@ -271,6 +275,12 @@ celery_app.conf.update(
         "expire-stale-revenue-opportunities": {
             "task": "app.modules.revenue_autopilot.tasks.expire_stale_opportunities_task",
             "schedule": crontab(minute=0, hour="*"),
+        },
+        # ── Part 12 — Dispatch due follow-up executions through the Hub every 5 min.
+        # Inert until FOLLOWUP_HUB_DISPATCH_ENABLED is turned on (see follow_up/tasks.py).
+        "dispatch-due-followup-executions": {
+            "task": "follow_up.dispatch_due_executions",
+            "schedule": crontab(minute="*/5"),
         },
     }
 )

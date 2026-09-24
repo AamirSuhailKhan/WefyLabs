@@ -9,7 +9,7 @@ import math
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.predictive_models import PredictionDriftRecord

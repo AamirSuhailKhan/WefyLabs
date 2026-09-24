@@ -58,6 +58,12 @@ class StandardDomainEvents:
     PROPERTY_PRICE_CHANGED = "property.price_changed"
     PROPERTY_AVAILABILITY_CHANGED = "property.availability_changed"
     PROPERTY_ARCHIVED = "property.archived"
+    # Webhook Integration Events
+    WEBHOOK_RECEIVED = "webhook.received"
+    WEBHOOK_PROCESSED = "webhook.processed"
+    WEBHOOK_FAILED = "webhook.failed"
+    WEBHOOK_SIGNATURE_FAILED = "webhook.signature_failed"
+    WEBHOOK_REPLAY_BLOCKED = "webhook.replay_blocked"
 
 class DomainEventBus:
     """

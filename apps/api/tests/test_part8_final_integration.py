@@ -1,4 +1,4 @@
-﻿"""
+"""
 WEFYLABS PART 8 — FINAL SYSTEM INTEGRATION TEST SUITE
 =====================================================
 Mission: Verify the entire customer-to-revenue journey as ONE coherent system.
@@ -497,14 +497,27 @@ class TestPhaseNFullJourney:
 
 class TestPhaseOSystemContracts:
     def test_alembic_head_is_0027(self):
-        """VERIFIED: Alembic migration head is 0027_customer_identity_canonical."""
+        """VERIFIED: Alembic migration head is at or beyond 0027 (currently 0029_native_crm_indexes)."""
+        import pathlib
+        # Resolve the apps/api directory regardless of test runner CWD
+        api_root = pathlib.Path(__file__).parent.parent  # apps/api
         result = subprocess.run(
             ["python", "-m", "alembic", "heads"],
-            capture_output=True, text=True, cwd="."
+            capture_output=True, text=True, cwd=str(api_root)
         )
         output = result.stdout + result.stderr
-        assert "0027_customer_identity_canonical" in output, (
-            f"Alembic head is not 0027. Output: {output[:300]}"
+        # Accept 0027 or any later migration head as valid
+        has_valid_head = any(
+            marker in output
+            for marker in [
+                "0027_customer_identity_canonical",
+                "0028_revenue_intelligence",
+                "0029_native_crm_indexes",
+                "0030_enterprise_runtime",
+            ]
+        )
+        assert has_valid_head, (
+            f"Alembic head is not at expected migration. Output: {output[:300]}"
         )
 
     def test_model_table_count_is_substantial(self):
@@ -566,7 +579,10 @@ class TestPhaseOSystemContracts:
 
     def test_create_all_is_guarded_from_production(self):
         """VERIFIED: create_all() is protected by ENV check and never runs in production."""
-        with open("app/main.py") as f:
+        import pathlib
+        # Resolve main.py relative to this test file to be CWD-independent
+        main_py = pathlib.Path(__file__).parent.parent / "app" / "main.py"
+        with open(str(main_py)) as f:
             content = f.read()
         idx = content.find("create_all")
         assert idx != -1, "create_all not found in main.py"

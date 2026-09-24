@@ -105,6 +105,109 @@ class FollowUpOrchestratorService:
         await self.db.refresh(policy)
         return policy
 
+    async def get_channel_status(self) -> Dict[str, Any]:
+        """Return the truthful per-channel availability used by channel selection."""
+        from app.modules.communication.channels import ChannelStatusService
+        return await ChannelStatusService().get_public_summary()
+
+    async def dispatch_execution(self, execution_id: str, organization_id: str) -> Dict[str, Any]:
+        """Dispatch a scheduled follow-up execution through the Communication Hub.
+
+        Part 12: the follow-up engine never calls providers directly. The Hub enforces
+        channel availability, canonical channel vocabulary, idempotency and outbound
+        queueing. Idempotent: an execution already dispatched or terminal is not re-sent.
+        """
+        from app.modules.communication.hub import CommunicationHub
+        from app.modules.communication.channels import Channel, MessageActorType
+
+        stmt = select(FollowUpExecution).where(
+            FollowUpExecution.id == execution_id,
+            FollowUpExecution.organization_id == organization_id,
+        )
+        execution = (await self.db.execute(stmt)).scalars().first()
+        if not execution:
+            raise ValueError(f"Follow-up execution '{execution_id}' not found.")
+
+        if execution.status in ("CANCELLED", "SUPPRESSED", "FAILED"):
+            raise ValueError(
+                f"Follow-up execution '{execution_id}' is {execution.status} and cannot be dispatched."
+            )
+        if execution.status in ("DISPATCHED", "DELIVERED", "READ", "RESPONDED", "SENT"):
+            return {
+                "status": "already_dispatched",
+                "execution_id": execution.id,
+                "message_id": None,
+                "channel": execution.channel,
+                "delivery_status": execution.status,
+            }
+
+        try:
+            lead_pk = uuid.UUID(str(execution.lead_id))
+        except Exception:
+            lead_pk = execution.lead_id
+        lead = (await self.db.execute(select(Lead).where(Lead.id == lead_pk))).scalars().first()
+        if not lead:
+            raise ValueError(f"Lead '{execution.lead_id}' not found for execution '{execution_id}'.")
+
+        if not execution.message_body:
+            raise ValueError("Follow-up execution has no message body to dispatch.")
+
+        canonical = Channel.normalize(execution.channel)
+        recipient = self._recipient_identifier_for(canonical, lead)
+        if not recipient:
+            raise ValueError(f"No recipient identifier available for channel '{canonical.value}'.")
+
+        hub = CommunicationHub()
+        result = await hub.send_message(
+            db=self.db,
+            organization_id=organization_id,
+            lead_id=str(lead.id),
+            channel=canonical,
+            content=execution.message_body,
+            recipient_identifier=recipient,
+            actor_type=MessageActorType.AUTOMATION,
+            message_type="text",
+            content_structured={"subject": execution.message_subject} if execution.message_subject else None,
+            # Deterministic key: a retried dispatch (Celery retry, duplicate
+            # scheduled trigger) reuses the existing message instead of re-sending.
+            idempotency_key=f"followup:{execution.id}",
+        )
+
+        execution.status = "DISPATCHED"
+        execution.executed_at = datetime.now(timezone.utc)
+        facts = list(execution.grounded_facts or [])
+        facts.append({
+            "dispatch": "communication_hub",
+            "message_id": result.message_id,
+            "provider": result.provider_name,
+        })
+        execution.grounded_facts = facts
+        await self.db.commit()
+
+        logger.info(
+            f"[FollowUpService] Dispatched execution {execution.id} via Communication Hub "
+            f"channel={result.channel} message_id={result.message_id}"
+        )
+        return {
+            "status": "dispatched",
+            "execution_id": execution.id,
+            "message_id": result.message_id,
+            "conversation_id": result.conversation_id,
+            "channel": result.channel,
+            "delivery_status": result.delivery_status,
+            "provider": result.provider_name,
+        }
+
+    @staticmethod
+    def _recipient_identifier_for(channel, lead: Lead) -> Optional[str]:
+        """Resolve the channel-appropriate recipient identifier for a lead."""
+        from app.modules.communication.channels import Channel
+        if channel is Channel.EMAIL:
+            return lead.email
+        if channel in (Channel.SMS, Channel.WHATSAPP):
+            return lead.phone
+        return lead.email or lead.phone or str(lead.id)
+
     async def evaluate_lead_followup(
         self,
         lead_id: str,
@@ -135,14 +238,25 @@ class FollowUpOrchestratorService:
         # 2. Compute Next Best Action
         nba = await self.nba_engine.compute_next_best_action(lead, policy, target_property_id)
 
-        # 3. Channel Selection
+        # 3. Channel Selection (never returns a disabled/unavailable channel)
         reason_type = trigger_event or "UNANSWERED_INQUIRY"
-        channel, channel_score = self.channel_selector.select_channel(lead, policy, reason_type=reason_type)
+        channel, channel_score = await self.channel_selector.select_channel(
+            lead, policy, reason_type=reason_type, organization_id=organization_id
+        )
 
         # 4. Suppression Evaluation
-        is_suppressed, supp_reason, rules = await self.suppression_engine.evaluate_suppression(
-            lead=lead, channel=channel, policy=policy
-        )
+        if channel is None:
+            # No permitted channel is currently enabled/deliverable — do not
+            # queue an undeliverable follow-up.
+            is_suppressed, supp_reason, rules = True, "NO_AVAILABLE_CHANNEL", []
+            logger.info(
+                f"[FollowUpService] No available channel for lead {lead_id}; "
+                f"follow-up suppressed."
+            )
+        else:
+            is_suppressed, supp_reason, rules = await self.suppression_engine.evaluate_suppression(
+                lead=lead, channel=channel, policy=policy
+            )
 
         # 5. Timing Calculation
         optimal_time_utc, tz_name = self.timing_engine.calculate_optimal_send_time(lead, policy)

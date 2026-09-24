@@ -381,6 +381,32 @@ app.include_router(onboarding_router)
 from app.modules.revenue_autopilot import revenue_router
 app.include_router(revenue_router, prefix=settings.API_V1_STR)
 
+# ─── Part 11 — Revenue Intelligence Layer ─────────────────────────────────────
+from app.modules.revenue_intelligence.router import router as revenue_intelligence_router
+app.include_router(revenue_intelligence_router)
+
+# ─── Part 10 — AI Workforce Engine ───────────────────────────────────────────
+from app.modules.ai_agent.workforce.controller import router as workforce_router
+app.include_router(workforce_router)
+
+# ─── Part 14 — Native WefyLabs CRM Core & Customer 360 ─────────────────────────
+from app.modules.crm import crm_router
+app.include_router(crm_router, prefix=settings.API_V1_STR)
+
+# ─── Part 18 — Real Estate Deal, Booking & Transaction OS ────────────────────
+from app.modules.deals.controller.deal_controller import router as deals_router
+app.include_router(deals_router, prefix=settings.API_V1_STR)
+
+# ─── Part 19 — Real Estate Supply, Project, Unit Inventory & Channel Partner OS ─
+from app.modules.inventory import inventory_router
+app.include_router(inventory_router, prefix=settings.API_V1_STR)
+
+# ─── Part 20 — Real Estate Marketing, Listing Distribution & Demand Generation OS ─
+from app.modules.marketing import marketing_router
+app.include_router(marketing_router, prefix=settings.API_V1_STR)
+
+
+
 @app.get("/metrics", response_class=PlainTextResponse, tags=["Observability"])
 async def metrics():
     """Prometheus-compatible metrics endpoint."""

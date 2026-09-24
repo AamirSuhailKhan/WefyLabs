@@ -26,6 +26,7 @@ import time
 from decimal import Decimal
 from typing import Optional, Dict, Any, Union
 from datetime import datetime, timezone
+from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Request, HTTPException, status, Depends, Header
 from fastapi.responses import Response, JSONResponse, HTMLResponse
@@ -35,10 +36,13 @@ from sqlalchemy import select, and_
 from app.database import get_db
 from app.common.response import APIResponse, create_success_response
 from app.models.acquisition_models import LeadSource, LeadAcquisitionEvent, LeadProspect, ProspectStatus, DuplicateMatchStatus
-from app.modules.lead_acquisition.dto.acquisition_dto import PublicLeadCaptureDTO
+from app.modules.lead_acquisition.dto.acquisition_dto import (
+    PublicLeadCaptureDTO, CanonicalLeadIntakeDTO, UniversalSourceType
+)
 from app.modules.lead_acquisition.services.lead_source_service import LeadSourceService
 from app.modules.lead_acquisition.services.acquisition_event_service import AcquisitionEventService
 from app.modules.lead_acquisition.services.prospect_service import ProspectService
+from app.modules.lead_acquisition.services.universal_intake_service import UniversalIntakeService
 from app.modules.lead_acquisition.services.normalization_service import (
     normalize_phone, normalize_email, normalize_name,
     normalize_budget, normalize_currency, normalize_country_code
@@ -202,131 +206,164 @@ async def public_capture_lead(
             detail="At least one of phone or email is required."
         )
 
-    # 5. Idempotency Key Determination
+    # 5. Route through Universal Intake Pipeline
     raw_idem = (
         payload.idempotency_key
-        or x_idempotency_key
+        or (x_idempotency_key if isinstance(x_idempotency_key, str) else None)
         or f"{source.id}:{payload.phone or ''}:{payload.email or ''}:{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H')}"
     )
-    idem_key = hashlib.sha256(raw_idem.encode("utf-8")).hexdigest()
 
-    # Check for duplicate event
-    event_svc = AcquisitionEventService(db)
-    existing_event = await event_svc.get_by_idempotency_key(org_id, idem_key)
-    if existing_event and existing_event.status == "processed":
-        return create_success_response(data={
-            "status": "duplicate",
-            "event_id": existing_event.id,
-            "message": "Submission already processed.",
-            "is_duplicate": True,
-        })
-
-    # 6. Record LeadAcquisitionEvent
-    event, is_new_event = await event_svc.record_event(
-        organization_id=org_id,
-        source_id=source.id,
+    intake_dto = CanonicalLeadIntakeDTO(
+        source_type=UniversalSourceType.WEBSITE,
+        external_source=source.provider or "public_capture",
+        external_lead_id=None,
+        name=payload.name,
+        phone=payload.phone,
+        email=payload.email,
+        message=payload.message or payload.requirement,
+        property_type=payload.property_type,
+        transaction_type=payload.transaction_type,
+        budget=payload.budget,
+        budget_min=payload.budget_min,
+        budget_max=payload.budget_max,
+        currency=payload.currency or "INR",
+        city=payload.city or payload.location,
+        timeline=payload.timeline,
+        landing_page=payload.landing_page,
+        referrer=payload.referrer,
+        utm_source=payload.utm_source or source.name,
+        utm_medium=payload.utm_medium or source.channel,
+        utm_campaign=payload.utm_campaign,
+        utm_term=payload.utm_term,
+        utm_content=payload.utm_content,
         campaign_id=payload.campaign_id,
-        channel=source.channel or "WEBSITE",
-        idempotency_key=idem_key,
-        provider_name=source.provider or "public_capture",
+        source_id=source.id,
+        marketing_consent=payload.marketing_consent,
+        email_consent=payload.email_consent,
+        whatsapp_consent=payload.whatsapp_consent,
+        idempotency_key=raw_idem,
+    )
+
+    u_svc = UniversalIntakeService(db)
+    result = await u_svc.ingest_lead(
+        organization_id=org_id,
+        dto=intake_dto,
         ip_address=client_ip,
-        user_agent=request.headers.get("User-Agent"),
+        user_agent=getattr(request, "headers", {}).get("User-Agent") if hasattr(request, "headers") else None,
+        raw_payload=payload.model_dump(),
     )
-
-    # 7. Normalization
-    phone_e164, _ = normalize_phone(payload.phone)
-    email_norm, email_fp = normalize_email(payload.email)
-    name_norm = normalize_name(payload.name)
-    sanitized_msg = _sanitize_untrusted_text(payload.message or payload.requirement)
-    city_norm = (payload.city or payload.location or "").strip() or None
-
-    # Flexible Budget Parsing
-    parsed_budget = _parse_flexible_budget(payload.budget)
-    parsed_b_min = _parse_flexible_budget(payload.budget_min) or parsed_budget
-    parsed_b_max = _parse_flexible_budget(payload.budget_max) or parsed_budget
-
-    # 8. Create or update prospect
-    prospect_svc = ProspectService(db)
-    existing_prospect = await prospect_svc._find_existing_prospect(
-        organization_id=org_id,
-        phone_e164=phone_e164,
-        email_fingerprint=email_fp,
-    )
-
-    if existing_prospect and existing_prospect.status not in (ProspectStatus.REJECTED, ProspectStatus.FAILED):
-        prospect = existing_prospect
-        prospect.acquisition_event_id = event.id
-        prospect.updated_at = datetime.now(timezone.utc)
-        is_new_prospect = False
-    else:
-        prospect = LeadProspect(
-            organization_id=org_id,
-            acquisition_event_id=event.id,
-            source_id=source.id,
-            campaign_id=payload.campaign_id,
-            name=name_norm,
-            email=email_norm,
-            phone=payload.phone,
-            phone_e164=phone_e164,
-            email_fingerprint=email_fp,
-            city=city_norm,
-            property_type=payload.property_type,
-            transaction_type=payload.transaction_type,
-            budget_min=parsed_b_min,
-            budget_max=parsed_b_max,
-            currency=payload.currency or "INR",
-            timeline=payload.timeline,
-            message=sanitized_msg,
-            email_consent=payload.email_consent,
-            whatsapp_consent=payload.whatsapp_consent,
-            marketing_consent=payload.marketing_consent,
-            consent_status="GRANTED" if (payload.marketing_consent or payload.email_consent or payload.whatsapp_consent) else "UNKNOWN",
-            status=ProspectStatus.RECEIVED,
-            duplicate_status=DuplicateMatchStatus.UNKNOWN,
-        )
-        db.add(prospect)
-        await db.flush()
-        is_new_prospect = True
-
-    # 9. Run normalization & deduplication check
-    prospect = await prospect_svc.run_normalization(prospect)
-    prospect, match_status = await prospect_svc.run_duplicate_check(org_id, prospect)
-
-    # 10. UTM parameter attribution bundle
-    utm_params = {
-        "utm_source": payload.utm_source or source.name,
-        "utm_medium": payload.utm_medium or source.channel,
-        "utm_campaign": payload.utm_campaign,
-        "utm_term": payload.utm_term,
-        "utm_content": payload.utm_content,
-        "landing_page": payload.landing_page,
-        "referrer": payload.referrer,
-    }
-
-    # 11. Convert to Canonical CRM Lead / Link Duplicate
-    lead = await prospect_svc.import_as_lead(
-        organization_id=org_id,
-        prospect=prospect,
-        broker_uuid=None,  # Automatically assigned via LeadAssignmentService
-        utm_params=utm_params,
-    )
-
-    await event_svc.mark_processed(event)
-    await db.commit()
 
     elapsed = time.perf_counter() - start_time
     record_latency(source.channel or "WEBSITE", elapsed)
     record_acquisition_success(org_id, source.channel or "WEBSITE")
 
-    is_dup = match_status in (DuplicateMatchStatus.EXACT_MATCH, DuplicateMatchStatus.HIGH_CONFIDENCE_MATCH)
     return create_success_response(data={
         "status": "accepted",
-        "event_id": event.id,
-        "lead_id": str(lead.id),
-        "is_duplicate": is_dup,
-        "is_new_prospect": is_new_prospect,
-        "message": "Inquiry received and processed into CRM.",
+        "event_id": result.event_id,
+        "lead_id": result.lead_id,
+        "is_duplicate": result.is_duplicate,
+        "is_new_prospect": result.is_new_lead,
+        "identity_outcome": result.identity_outcome,
+        "message": result.message,
     })
+
+
+class PublicConversationLeadCaptureDTO(BaseModel):
+    conversation_id: str = Field(..., description="Active omnichannel conversation ID")
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+    message: Optional[str] = None
+    budget: Optional[Union[str, int, float, Decimal]] = None
+    city: Optional[str] = None
+    property_type: Optional[str] = None
+    transaction_type: Optional[str] = None
+    timeline: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    landing_page: Optional[str] = None
+    referrer: Optional[str] = None
+
+
+@router.post("/conversation/{token}", response_model=APIResponse, status_code=status.HTTP_200_OK)
+async def public_capture_lead_from_conversation(
+    token: str,
+    payload: PublicConversationLeadCaptureDTO,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Public conversational lead capture endpoint (Part 9 / Phase 22–24).
+    Enables anonymous web visitors conversing with the AI agent to submit contact
+    information, seamlessly linking the existing conversation to the canonical Lead
+    and Customer Intelligence node.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(f"ip:{client_ip}", _IP_RATE_CACHE, limit=60, window_seconds=60):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please retry in a moment."
+        )
+
+    stmt = select(LeadSource).where(
+        and_(LeadSource.webhook_url_token == token, LeadSource.is_active.is_(True))
+    )
+    res = await db.execute(stmt)
+    source = res.scalars().first()
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Capture source not found or inactive."
+        )
+
+    if not (payload.phone or payload.email):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one of phone or email is required."
+        )
+
+    intake_dto = CanonicalLeadIntakeDTO(
+        source_type=UniversalSourceType.PUBLIC_AI,
+        external_source="public_ai_conversation",
+        name=payload.name,
+        phone=payload.phone,
+        email=payload.email,
+        message=payload.message,
+        property_type=payload.property_type,
+        transaction_type=payload.transaction_type,
+        budget=payload.budget,
+        city=payload.city,
+        timeline=payload.timeline,
+        landing_page=payload.landing_page,
+        referrer=payload.referrer,
+        utm_source=payload.utm_source or source.name,
+        utm_medium=payload.utm_medium or "ai_chat",
+        utm_campaign=payload.utm_campaign,
+        source_id=source.id,
+        conversation_id=payload.conversation_id,
+    )
+
+    u_svc = UniversalIntakeService(db)
+    result = await u_svc.ingest_lead(
+        organization_id=source.organization_id,
+        dto=intake_dto,
+        ip_address=client_ip,
+        user_agent=getattr(request, "headers", {}).get("User-Agent") if hasattr(request, "headers") else None,
+        raw_payload=payload.model_dump(),
+    )
+
+    return create_success_response(data={
+        "status": "accepted",
+        "event_id": result.event_id,
+        "lead_id": result.lead_id,
+        "customer_id": result.customer_id,
+        "conversation_id": result.conversation_id,
+        "is_duplicate": result.is_duplicate,
+        "identity_outcome": result.identity_outcome,
+        "message": "Conversational inquiry linked to canonical lead.",
+    })
+
 
 
 @router.get("/forms/{token}/config", response_model=APIResponse)

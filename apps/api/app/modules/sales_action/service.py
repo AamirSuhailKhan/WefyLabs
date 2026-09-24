@@ -14,7 +14,7 @@ import uuid
 import time
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, update
 from fastapi import HTTPException, status
@@ -137,6 +137,117 @@ class SalesActionDomainService:
 
         return policy
 
+    @staticmethod
+    def _to_communication_channel(channel) -> CommunicationChannel:
+        """Map a canonical Channel to the sales-action channel enum."""
+        from app.modules.communication.channels import Channel
+        if channel is Channel.EMAIL:
+            return CommunicationChannel.EMAIL
+        if channel is Channel.SMS:
+            return CommunicationChannel.SMS
+        if channel is Channel.WHATSAPP:
+            return CommunicationChannel.WHATSAPP
+        if channel is Channel.WEB:
+            return CommunicationChannel.IN_APP
+        return CommunicationChannel.IN_APP
+
+    async def _ordered_available_channels(self, policy: FollowUpPolicy) -> List[Any]:
+        """Ordered canonical channels that are ENABLED right now.
+
+        Policy-allowed channels come first, followed by the platform fallbacks.
+        Disabled / unconfigured channels (WhatsApp, unconfigured SMS, future
+        channels) are excluded entirely so nothing downstream can select them.
+        """
+        from app.modules.communication.channels import (
+            Channel,
+            ChannelEnablementState,
+            ChannelStatusService,
+        )
+
+        candidates: List[Any] = [Channel.normalize(t) for t in (policy.allowed_channels or ["WHATSAPP", "EMAIL"])]
+        # Platform fallbacks (web/in-app is always available when enabled).
+        candidates.extend([Channel.WEB, Channel.EMAIL, Channel.SMS])
+
+        status_service = ChannelStatusService()
+        available: List[Any] = []
+        seen = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            status = await status_service.get_status(candidate)
+            if status.state == ChannelEnablementState.ENABLED:
+                available.append(candidate)
+        return available
+
+    async def _resolve_default_channel(self, policy: FollowUpPolicy) -> CommunicationChannel:
+        """Resolve the outbound channel from availability instead of hardcoding WhatsApp.
+
+        Part 12: prefers a policy-allowed channel that is currently ENABLED, then the
+        platform's own web/in-app channel. Never returns a disabled channel when an
+        enabled one exists.
+        """
+        available = await self._ordered_available_channels(policy)
+        if not available:
+            logger.warning(
+                "[SalesActionService] No enabled communication channel available for org=%s; "
+                "falling back to policy default.",
+                getattr(policy, "organization_id", None),
+            )
+            return CommunicationChannel.WHATSAPP
+        return self._to_communication_channel(available[0])
+
+    async def _resolve_channel_and_consent(
+        self,
+        policy: FollowUpPolicy,
+        lead_id: str,
+        organization_id: str,
+        is_direct_customer_inquiry: bool,
+    ) -> Tuple[CommunicationChannel, ConsentStatus, Optional[str]]:
+        """Resolve the outbound channel *and* the consent decision for that channel.
+
+        Part 12: the channel is resolved from real availability (never a hardcoded
+        WhatsApp default) and consent is subsequently evaluated for that exact
+        channel. When several channels are available we prefer one the customer has
+        actually consented to; if none is consented, the first available channel is
+        returned with its own (blocking) consent status so the decision is blocked
+        honestly instead of silently switching to a different channel.
+        """
+        available = await self._ordered_available_channels(policy)
+        if not available:
+            logger.warning(
+                "[SalesActionService] No enabled communication channel available for org=%s.",
+                getattr(policy, "organization_id", None),
+            )
+            return (
+                CommunicationChannel.WHATSAPP,
+                ConsentStatus.UNKNOWN,
+                "No enabled communication channel is currently available.",
+            )
+
+        fallback: Optional[Tuple[CommunicationChannel, ConsentStatus, Optional[str]]] = None
+        for candidate in available:
+            mapped = self._to_communication_channel(candidate)
+            permitted, consent_status, reason = await self.consent_guard.evaluate_consent(
+                lead_id=lead_id,
+                organization_id=organization_id,
+                channel=mapped,
+                is_direct_customer_inquiry=is_direct_customer_inquiry,
+            )
+            if permitted:
+                return mapped, consent_status, reason
+            if fallback is None:
+                fallback = (mapped, consent_status, reason)
+
+        logger.info(
+            "[SalesActionService] No consented available channel for lead=%s; blocking "
+            "outbound on channel=%s (consent=%s).",
+            lead_id,
+            fallback[0].value,
+            fallback[1].value,
+        )
+        return fallback
+
     async def evaluate_next_sales_action(
         self,
         lead_id: str,
@@ -223,12 +334,13 @@ class SalesActionDomainService:
         latest_msg = latest_conv.message if latest_conv else None
 
         # ── 6. Compliance & Safety Guards ────────────────────────────────────
-        # Consent Guard
+        # Consent Guard — evaluated against the *available* channel that will actually
+        # be used (Part 12), never a hardcoded WhatsApp proxy.
         is_direct = bool(latest_msg and len(prev_execs) == 0)
-        has_consent, consent_status, consent_reason = await self.consent_guard.evaluate_consent(
+        default_channel, consent_status, consent_reason = await self._resolve_channel_and_consent(
+            policy=policy,
             lead_id=str(lead.id),
             organization_id=organization_id,
-            channel=CommunicationChannel.WHATSAPP,
             is_direct_customer_inquiry=is_direct,
         )
 
@@ -267,6 +379,7 @@ class SalesActionDomainService:
             fatigue_reason=fatigue_reason,
             is_dormant_candidate=is_dormant_candidate,
             previous_executions=prev_execs,
+            default_channel=default_channel,
         )
 
         # ── 8. Phrase Grounded Message Draft ─────────────────────────────────

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 # Broker Schemas
 class BrokerCreate(BaseModel):
@@ -33,8 +33,7 @@ class BrokerResponse(BaseModel):
     trial_ends_at: Optional[datetime] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Conversation Schemas
 class ConversationCreate(BaseModel):
@@ -55,8 +54,7 @@ class ConversationResponse(BaseModel):
     whatsapp_message_id: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Lead Schemas
 class LeadCreate(BaseModel):
@@ -86,24 +84,21 @@ class ScoreResponse(BaseModel):
     extracted_data: Optional[Dict[str, Any]] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LeadTagSchema(BaseModel):
     id: str
     name: str
     color: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LeadNoteSchema(BaseModel):
     id: str
     content: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class TaskSchema(BaseModel):
     id: str
@@ -112,8 +107,7 @@ class TaskSchema(BaseModel):
     status: str
     reminder_sent: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LeadResponse(BaseModel):
     id: str
@@ -141,8 +135,7 @@ class LeadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LeadDetailResponse(LeadResponse):
     conversations: List[ConversationResponse] = []

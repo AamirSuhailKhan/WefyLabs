@@ -191,7 +191,7 @@ export default function AIConversationTab({ leadId, leadName, leadPhone }: AICon
                 )}
               </div>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Session ID: <span className="text-slate-300">{activeSessionId}</span> • Channel: <span className="text-emerald-400 uppercase">Omnichannel Web/WhatsApp</span>
+                Session ID: <span className="text-slate-300">{activeSessionId}</span> • Channel: <span className="text-emerald-400 uppercase">Omnichannel Web Chat</span>
               </p>
             </div>
           </div>

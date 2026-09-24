@@ -3,6 +3,12 @@ Part 21.5 — Communication Consent Guard
 =======================================
 Enforces granular per-channel, per-purpose customer consent.
 Never assumes consent. Fail-closed on revoked/denied/unknown consent.
+
+Part 12 note: *first-party* surfaces (the in-product web / in-app chat the
+customer is actively using) are not marketing channels, so they do not require a
+separate marketing opt-in. This exemption is deliberately narrow: an explicit
+opt-out / denial / revocation on any channel still blocks first-party contact too
+(the global opt-out check runs first and is unaffected).
 """
 import logging
 from typing import Tuple, Optional
@@ -13,6 +19,10 @@ from app.models.follow_up_models import CommunicationConsent
 from app.modules.sales_action.taxonomies import CommunicationChannel, ConsentStatus
 
 logger = logging.getLogger(__name__)
+
+# CommunicationChannel values that represent a first-party surface the customer is
+# already interacting with in-product. These are not marketing channels.
+FIRST_PARTY_CHANNELS = {"IN_APP", "WEB", "WEBCHAT"}
 
 
 class ConsentGuard:
@@ -57,6 +67,9 @@ class ConsentGuard:
         consent = res_ch.scalars().first()
 
         if not consent:
+            if ch_str in FIRST_PARTY_CHANNELS:
+                # First-party in-product surface: no marketing opt-in required.
+                return True, ConsentStatus.GRANTED, None
             if is_direct_customer_inquiry:
                 # Direct customer initiated inquiry allows initial transactional response
                 return True, ConsentStatus.GRANTED, None

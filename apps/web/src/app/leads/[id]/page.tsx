@@ -12,6 +12,7 @@ import ConversationIntelligencePanel from '@/components/leads/ConversationIntell
 import AutonomousSalesTimeline from '@/components/leads/AutonomousSalesTimeline';
 import ScoreBadge from '@/components/shared/ScoreBadge';
 import LeadPropertyMatchesPanel from '@/components/leads/LeadPropertyMatchesPanel';
+import SourceAttributionCard from '@/components/leads/SourceAttributionCard';
 import AIConversationTab from '@/components/leads/AIConversationTab';
 import { Bot, MessageSquare } from 'lucide-react';
 
@@ -191,6 +192,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <AutonomousSalesTimeline leadId={lead.id} leadName={lead.name} />
           {/* Part 29 — Explainable AI Property Matches */}
           <LeadPropertyMatchesPanel leadId={lead.id} leadName={lead.name} />
+          <SourceAttributionCard lead={lead} />
           <ExtractedDataCard lead={lead} />
         </div>
       </div>

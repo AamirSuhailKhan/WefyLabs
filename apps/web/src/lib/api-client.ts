@@ -387,6 +387,24 @@ export const api = {
 
   getLeadById: (id: string) => fetcher<LeadDetail>(`/leads/${id}`),
 
+  getLeadAttribution: (id: string) =>
+    fetcher<{ data: {
+      id: string;
+      lead_id: string;
+      channel?: string;
+      provider?: string;
+      external_id?: string;
+      landing_page?: string;
+      referrer?: string;
+      utm_source?: string;
+      utm_medium?: string;
+      utm_campaign?: string;
+      utm_term?: string;
+      utm_content?: string;
+      first_touch_at?: string;
+      last_touch_at?: string;
+    } | null }>(`/lead-acquisition/attribution/${id}`).then(res => (res as any)?.data ?? null).catch(() => null),
+
   createLead: (data: {
     phone: string;
     name?: string;
@@ -701,6 +719,117 @@ export const api = {
     }
   },
 
+  // Part 18 — Deal, Booking & Transaction OS
+  dealOS: {
+    list: (params?: { stage?: string; status?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.stage && params.stage !== 'all') q.append('stage', params.stage);
+      if (params?.status) q.append('status', params.status);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any[]>(`/deals${qStr}`);
+    },
+    getSummary: () => fetcher<any>('/deals/summary'),
+    get: (dealId: string) => fetcher<any>(`/deals/${dealId}`),
+    create: (data: any) => fetcher<any>('/deals', { method: 'POST', body: JSON.stringify(data) }),
+    advanceStage: (dealId: string, data: { target_stage: string; reason?: string }) =>
+      fetcher<any>(`/deals/${dealId}/stage`, { method: 'POST', body: JSON.stringify(data) }),
+    submitOffer: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/offers`, { method: 'POST', body: JSON.stringify(data) }),
+    respondOffer: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/offers/respond`, { method: 'POST', body: JSON.stringify(data) }),
+    createReservation: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/reservations`, { method: 'POST', body: JSON.stringify(data) }),
+    requestBooking: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/bookings/request`, { method: 'POST', body: JSON.stringify(data) }),
+    confirmBooking: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/bookings/confirm`, { method: 'POST', body: JSON.stringify(data) }),
+    recordCommission: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/commissions`, { method: 'POST', body: JSON.stringify(data) }),
+    createClosing: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/closings`, { method: 'POST', body: JSON.stringify(data) }),
+    completeClosing: (dealId: string) =>
+      fetcher<any>(`/deals/${dealId}/closings/complete`, { method: 'POST' }),
+    recordPostSale: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/post-sale`, { method: 'POST', body: JSON.stringify(data) }),
+    addDocument: (dealId: string, data: any) =>
+      fetcher<any>(`/deals/${dealId}/documents`, { method: 'POST', body: JSON.stringify(data) }),
+    getAudit: (dealId: string) => fetcher<any[]>(`/deals/${dealId}/audit`),
+  },
+
+  // Part 19 — Supply Side Inventory OS & Channel Partner Network
+  inventoryOS: {
+    getDashboard: () => fetcher<any>('/inventory/dashboard'),
+    listDevelopers: (params?: { status?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.append('status', params.status);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/inventory/developers${qStr}`);
+    },
+    getDeveloper: (id: string) => fetcher<any>(`/inventory/developers/${id}`),
+    createDeveloper: (data: any) => fetcher<any>('/inventory/developers', { method: 'POST', body: JSON.stringify(data) }),
+    updateDeveloper: (id: string, data: any) => fetcher<any>(`/inventory/developers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    listProjects: (params?: { status?: string; city?: string; project_type?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.append('status', params.status);
+      if (params?.city) q.append('city', params.city);
+      if (params?.project_type) q.append('project_type', params.project_type);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/inventory/projects${qStr}`);
+    },
+    getProject: (id: string) => fetcher<any>(`/inventory/projects/${id}`),
+    createProject: (data: any) => fetcher<any>('/inventory/projects', { method: 'POST', body: JSON.stringify(data) }),
+    listUnits: (projectId: string, params?: { inventory_status?: string; unit_type?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.inventory_status) q.append('inventory_status', params.inventory_status);
+      if (params?.unit_type) q.append('unit_type', params.unit_type);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/inventory/projects/${projectId}/units${qStr}`);
+    },
+    getUnit: (unitId: string) => fetcher<any>(`/inventory/units/${unitId}`),
+    createUnit: (projectId: string, data: any) => fetcher<any>(`/inventory/projects/${projectId}/units`, { method: 'POST', body: JSON.stringify(data) }),
+    transitionUnitStatus: (unitId: string, data: any) => fetcher<any>(`/inventory/units/${unitId}/transition`, { method: 'POST', body: JSON.stringify(data) }),
+    getAvailabilitySnapshot: (projectId: string) => fetcher<any>(`/inventory/projects/${projectId}/availability`),
+    search: (params?: { city?: string; project_type?: string; min_price?: number; max_price?: number; bedrooms?: number; inventory_status?: string; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.city) q.append('city', params.city);
+      if (params?.project_type) q.append('project_type', params.project_type);
+      if (params?.min_price) q.append('min_price', params.min_price.toString());
+      if (params?.max_price) q.append('max_price', params.max_price.toString());
+      if (params?.bedrooms) q.append('bedrooms', params.bedrooms.toString());
+      if (params?.inventory_status) q.append('inventory_status', params.inventory_status);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/inventory/search${qStr}`);
+    },
+    createPriceBook: (projectId: string, data: any) => fetcher<any>(`/inventory/projects/${projectId}/price-books`, { method: 'POST', body: JSON.stringify(data) }),
+    publishPriceBook: (priceBookId: string) => fetcher<any>(`/inventory/price-books/${priceBookId}/publish`, { method: 'POST' }),
+    addPriceEntry: (priceBookId: string, data: any) => fetcher<any>(`/inventory/price-books/${priceBookId}/entries`, { method: 'POST', body: JSON.stringify(data) }),
+    listChannelPartners: (params?: { status?: string; tier?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.append('status', params.status);
+      if (params?.tier) q.append('tier', params.tier);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      if (params?.offset) q.append('offset', params.offset.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/inventory/channel-partners${qStr}`);
+    },
+    getChannelPartner: (id: string) => fetcher<any>(`/inventory/channel-partners/${id}`),
+    registerChannelPartner: (data: any) => fetcher<any>('/inventory/channel-partners', { method: 'POST', body: JSON.stringify(data) }),
+    verifyKyc: (cpId: string) => fetcher<any>(`/inventory/channel-partners/${cpId}/kyc-verify`, { method: 'POST' }),
+    createAgreement: (cpId: string, data: any) => fetcher<any>(`/inventory/channel-partners/${cpId}/project-agreements`, { method: 'POST', body: JSON.stringify(data) }),
+    recordCommission: (cpId: string, data: any) => fetcher<any>(`/inventory/channel-partners/${cpId}/commissions`, { method: 'POST', body: JSON.stringify(data) }),
+    registerPartnerLead: (cpId: string, data: any) => fetcher<any>(`/inventory/channel-partners/${cpId}/leads`, { method: 'POST', body: JSON.stringify(data) }),
+    getPartnerPortal: (cpId: string) => fetcher<any>(`/inventory/channel-partners/${cpId}/portal`),
+  },
+
   // Inbox & Unified Timeline
   inbox: {
     getConversations: (leadId: string) =>
@@ -890,7 +1019,22 @@ export const api = {
         method: 'POST'
       }),
 
-    getPerformance: () => fetcher<any>('/followups/analytics/performance')
+    getPerformance: () => fetcher<any>('/followups/analytics/performance'),
+
+    // Part 12 — truthful per-channel availability used by follow-up dispatch.
+    getChannelStatus: () => fetcher<{
+      channels: Record<string, {
+        channel: string;
+        state: 'ENABLED' | 'DISABLED' | 'CONFIGURED' | 'NOT_CONFIGURED' | 'STAGING' | 'ERROR';
+        enabled: boolean;
+        configured: boolean;
+        implemented: boolean;
+        provider_name?: string | null;
+        reason?: string | null;
+        capabilities?: Record<string, any>;
+      }>;
+      sendable_channels: string[];
+    }>('/followups/channels/status')
   },
 
   // Predictive Intelligence
@@ -1825,6 +1969,212 @@ export const api = {
       return (res && res.data) ? res.data : res;
     },
   },
+
+  // ─── Part 11 — Revenue Intelligence ──────────────────────────────────
+  revenueIntelligence: {
+    getOverview: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<RevenueOverviewDTO>(`/revenue-intelligence/overview${qStr}`);
+    },
+    getFunnel: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<FunnelSummaryDTO>(`/revenue-intelligence/funnel${qStr}`);
+    },
+    getLeakage: (params?: { start_date?: string; end_date?: string; staleness_threshold_days?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      if (params?.staleness_threshold_days) q.append('staleness_threshold_days', params.staleness_threshold_days.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<LeakageReportDTO>(`/revenue-intelligence/leakage${qStr}`);
+    },
+    getLeakageItems: (params?: { start_date?: string; end_date?: string; status?: string; severity?: string; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      if (params?.status) q.append('status', params.status);
+      if (params?.severity) q.append('severity', params.severity);
+      if (params?.limit) q.append('limit', params.limit.toString());
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<ExtendedLeakageItemDTO[]>(`/revenue-intelligence/leakage/items${qStr}`);
+    },
+    getAttribution: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<AttributionReportDTO>(`/revenue-intelligence/attribution${qStr}`);
+    },
+    getSources: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<AttributionReportDTO>(`/revenue-intelligence/sources${qStr}`);
+    },
+    getOpportunities: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/revenue-intelligence/opportunities${qStr}`);
+    },
+    getOutcomes: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<OutcomeSummaryDTO>(`/revenue-intelligence/outcomes${qStr}`);
+    },
+    getActions: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<LearningLoopSummaryDTO>(`/revenue-intelligence/actions${qStr}`);
+    },
+    getDataQuality: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<DataQualityReportDTO>(`/revenue-intelligence/data-quality${qStr}`);
+    },
+    getLeadJourney: (leadId: string) =>
+      fetcher<LeadRevenueJourneyDTO>(`/revenue-intelligence/journey/${leadId}`),
+    getPropertyJourney: (propertyId: string) =>
+      fetcher<PropertyRevenueJourneyDTO>(`/revenue-intelligence/property/${propertyId}`),
+    getTeam: (params?: { start_date?: string; end_date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.start_date) q.append('start_date', params.start_date);
+      if (params?.end_date) q.append('end_date', params.end_date);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<TeamIntelligenceDTO>(`/revenue-intelligence/team${qStr}`);
+    },
+    getPropensity: (leadId: string) =>
+      fetcher<PropensityScoreDTO>(`/revenue-intelligence/propensity/${leadId}`),
+    recompute: (data?: { period_start?: string; period_end?: string }) =>
+      fetcher<{ status: string; recomputed_at: string; message: string }>('/revenue-intelligence/recompute', {
+        method: 'POST',
+        body: JSON.stringify(data || {})
+      }),
+    captureSnapshot: (periodType: string = 'DAILY') =>
+      fetcher<FunnelSnapshotDTO>('/revenue-intelligence/snapshot', {
+        method: 'POST',
+        body: JSON.stringify({ period_type: periodType })
+      }),
+    listSnapshots: (limit: number = 30) =>
+      fetcher<SnapshotListDTO>(`/revenue-intelligence/snapshots?limit=${limit}`)
+  },
+
+  // Native CRM Core (Part 14)
+  crm: {
+    getCustomers: (params?: { search?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.search) q.set('search', params.search);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<import('@/types/crm').LeadCRMListItem[]>(`/crm/customers${qs}`);
+    },
+    getCustomer360: (customerId: string) =>
+      fetcher<import('@/types/crm').Customer360Response>(`/crm/customers/${customerId}`),
+    getCustomerTimeline: (customerId: string, limit = 50) =>
+      fetcher<import('@/types/crm').CustomerTimelineEvent[]>(`/crm/customers/${customerId}/timeline?limit=${limit}`),
+    getLeads: (params?: Record<string, any>) => {
+      const q = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+        });
+      }
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<{ items: import('@/types/crm').LeadCRMListItem[]; total: number; limit: number; offset: number }>(`/crm/leads${qs}`);
+    },
+    getLeadDetail: (leadId: string) =>
+      fetcher<import('@/types/crm').Customer360Response>(`/crm/leads/${leadId}`),
+    updateLeadStage: (leadId: string, payload: { new_stage: string; reason?: string }) =>
+      fetcher<{ status: string; lead_id: string; pipeline_stage: string }>(`/crm/leads/${leadId}/stage`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    reassignLead: (leadId: string, payload: { target_broker_id: string; reason?: string }) =>
+      fetcher<{ status: string; lead_id: string; assigned_broker_id: string }>(`/crm/leads/${leadId}/assign`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    bulkLeads: (payload: { operation: string; lead_ids: string[]; params?: Record<string, any> }) =>
+      fetcher<import('@/types/crm').BulkOperationResult>('/crm/bulk/leads', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    getPipeline: (assignedTo?: string) => {
+      const qs = assignedTo ? `?assigned_to=${encodeURIComponent(assignedTo)}` : '';
+      return fetcher<import('@/types/crm').PipelineKanbanResponse>(`/crm/pipeline${qs}`);
+    },
+    getOpportunities: (stage?: string) => {
+      const qs = stage ? `?stage=${encodeURIComponent(stage)}` : '';
+      return fetcher<import('@/types/crm').OpportunitySummary[]>(`/crm/opportunities${qs}`);
+    },
+    createOpportunity: (payload: { lead_id: string; property_id: string; deal_name: string; agreed_price: number; currency?: string; commission_percentage?: number; current_stage?: string }) =>
+      fetcher<import('@/types/crm').OpportunitySummary>('/crm/opportunities', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    updateOpportunityStage: (opportunityId: string, payload: { current_stage: string; reason?: string }) =>
+      fetcher<{ status: string; id: string; current_stage: string }>(`/crm/opportunities/${opportunityId}/stage`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      }),
+    getTasks: (filters?: { status?: string; priority?: string; lead_id?: string }) => {
+      const q = new URLSearchParams();
+      if (filters?.status) q.set('status', filters.status);
+      if (filters?.priority) q.set('priority', filters.priority);
+      if (filters?.lead_id) q.set('lead_id', filters.lead_id);
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<import('@/types/crm').CRMTask[]>(`/crm/tasks${qs}`);
+    },
+    createTask: (payload: { title: string; description?: string; due_at?: string; priority?: string; lead_id?: string; status?: string }) =>
+      fetcher<import('@/types/crm').CRMTask>('/crm/tasks', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    updateTask: (taskId: string, payload: { title?: string; description?: string; due_at?: string; priority?: string; status?: string }) =>
+      fetcher<import('@/types/crm').CRMTask>(`/crm/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      }),
+    deleteTask: (taskId: string) =>
+      fetcher<{ status: string; message: string }>(`/crm/tasks/${taskId}`, {
+        method: 'DELETE'
+      }),
+    getActivities: (leadId?: string, limit = 50) => {
+      const qs = leadId ? `?lead_id=${encodeURIComponent(leadId)}&limit=${limit}` : `?limit=${limit}`;
+      return fetcher<import('@/types/crm').CRMActivity[]>(`/crm/activities${qs}`);
+    },
+    logActivity: (payload: { activity_type: string; title: string; description?: string; lead_id?: string; actor_type?: string; activity_data?: Record<string, any> }) =>
+      fetcher<import('@/types/crm').CRMActivity>('/crm/activities', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    getNotes: (leadId: string) =>
+      fetcher<import('@/types/crm').CRMNote[]>(`/crm/notes?lead_id=${encodeURIComponent(leadId)}`),
+    createNote: (payload: { lead_id: string; content: string; visibility?: string }) =>
+      fetcher<import('@/types/crm').CRMNote>('/crm/notes', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }),
+    search: (query: string, limit = 30) =>
+      fetcher<import('@/types/crm').CRMSearchResponse>(`/crm/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+    getDashboard: () =>
+      fetcher<import('@/types/crm').CRMDashboardMetrics>('/crm/dashboard')
+  }
 };
 
 export interface SalesBriefData {
@@ -2702,3 +3052,242 @@ export const customerIntelligenceApi = {
     return resp.json();
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 11 — Revenue Intelligence Types & Interfaces
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface FunnelStageDTO {
+  stage: string;
+  count: number;
+  conversion_rate_pct: number | null;
+}
+
+export interface FunnelSummaryDTO {
+  organization_id: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  total_leads: number;
+  stages: FunnelStageDTO[];
+  overall_conversion_rate_pct: number | null;
+  active_opportunities: number;
+  estimated_pipeline_value_estimate: number | null;
+  confirmed_revenue: number | null;
+}
+
+export interface LeakageByStageDTO {
+  stage: string;
+  lost_count: number;
+  total_estimated_value_lost_estimate: number | null;
+  avg_days_in_stage: number | null;
+  top_reason?: string | null;
+}
+
+export interface LeakageReportDTO {
+  organization_id: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  staleness_threshold_days: number;
+  total_leakage_events: number;
+  total_estimated_value_at_risk_estimate: number | null;
+  by_stage: LeakageByStageDTO[];
+}
+
+export interface ExtendedLeakageItemDTO {
+  leakage_type: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  entity_type: string;
+  entity_id: string;
+  organization_id: string;
+  detected_at: string;
+  age_days?: number | null;
+  evidence: Record<string, any>;
+  estimated_impact_estimate?: number | null;
+  recommended_next_action: string;
+  source_channel?: string | null;
+  status: string;
+}
+
+export interface OutcomeDistributionItemDTO {
+  outcome: string;
+  count: number;
+  pct?: number | null;
+}
+
+export interface OutcomeSummaryDTO {
+  organization_id: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  total_feedback_records: number;
+  win_rate_pct: number | null;
+  positive_feedback_count: number;
+  negative_feedback_count: number;
+  completed_deals: number;
+  avg_opportunity_score_at_win?: number | null;
+  outcome_distribution: OutcomeDistributionItemDTO[];
+}
+
+export interface SourceAttributionItemDTO {
+  source: string;
+  lead_count: number;
+  converted_count: number;
+  conversion_rate_pct: number | null;
+  estimated_revenue_estimate: number | null;
+}
+
+export interface AttributionReportDTO {
+  organization_id: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  total_sources: number;
+  by_source: SourceAttributionItemDTO[];
+  top_source_by_leads?: string | null;
+  top_source_by_conversion?: string | null;
+}
+
+export interface TopOpportunityTypeDTO {
+  opportunity_type: string;
+  total_count: number;
+  actioned_count: number;
+  positive_feedback_count: number;
+  action_rate_pct: number | null;
+  positive_feedback_rate_pct: number | null;
+}
+
+export interface LearningLoopSummaryDTO {
+  organization_id: string;
+  date_from?: string | null;
+  date_to?: string | null;
+  computation_method: string;
+  top_opportunity_types: TopOpportunityTypeDTO[];
+  top_source_by_conversion?: string | null;
+  total_opportunities_evaluated: number;
+  total_positive_signals: number;
+}
+
+export interface FunnelSnapshotDTO {
+  id: string;
+  organization_id: string;
+  period_type: string;
+  snapshot_date: string;
+  total_leads: number;
+  leads_new: number;
+  leads_contacted: number;
+  leads_qualified: number;
+  leads_site_visit: number;
+  leads_negotiation: number;
+  leads_converted: number;
+  leads_lost: number;
+  active_opportunities: number;
+  estimated_pipeline_value_estimate?: number | null;
+  confirmed_revenue?: number | null;
+  metrics: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SnapshotListDTO {
+  organization_id: string;
+  total: number;
+  snapshots: FunnelSnapshotDTO[];
+}
+
+export interface RevenueOverviewDTO {
+  organization_id: string;
+  realized_revenue: number | null;
+  current_pipeline_estimate: number | null;
+  revenue_at_risk_estimate: number | null;
+  active_opportunities: number;
+  total_leads: number;
+  attributed_revenue: number | null;
+  unattributed_revenue: number | null;
+  attribution_coverage_pct: number | null;
+  forecast_status: string;
+  forecast_disclaimer: string;
+}
+
+export interface DataQualityItemDTO {
+  metric: string;
+  missing_count: number;
+  total_count: number;
+  coverage_pct: number | null;
+  severity: string;
+  description: string;
+}
+
+export interface DataQualityReportDTO {
+  organization_id: string;
+  data_health_score_pct: number;
+  total_records_audited: number;
+  issues: DataQualityItemDTO[];
+  audited_at: string;
+}
+
+export interface JourneyEventDTO {
+  event_id: string;
+  occurred_at: string;
+  stage: string;
+  title: string;
+  description?: string | null;
+  actor_type: string;
+  channel?: string | null;
+  metadata: Record<string, any>;
+}
+
+export interface LeadRevenueJourneyDTO {
+  lead_id: string;
+  organization_id: string;
+  lead_name?: string | null;
+  source?: string | null;
+  pipeline_stage: string;
+  score?: string | null;
+  budget_max?: number | null;
+  total_events: number;
+  journey: JourneyEventDTO[];
+}
+
+export interface PropertyRevenueJourneyDTO {
+  property_id: string;
+  organization_id: string;
+  property_title?: string | null;
+  price?: number | null;
+  total_matches: number;
+  qualified_leads_count: number;
+  appointments_count: number;
+  site_visits_count: number;
+  deals_closed: number;
+  confirmed_revenue?: number | null;
+  conversion_rate_pct?: number | null;
+}
+
+export interface AgentOperationalMetricsDTO {
+  broker_id: string;
+  name: string;
+  email?: string | null;
+  assigned_leads: number;
+  contacted_leads: number;
+  qualified_leads: number;
+  scheduled_appointments: number;
+  completed_site_visits: number;
+  active_opportunities: number;
+  closed_deals: number;
+}
+
+export interface TeamIntelligenceDTO {
+  organization_id: string;
+  total_agents: number;
+  agents: AgentOperationalMetricsDTO[];
+}
+
+export interface PropensityScoreDTO {
+  lead_id: string;
+  organization_id: string;
+  score: number;
+  method: string;
+  version: string;
+  features_used: Record<string, any>;
+  calculation_breakdown: string[];
+  generated_at: string;
+  data_window_days: number;
+}
+

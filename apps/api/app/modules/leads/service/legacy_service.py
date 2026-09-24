@@ -124,6 +124,26 @@ async def create_lead(db: AsyncSession, broker_id: uuid.UUID, req: LeadCreate) -
         notes=initial_notes
     )
     db.add(lead)
+    await db.flush()
+
+    try:
+        from app.models.acquisition_models import SourceAttribution
+        now = datetime.now(timezone.utc)
+        attribution = SourceAttribution(
+            id=str(uuid.uuid4()),
+            organization_id=str(broker_id),
+            lead_id=str(lead.id),
+            channel=req.source or "manual",
+            provider="crm_manual",
+            landing_page="internal_dashboard",
+            first_touch_at=now,
+            last_touch_at=now,
+            created_at=now
+        )
+        db.add(attribution)
+    except Exception:
+        pass
+
     await db.commit()
 
     return await get_lead_by_id(db, lead.id, broker_id)

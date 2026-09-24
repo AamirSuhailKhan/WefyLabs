@@ -274,7 +274,7 @@ async def execute_action(
     summary="Get Daily Operational Brief"
 )
 async def get_daily_brief(
-    role: str = Query("broker", regex="^(manager|broker)$"),
+    role: str = Query("broker", pattern="^(manager|broker)$"),
     current_broker: Broker = Depends(get_current_broker),
     db: AsyncSession = Depends(get_db)
 ):

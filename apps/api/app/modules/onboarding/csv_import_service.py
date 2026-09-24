@@ -216,24 +216,48 @@ class OnboardingCsvImportService:
         skipped_count = 0
 
         if dto.entity_type == "leads":
+            from app.modules.lead_acquisition.dto.acquisition_dto import (
+                CanonicalLeadIntakeDTO,
+                UniversalSourceType,
+            )
+            from app.modules.lead_acquisition.services.universal_intake_service import (
+                UniversalIntakeService,
+            )
+
+            intake_service = UniversalIntakeService(self.db)
             for item in dto.items:
-                raw_phone = str(item.get("phone", "") or "")
-                phone = re.sub(r"[^\d+]", "", raw_phone)
                 name = sanitize_csv_cell(item.get("name", "Unnamed Lead"))
-                lead = Lead(
-                    broker_id=broker.id,
+                phone = item.get("phone")
+                email = item.get("email")
+                intake_dto = CanonicalLeadIntakeDTO(
+                    source_type=UniversalSourceType.CSV,
+                    external_source="csv_import",
+                    external_lead_id=item.get("external_id"),
                     name=name,
                     phone=phone,
-                    budget_min=item.get("budget_min"),
-                    budget_max=item.get("budget_max"),
-                    property_type=sanitize_csv_cell(item.get("property_type", "apartment")),
-                    preferred_locations=item.get("preferred_locations", ["Bengaluru"]),
-                    source="onboarding_import",
-                    status="active",
-                    pipeline_stage="new"
+                    email=email,
+                    requirements={
+                        "property_type": sanitize_csv_cell(item.get("property_type", "apartment")),
+                        "preferred_locations": item.get("preferred_locations", ["Bengaluru"]),
+                        "budget_min": item.get("budget_min"),
+                        "budget_max": item.get("budget_max"),
+                    },
+                    landing_page="csv_bulk_import",
+                    consent=True,
                 )
-                self.db.add(lead)
-                imported_ids.append(str(lead.id))
+                try:
+                    res = await intake_service.ingest_lead(
+                        organization_id=str(broker.id),
+                        dto=intake_dto,
+                        actor_id=str(broker.id),
+                    )
+                    if res.lead_id:
+                        imported_ids.append(str(res.lead_id))
+                    else:
+                        skipped_count += 1
+                except Exception as ex:
+                    logger.error(f"[CSV IMPORT] Failed to ingest lead row: {ex}")
+                    skipped_count += 1
 
         elif dto.entity_type == "properties":
             for item in dto.items:

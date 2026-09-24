@@ -56,7 +56,7 @@ export default function ConversationIntelligencePanel({
       const res = await fetch(`/api/v1/leads/${leadId}/conversation/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: inputText, channel: 'whatsapp' }),
+        body: JSON.stringify({ text: inputText, channel: 'web' }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -110,7 +110,7 @@ export default function ConversationIntelligencePanel({
             <h3 className="font-extrabold text-white text-sm flex items-center gap-2">
               AI Conversation Intelligence
               <span className="text-[10px] bg-purple-500/20 text-purple-300 font-mono px-2 py-0.5 rounded-full">
-                Part 21.7
+                REAL-TIME RADAR
               </span>
             </h3>
             <p className="text-[11px] text-slate-400 font-medium">

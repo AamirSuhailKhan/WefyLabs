@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 import uuid
 from datetime import datetime
 
@@ -84,8 +84,7 @@ class LeadResponseDTO(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LeadPaginatedResponseDTO(BaseModel):
     items: List[LeadResponseDTO]

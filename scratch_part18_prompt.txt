@@ -1,0 +1,2150 @@
+<USER_REQUEST>
+You are the Principal Engineer, Product Architect, Real Estate SaaS Architect, Backend Architect, Frontend Architect, AI Systems Architect, Data Architect, Security Architect, QA Lead, and Production Engineer for WefyLabs.
+
+WefyLabs is an AI-native Real Estate Revenue Operating System.
+
+You are working inside the EXISTING repository.
+
+Parts 1–17 already exist.
+
+DO NOT rebuild them.
+
+Your task is to implement:
+
+============================================================
+PART 18 — REAL ESTATE DEAL, BOOKING & TRANSACTION OS
+============================================================
+
+WefyLabs must now extend the journey:
+
+LEAD
+→ CUSTOMER
+→ QUALIFICATION
+→ PROPERTY
+→ MATCH
+→ CONVERSATION
+→ APPOINTMENT
+→ SITE VISIT
+→ FOLLOW-UP
+→ OPPORTUNITY
+→ NEGOTIATION
+→ OFFER
+→ RESERVATION
+→ BOOKING
+→ TRANSACTION
+→ COMMISSION
+→ CLOSING
+→ POST-SALE
+→ REVENUE LEARNING
+
+The objective is NOT to create another CRM dashboard.
+
+The objective is to create the operational system that takes a qualified real-estate opportunity and manages the deal until it is actually closed or lost.
+
+============================================================
+0. IMPORTANT CURRENT BASELINE
+============================================================
+
+Before changing anything:
+
+INSPECT THE ACTUAL REPOSITORY.
+
+Previous Part 17 report states:
+
+- Part 17: 38/38 PASS
+- Full repository: 1,935/1,936 PASS
+- 1 skipped
+- 0 failed
+- Alembic current head: 0030_enterprise_runtime
+- Frontend TypeScript: PASS
+- Frontend build: PASS
+- Lint: PASS
+- Tenant isolation: PASS
+- Security tests: PASS
+- Critical E2E: PASS
+
+However:
+
+THE REPORT IS NOT AUTHORITY.
+
+Verify the repository yourself.
+
+DO NOT assume:
+
+- migration number
+- table count
+- route count
+- current test count
+- cloud deployment
+- database state
+- existing transaction implementation
+- payment state
+- booking implementation
+
+============================================================
+1. PRODUCT OBJECTIVE
+============================================================
+
+Build the native WefyLabs:
+
+DEAL + BOOKING + TRANSACTION OS
+
+This system should allow a real-estate organization to move from:
+
+“we have a promising lead”
+
+to:
+
+“this customer has a real property transaction with measurable commercial value.”
+
+The system must manage:
+
+- opportunity
+- deal
+- negotiation
+- offer
+- counter-offer
+- property reservation
+- booking
+- booking amount
+- payment milestones
+- transaction milestones
+- documents
+- stakeholders
+- commission
+- broker/team attribution
+- closing
+- cancellation
+- loss
+- post-sale follow-up
+- revenue recognition/recording
+- complete audit history
+
+============================================================
+2. NON-NEGOTIABLE RULES
+============================================================
+
+1. WefyLabs remains the system of record.
+2. Do not depend on HubSpot.
+3. Do not depend on Salesforce.
+4. Do not depend on Zoho.
+5. Do not depend on Pipedrive.
+6. External CRM integrations are optional future capabilities.
+7. Do not create duplicate CRM entities.
+8. Do not rebuild Part 14 opportunity functionality.
+9. Extend the existing Opportunity/Deal architecture where appropriate.
+10. Do not activate Razorpay LIVE.
+11. Do not pretend payment collection is live.
+12. Do not create fake payment confirmations.
+13. Payment records may exist as transaction bookkeeping/state management only.
+14. Actual payment processing must remain explicitly environment-controlled.
+15. WhatsApp remains disabled.
+16. Do not add autonomous financial transactions.
+17. Every booking-changing action must be auditable.
+18. Every tenant boundary must be enforced.
+19. Every commercial mutation must be idempotent where required.
+20. AI may recommend actions but must not silently execute irreversible commercial actions.
+21. Never store chain-of-thought.
+22. Never fabricate transaction values.
+23. Never fabricate commissions.
+24. Never fabricate payment status.
+25. Never claim a deal is closed without explicit authoritative state.
+26. Never allow double reservation through race conditions.
+
+============================================================
+3. PHASE 0 — REALITY AUDIT
+============================================================
+
+Inspect the repository for existing concepts:
+
+- Opportunity
+- Deal
+- Booking
+- Reservation
+- Transaction
+- Payment
+- Commission
+- Closing
+- Offer
+- Negotiation
+- Contract
+- Document
+- Milestone
+- Unit
+- PropertyInventory
+- InventoryStatus
+- LeadPropertyInterest
+- SiteVisit
+- RevenueOpportunity
+- RevenueEvent
+- Outcome
+- attribution
+- owner
+- salesperson
+- agent
+- team
+- audit
+
+Search all:
+
+backend
+frontend
+database
+migrations
+tests
+types
+services
+AI tools
+Copilot tools
+Celery tasks
+events
+
+Determine what already exists.
+
+Classify every finding:
+
+VERIFIED
+PARTIAL
+BACKEND ONLY
+FRONTEND ONLY
+MOCKED
+HARDCODED
+STUBBED
+DEAD CODE
+UNUSED
+BROKEN
+MISSING
+
+Create:
+
+WEFYLABS_PART18_BASELINE.md
+
+============================================================
+4. CORE DOMAIN MODEL
+============================================================
+
+Design a clear domain model without creating unnecessary duplication.
+
+Minimum conceptual entities may include:
+
+Deal
+
+Offer
+
+CounterOffer
+
+Reservation
+
+Booking
+
+Transaction
+
+TransactionMilestone
+
+PaymentRecord
+
+CommissionRecord
+
+TransactionDocument
+
+DealParticipant
+
+ClosingRecord
+
+CancellationRecord
+
+PostSaleActivity
+
+Use existing models when equivalent entities already exist.
+
+Every entity must have:
+
+- id
+- tenant_id
+- created_at
+- updated_at
+- created_by where meaningful
+- updated_by where meaningful
+
+Commercial entities must have immutable identifiers.
+
+============================================================
+5. DEAL VS OPPORTUNITY
+============================================================
+
+Do NOT blindly create “Deal” as a duplicate of Part 14 Opportunity.
+
+Determine whether existing Opportunity can serve as pre-transaction commercial state.
+
+Preferred conceptual boundary:
+
+Opportunity:
+potential commercial opportunity
+
+Deal:
+accepted commercial pursuit requiring structured negotiation/execution
+
+Transaction:
+commercial execution after booking/reservation
+
+But use the repository's existing architecture when a better equivalent exists.
+
+Document the boundary clearly.
+
+============================================================
+6. DEAL STATE MACHINE
+============================================================
+
+Create a controlled state machine.
+
+Example states:
+
+OPEN
+QUALIFIED
+VIEWING
+NEGOTIATION
+OFFER_MADE
+COUNTER_OFFER
+RESERVATION_PENDING
+RESERVED
+BOOKING_PENDING
+BOOKED
+AGREEMENT_PENDING
+AGREEMENT_SIGNED
+PAYMENT_IN_PROGRESS
+CLOSING_PENDING
+CLOSED_WON
+CLOSED_LOST
+CANCELLED
+
+Do NOT implement all states blindly.
+
+Inspect the actual business model first.
+
+Every transition must define:
+
+- allowed previous states
+- allowed next states
+- actor permissions
+- required data
+- audit event
+- side effects
+- reversibility
+- terminal state behavior
+
+No arbitrary stage mutation through raw PATCH.
+
+============================================================
+7. NEGOTIATION ENGINE
+============================================================
+
+Build structured negotiation support.
+
+Capture:
+
+- asking price
+- offered price
+- counter price
+- discount
+- incentives
+- payment terms
+- possession terms
+- furnishing
+- parking
+- floor
+- unit
+- preferred closing date
+- special conditions
+- notes
+- expiration
+
+A negotiation history must be immutable.
+
+Example:
+
+OFFER #1
+→ COUNTER #1
+→ OFFER #2
+→ COUNTER #2
+
+Do not overwrite prior commercial offers.
+
+============================================================
+8. OFFER MANAGEMENT
+============================================================
+
+Build an Offer entity or existing-equivalent capability.
+
+Each offer must contain:
+
+- deal
+- customer
+- property/unit
+- offer amount
+- requested terms
+- validity
+- status
+- submitted_by
+- submitted_at
+- approved_by
+- approved_at
+- rejection_reason where applicable
+
+Statuses may include:
+
+DRAFT
+SUBMITTED
+UNDER_REVIEW
+COUNTERED
+ACCEPTED
+REJECTED
+EXPIRED
+WITHDRAWN
+
+Use a controlled state transition system.
+
+============================================================
+9. AI NEGOTIATION INTELLIGENCE
+============================================================
+
+Integrate with existing AI Gateway and AI Workforce.
+
+Do NOT create a new AI architecture.
+
+Add specialist capability such as:
+
+Deal Intelligence
+
+or:
+
+Negotiation Advisor
+
+Use existing governed AI execution.
+
+AI may analyze:
+
+- customer preferences
+- property economics
+- historical interactions
+- prior offers
+- deal age
+- price changes
+- inventory availability
+- negotiation history
+- urgency
+- appointment/site visit outcomes
+- revenue probability
+
+AI may recommend:
+
+- negotiation strategy
+- next best action
+- follow-up timing
+- concession alternatives
+- escalation
+- manager review
+
+AI must NOT independently:
+
+- approve a discount
+- accept an offer
+- reserve property
+- confirm booking
+- execute payment
+- close a transaction
+
+without explicit human authorization.
+
+============================================================
+10. PROPERTY INVENTORY RESERVATION
+============================================================
+
+This is critical.
+
+A property/unit that is being transacted must have authoritative inventory state.
+
+Potential statuses:
+
+AVAILABLE
+HELD
+RESERVED
+BOOKED
+SOLD
+BLOCKED
+UNAVAILABLE
+
+Use the actual existing property inventory model.
+
+Do not duplicate inventory.
+
+============================================================
+11. DOUBLE-BOOKING PREVENTION
+============================================================
+
+Implement database-backed concurrency protection.
+
+Scenario:
+
+Customer A attempts reservation
+Customer B attempts reservation
+both arrive simultaneously
+
+Only one may obtain the reservation.
+
+Use appropriate:
+
+- transaction
+- unique constraints
+- row locking
+- optimistic concurrency
+- reservation token
+
+Do NOT use only:
+
+if status == AVAILABLE:
+    update status
+
+without database-level protection.
+
+Write a real concurrent test.
+
+============================================================
+12. RESERVATION ENGINE
+============================================================
+
+Reservation must define:
+
+- property/unit
+- customer
+- deal
+- tenant
+- start
+- expiry
+- created_by
+- status
+- release reason
+
+Statuses:
+
+ACTIVE
+EXPIRED
+RELEASED
+CONVERTED_TO_BOOKING
+CANCELLED
+
+Expired reservations must not permanently block inventory.
+
+Use a safe cleanup worker where appropriate.
+
+============================================================
+13. BOOKING ENGINE
+============================================================
+
+Booking represents explicit commercial commitment.
+
+Store:
+
+- booking reference
+- customer
+- deal
+- property/unit
+- booking date
+- agreed value
+- booking amount
+- balance
+- payment schedule
+- terms
+- owner
+- salesperson
+- manager
+- source attribution
+- booking status
+
+Possible statuses:
+
+DRAFT
+PENDING_APPROVAL
+CONFIRMED
+PAYMENT_PENDING
+ACTIVE
+COMPLETED
+CANCELLED
+
+Use explicit definitions.
+
+============================================================
+14. BOOKING APPROVAL
+============================================================
+
+Some businesses require manager approval.
+
+Build configurable approval rules.
+
+Examples:
+
+- discount exceeds threshold
+- price below floor
+- special payment terms
+- unusual commission
+- manual override
+
+Approval records must capture:
+
+- requested by
+- approved/rejected by
+- timestamp
+- reason
+- original values
+- requested values
+
+Never silently mutate approved commercial terms.
+
+============================================================
+15. TRANSACTION WORKSPACE
+============================================================
+
+Create a dedicated transaction workspace.
+
+It should centralize:
+
+Deal
+Customer
+Property
+Booking
+Offers
+Negotiation history
+Payment records
+Milestones
+Documents
+Commission
+Activities
+Messages
+Appointments
+Site visits
+Audit
+
+The workspace must show:
+
+WHAT HAPPENED
+WHAT IS PENDING
+WHAT IS BLOCKING CLOSING
+WHAT MONEY IS INVOLVED
+WHO OWNS THE NEXT ACTION
+
+This is an execution workspace, not another analytics page.
+
+============================================================
+16. TRANSACTION MILESTONES
+============================================================
+
+Build configurable milestones.
+
+Examples:
+
+Booking confirmed
+Booking amount received
+Agreement prepared
+Agreement signed
+KYC/document complete
+Payment milestone 1
+Payment milestone 2
+Registration
+Possession
+Final settlement
+Closing
+
+Each milestone:
+
+- has status
+- owner
+- due date
+- completed date
+- blocker
+- notes
+- audit
+
+Statuses:
+
+PENDING
+IN_PROGRESS
+COMPLETED
+BLOCKED
+WAIVED
+
+============================================================
+17. PAYMENT RECORDING — NOT PAYMENT PROCESSING
+============================================================
+
+IMPORTANT:
+
+Do not activate real payment collection.
+
+This module may RECORD commercial payment state.
+
+For example:
+
+PaymentRecord:
+
+- amount
+- currency
+- due_date
+- paid_date
+- payment_method
+- reference
+- status
+- booking
+- transaction
+
+Statuses:
+
+EXPECTED
+PENDING
+REPORTED
+VERIFIED
+FAILED
+CANCELLED
+
+“VERIFIED” must require an authorized actor/system event.
+
+Do NOT automatically treat frontend input as verified payment.
+
+============================================================
+18. RAZORPAY BOUNDARY
+============================================================
+
+If Razorpay architecture already exists:
+
+reuse it only where safe.
+
+Maintain:
+
+TEST MODE
+
+Do not enable LIVE credentials.
+
+No code path should silently switch to production payment processing.
+
+Document:
+
+PAYMENT PROCESSING:
+NOT LIVE
+
+PAYMENT RECORDING:
+SUPPORTED
+
+============================================================
+19. DOCUMENT MANAGEMENT
+============================================================
+
+Inspect existing file/media architecture.
+
+Add transaction documents where required.
+
+Document types may include:
+
+- offer
+- agreement
+- identity document
+- payment proof
+- booking form
+- contract
+- registration document
+- closing document
+
+Documents must be:
+
+- tenant-scoped
+- access-controlled
+- auditable
+- versioned where necessary
+
+No public unrestricted document URLs.
+
+============================================================
+20. DOCUMENT STATUS
+============================================================
+
+Example:
+
+UPLOADED
+UNDER_REVIEW
+APPROVED
+REJECTED
+EXPIRED
+
+Record:
+
+reviewer
+reviewed_at
+reason
+
+Do not delete historic document versions silently.
+
+============================================================
+21. COMMISSION ENGINE
+============================================================
+
+Build commission accounting.
+
+Store:
+
+- deal/transaction
+- beneficiary
+- role
+- rate
+- fixed amount
+- calculated amount
+- status
+- approval
+- payout state
+
+Do not assume one universal commission model.
+
+Support:
+
+percentage
+fixed
+tiered/configurable
+
+Where business rules are unknown, make the rules configurable.
+
+============================================================
+22. COMMISSION AUDITABILITY
+============================================================
+
+Commission calculation must be reproducible.
+
+Record:
+
+- base amount
+- rate
+- formula version
+- calculated amount
+- adjustment
+- final amount
+- actor
+- timestamp
+
+Never silently overwrite a historical commission calculation.
+
+============================================================
+23. SOURCE ATTRIBUTION PRESERVATION
+============================================================
+
+Integrate with Part 9 and Part 11.
+
+A transaction must preserve attribution lineage:
+
+Lead source
+→ campaign
+→ first touch
+→ last touch
+→ opportunity
+→ deal
+→ booking
+→ transaction
+→ revenue
+
+Do not recalculate historical attribution silently.
+
+Revenue Intelligence must remain compatible.
+
+============================================================
+24. REVENUE INTELLIGENCE INTEGRATION
+============================================================
+
+Integrate with existing:
+
+Revenue Intelligence
+Revenue Autopilot
+Outcome Tracking
+Learning Loop
+Predictive Intelligence
+
+New transaction events should produce appropriate learning/revenue events.
+
+Examples:
+
+OFFER_CREATED
+OFFER_ACCEPTED
+RESERVATION_CREATED
+BOOKING_CONFIRMED
+PAYMENT_REPORTED
+PAYMENT_VERIFIED
+TRANSACTION_PROGRESS
+TRANSACTION_COMPLETED
+TRANSACTION_CANCELLED
+CLOSED_WON
+CLOSED_LOST
+
+Use existing event conventions where possible.
+
+============================================================
+25. PREDICTIVE INTELLIGENCE INTEGRATION
+============================================================
+
+Use Part 16 rather than rebuilding it.
+
+Potential new prediction targets:
+
+- booking probability
+- transaction completion probability
+- closing delay probability
+- payment completion probability
+- cancellation risk
+- deal stall risk
+
+But:
+
+DO NOT claim validated ML automatically.
+
+Use existing classification:
+
+DETERMINISTIC_HEURISTIC
+STATISTICAL_BASELINE
+LLM_ESTIMATE
+VALIDATED_ML
+
+Data sufficiency must be enforced.
+
+============================================================
+26. DEAL STALL INTELLIGENCE
+============================================================
+
+Build operational intelligence for stalled deals.
+
+Detect signals such as:
+
+- no customer response
+- overdue milestone
+- offer expired
+- reservation nearing expiry
+- unresolved objection
+- missing document
+- payment overdue
+- manager approval pending
+- no next action
+
+Generate:
+
+BLOCKER
+→ EXPLANATION
+→ RECOMMENDED NEXT ACTION
+
+Do not make it another passive score dashboard.
+
+============================================================
+27. NEXT BEST ACTION
+============================================================
+
+Use the existing NBA framework.
+
+Possible deal actions:
+
+- contact customer
+- request document
+- follow up on offer
+- escalate for approval
+- schedule negotiation call
+- extend reservation
+- release reservation
+- prepare booking
+- verify payment
+- complete milestone
+- manager review
+
+AI proposes.
+
+Policy validates.
+
+Human confirmation controls high-impact actions.
+
+============================================================
+28. DEAL COMMAND CENTER
+============================================================
+
+Extend Command Center with an optional:
+
+DEAL EXECUTION
+
+section.
+
+Show:
+
+- active deals
+- offers awaiting action
+- reservations expiring
+- bookings pending
+- payment milestones due
+- documents blocked
+- closing blockers
+- commission pending
+- deals at risk
+
+Do not turn Command Center into a giant analytics page.
+
+============================================================
+29. MANAGER DEAL VIEW
+============================================================
+
+Authorized managers should see:
+
+- deal pipeline
+- commercial approvals
+- pending offers
+- discount exceptions
+- closing blockers
+- transaction velocity
+- revenue exposure
+- forecast inputs
+
+Do not expose data outside tenant authorization.
+
+============================================================
+30. DEAL SEARCH
+============================================================
+
+Support search/filtering by:
+
+- customer
+- property
+- unit
+- owner
+- stage
+- booking status
+- transaction status
+- date
+- amount range
+- source
+- milestone
+- blocker
+
+Use bounded pagination.
+
+Tenant scope is mandatory.
+
+============================================================
+31. BULK OPERATIONS
+============================================================
+
+Support only safe bulk operations.
+
+Examples:
+
+- assign owner
+- update task
+- mark internal review
+- export authorized data
+
+Avoid bulk operations for irreversible financial state unless explicit authorization exists.
+
+Every bulk action must be:
+
+- permission checked
+- bounded
+- audited
+- idempotent where appropriate
+
+============================================================
+32. AUDIT LOGGING
+============================================================
+
+Every commercial mutation must create audit history.
+
+At minimum:
+
+offer created
+offer changed
+offer submitted
+offer accepted
+offer rejected
+reservation created
+reservation extended
+reservation released
+booking created
+booking approved
+payment status changed
+document approved
+milestone completed
+commission changed
+transaction cancelled
+transaction closed
+
+Record:
+
+actor
+tenant
+target
+old state
+new state
+timestamp
+correlation ID
+reason where applicable
+
+Do not store excessive sensitive payload.
+
+============================================================
+33. CANCELLATION / LOSS
+============================================================
+
+Build controlled handling for failed transactions.
+
+Distinguish:
+
+CANCELLED
+LOST
+EXPIRED
+WITHDRAWN
+REJECTED
+
+Require reason taxonomy.
+
+Examples:
+
+PRICE
+FINANCING
+CUSTOMER_CHANGED_MIND
+PROPERTY_UNAVAILABLE
+DOCUMENTATION
+TIMING
+COMPETITOR
+INTERNAL
+UNKNOWN
+
+Do not invent reasons when the real business reason is absent.
+
+Capture structured reason + optional note.
+
+============================================================
+34. LOST DEAL LEARNING
+============================================================
+
+Integrate with Part 11 Learning Loop.
+
+Every lost/cancelled transaction should optionally capture:
+
+- reason
+- stage lost
+- competitor if actually known
+- price issue
+- product issue
+- timing
+- follow-up issue
+- qualification issue
+
+No fabricated classifications.
+
+These events become training/evaluation signals.
+
+============================================================
+35. POST-SALE WORKFLOW
+============================================================
+
+After CLOSED_WON:
+
+create a post-sale workflow.
+
+Possible actions:
+
+- documentation follow-up
+- payment milestone reminders
+- registration tracking
+- possession follow-up
+- customer satisfaction task
+- referral opportunity
+- renewal/repeat-investment signal
+
+Do not fabricate features that require unknown legal/business workflows.
+
+Build configurable tasks instead of hardcoded assumptions.
+
+============================================================
+36. CUSTOMER 360 INTEGRATION
+============================================================
+
+Customer 360 must show:
+
+- current deals
+- property interest
+- offers
+- reservations
+- bookings
+- transaction state
+- payment summary
+- milestones
+- documents
+- commission relevance where appropriate
+- communications
+- appointments
+- site visits
+- post-sale activity
+
+Preserve existing Customer 360 contracts.
+
+Do not create duplicate customer records.
+
+============================================================
+37. PROPERTY 360 INTEGRATION
+============================================================
+
+Property/Unit intelligence should show:
+
+- active offers
+- reservations
+- booking state
+- transaction state
+- historical transactions if supported
+- price history
+- demand
+- buyer signals
+
+Never expose private customer information to unauthorized users.
+
+============================================================
+38. REVENUE ATTRIBUTION
+============================================================
+
+A closed transaction must link back to its commercial origin.
+
+Preserve:
+
+source
+campaign
+lead
+customer
+opportunity
+deal
+property
+booking
+transaction
+revenue
+
+This will become one of the most important WefyLabs data assets.
+
+============================================================
+39. REAL ESTATE INVENTORY EDGE CASES
+============================================================
+
+Handle:
+
+reservation expiry
+duplicate reservation
+customer cancellation
+property cancellation
+property reassignment
+price change before booking
+price change after offer
+unit becomes unavailable
+deal loses property
+customer changes property
+multiple offers on same property
+multiple customers competing for same unit
+booking cancellation
+
+Every edge case must have deterministic state behavior.
+
+============================================================
+40. CONCURRENCY
+============================================================
+
+Build genuine concurrent tests.
+
+At minimum:
+
+Test A:
+Customer A and Customer B reserve same unit simultaneously.
+
+Expected:
+exactly one reservation succeeds.
+
+Test B:
+Two workers convert same reservation to booking.
+
+Expected:
+only one booking.
+
+Test C:
+Duplicate booking request.
+
+Expected:
+one logical booking.
+
+Test D:
+Reservation expiry races with booking.
+
+Expected:
+deterministic transaction outcome.
+
+Test E:
+Two users update negotiation state simultaneously.
+
+Expected:
+no corrupted state.
+
+============================================================
+41. IDEMPOTENCY
+============================================================
+
+Critical operations must support idempotency:
+
+- reservation creation
+- booking creation
+- payment record creation
+- offer submission
+- approval actions
+- transaction close
+- cancellation
+- milestone completion
+- external event ingestion
+
+Use database-backed constraints where practical.
+
+============================================================
+42. AI TOOLS
+============================================================
+
+Add governed AI tools only where necessary.
+
+Potential tools:
+
+get_deal
+get_negotiation_history
+get_active_offer
+get_reservation
+get_booking
+get_transaction
+get_transaction_blockers
+get_payment_schedule
+get_commission
+get_next_best_deal_action
+get_deal_risk
+
+Potential actions:
+
+draft_offer
+draft_followup
+request_approval
+create_internal_task
+prepare_summary
+
+High-impact mutations must use confirmation gating.
+
+No unrestricted:
+
+approve booking
+verify payment
+close transaction
+cancel transaction
+reserve unit
+
+through natural language without explicit confirmation.
+
+============================================================
+43. MANAGER COMMAND AGENT
+============================================================
+
+Extend existing Manager Command Agent.
+
+Queries such as:
+
+“Which bookings need attention?”
+
+“Which reservations expire soon?”
+
+“What is blocking today's closings?”
+
+“What deals have pending approvals?”
+
+“What transactions are delayed?”
+
+must retrieve real CRM/transaction state.
+
+No fabricated answers.
+
+============================================================
+44. DEAL AI EXPLAINABILITY
+============================================================
+
+Every AI-derived deal recommendation should expose:
+
+- recommendation
+- key evidence
+- source records
+- confidence where applicable
+- model/method classification
+- generated_at
+
+Do not expose chain-of-thought.
+
+============================================================
+45. SECURITY
+============================================================
+
+Apply Part 17 security architecture.
+
+Every endpoint must enforce:
+
+authentication
+tenant isolation
+authorization
+object ownership
+RBAC
+
+Test:
+
+tenant A cannot access tenant B deal
+tenant A cannot access tenant B offer
+tenant A cannot access tenant B reservation
+tenant A cannot access tenant B booking
+tenant A cannot access tenant B payment
+tenant A cannot access tenant B commission
+tenant A cannot access tenant B documents
+tenant A cannot access tenant B transactions
+
+============================================================
+46. DOCUMENT ACCESS SECURITY
+============================================================
+
+Test:
+
+- guessed document ID
+- modified download URL
+- tenant substitution
+- unauthorized employee role
+- revoked membership
+- deleted user
+- expired signed URL if applicable
+
+All must fail safely.
+
+============================================================
+47. FINANCIAL SAFETY
+============================================================
+
+Never trust frontend values for:
+
+- booking amount
+- total value
+- payment verified state
+- commission
+- discount approval
+- transaction status
+
+Server-side validation is mandatory.
+
+============================================================
+48. NUMERICAL PRECISION
+============================================================
+
+Use proper monetary representation.
+
+Do not use unsafe floating-point arithmetic for persisted money calculations.
+
+Define:
+
+currency
+minor units/decimal strategy
+rounding
+precision
+
+Document the chosen representation.
+
+Do not silently convert currencies.
+
+============================================================
+49. API DESIGN
+============================================================
+
+Use repository-native API style.
+
+Potential routes:
+
+/api/v1/deals
+/api/v1/deals/{id}
+/api/v1/deals/{id}/offers
+/api/v1/deals/{id}/negotiation
+/api/v1/deals/{id}/reservation
+/api/v1/deals/{id}/booking
+/api/v1/deals/{id}/transaction
+/api/v1/deals/{id}/milestones
+/api/v1/deals/{id}/documents
+/api/v1/deals/{id}/payments
+/api/v1/deals/{id}/commission
+/api/v1/deals/{id}/timeline
+/api/v1/transactions
+/api/v1/bookings
+
+BUT:
+
+Do not blindly create these exact routes.
+
+Follow existing routing conventions.
+
+============================================================
+50. FRONTEND
+============================================================
+
+Build production UI for:
+
+1. Deal workspace
+2. Offer history
+3. Negotiation timeline
+4. Reservation state
+5. Booking state
+6. Transaction milestones
+7. Payment schedule
+8. Documents
+9. Commission
+10. Closing checklist
+11. Post-sale actions
+
+The UI should clearly communicate:
+
+STATUS
+OWNER
+AMOUNT
+NEXT ACTION
+BLOCKER
+TIMELINE
+
+Avoid excessive analytics.
+
+============================================================
+51. DEAL TIMELINE
+============================================================
+
+A deal timeline should combine:
+
+- CRM activities
+- calls
+- messages
+- emails
+- site visits
+- offers
+- negotiation changes
+- reservations
+- bookings
+- payments
+- documents
+- milestone changes
+- AI recommendations
+- approvals
+- audit events
+
+Order by timestamp.
+
+Preserve event provenance.
+
+============================================================
+52. DEAL DETAIL UX
+============================================================
+
+Recommended structure:
+
+Header:
+Customer
+Property
+Deal status
+Value
+Owner
+
+Primary content:
+Negotiation
+Offer
+Booking/Transaction
+
+Secondary:
+Timeline
+Tasks
+Documents
+Milestones
+
+Action area:
+Next Best Action
+
+Do not overwhelm the user with every system detail simultaneously.
+
+============================================================
+53. REAL-TIME CONSIDERATIONS
+============================================================
+
+If repository infrastructure supports realtime updates:
+
+use it carefully for:
+
+- reservation state
+- booking state
+- approval updates
+- milestone changes
+
+If not, use safe refresh/polling.
+
+Do not add a new realtime infrastructure solely for this part.
+
+============================================================
+54. BACKGROUND JOBS
+============================================================
+
+Add safe jobs for:
+
+- reservation expiry
+- overdue milestones
+- payment reminder tasks
+- document expiry reminders
+- transaction blocker detection
+- post-sale workflow
+- revenue event processing
+
+Use Part 17 task reliability policies.
+
+No overlapping execution.
+
+No infinite retries.
+
+============================================================
+55. REVENUE AUTOPILOT
+============================================================
+
+Extend existing Revenue Autopilot with opportunities such as:
+
+RESERVATION_EXPIRING
+BOOKING_PENDING_ACTION
+PAYMENT_MILESTONE_DUE
+DOCUMENT_BLOCKER
+DEAL_APPROVAL_PENDING
+TRANSACTION_STALLED
+CLOSING_BLOCKER
+POST_SALE_FOLLOW_UP
+
+Preserve the existing:
+
+READ
+→ SUGGEST
+→ CONFIRM
+→ EXECUTE
+
+architecture.
+
+============================================================
+56. REVENUE OPPORTUNITY VS DEAL RISK
+============================================================
+
+Keep these concepts separate:
+
+Match Score
+Revenue Opportunity Score
+Prediction
+Deal Risk
+Transaction Risk
+Next Best Action
+
+Do NOT collapse them into one magic score.
+
+============================================================
+57. ANALYTICS
+============================================================
+
+Add factual transaction metrics:
+
+- booked value
+- active transaction value
+- closed value
+- cancellation value
+- average deal cycle
+- stage duration
+- offer-to-booking conversion
+- booking-to-close conversion
+- payment completion
+- cancellation rate
+- transaction aging
+
+All metrics must respect tenant scope.
+
+Zero data must return safe empty/None states.
+
+Never fabricate percentages.
+
+============================================================
+58. ATTRIBUTION ANALYTICS
+============================================================
+
+Integrate transaction outcomes into source attribution.
+
+Show where closed revenue originated when attribution exists.
+
+Do not force attribution when data is missing.
+
+Use:
+
+UNKNOWN
+
+instead of guessing.
+
+============================================================
+59. DATA INTEGRITY
+============================================================
+
+Create diagnostic checks for:
+
+- booking without deal
+- transaction without booking
+- payment without transaction
+- commission without transaction
+- reservation without valid property
+- booking for unavailable unit
+- closed transaction without required state
+- cross-tenant relationships
+- duplicate active reservations
+- orphan documents
+- impossible state transitions
+
+Make diagnostics read-only.
+
+============================================================
+60. DATA MIGRATIONS
+============================================================
+
+Use Alembic.
+
+Do not modify already-shipped migrations unnecessarily.
+
+Create new migrations.
+
+Verify:
+
+single head
+upgrade
+schema consistency
+indexes
+constraints
+foreign keys
+
+============================================================
+61. TESTING
+============================================================
+
+Create:
+
+test_part18_deals.py
+
+test_part18_offers.py
+
+test_part18_reservations.py
+
+test_part18_bookings.py
+
+test_part18_transactions.py
+
+test_part18_security.py
+
+test_part18_concurrency.py
+
+test_part18_ai.py
+
+test_part18_revenue.py
+
+test_part18_e2e.py
+
+Minimum categories:
+
+A. Domain model
+B. State machine
+C. Offers
+D. Negotiation
+E. Reservation
+F. Double booking
+G. Booking
+H. Transaction
+I. Milestones
+J. Payments
+K. Commission
+L. Documents
+M. Security
+N. Tenant isolation
+O. RBAC
+P. Idempotency
+Q. Concurrency
+R. AI integration
+S. Revenue integration
+T. E2E
+
+============================================================
+62. SECURITY TESTS
+============================================================
+
+Test:
+
+- IDOR
+- tenant substitution
+- role escalation
+- unauthorized booking
+- unauthorized cancellation
+- unauthorized payment verification
+- unauthorized commission access
+- document leakage
+- malicious numeric values
+- SQL injection
+- XSS
+- prompt injection
+- forged webhook
+- duplicate webhook
+- race conditions
+
+============================================================
+63. AI SAFETY TESTS
+============================================================
+
+Verify AI cannot:
+
+- close a transaction
+- approve a booking
+- verify a payment
+- alter commission
+- release a reservation
+- cancel a transaction
+
+without required confirmation/policy.
+
+Prompt:
+
+“Book this property now”
+
+must produce confirmation flow unless all required authorization and confirmation contracts explicitly permit the action.
+
+============================================================
+64. FULL E2E JOURNEY
+============================================================
+
+Run:
+
+Tenant
+→ Customer
+→ Lead
+→ Property
+→ Qualification
+→ Match
+→ Site Visit
+→ Opportunity
+→ Deal
+→ Offer
+→ Counter Offer
+→ Accepted Offer
+→ Reservation
+→ Booking
+→ Payment Record
+→ Milestones
+→ Documents
+→ Closing
+→ Revenue Event
+→ Attribution
+→ Customer 360
+
+Then verify:
+
+- all records linked
+- tenant boundaries intact
+- audit trail complete
+- revenue events emitted
+- attribution preserved
+- transaction status correct
+- no duplicate reservation
+- no duplicate booking
+
+============================================================
+65. FAILURE E2E
+============================================================
+
+Test failure scenarios:
+
+Offer submitted twice.
+
+Reservation request retried.
+
+Two customers request same unit.
+
+Booking worker crashes.
+
+Payment webhook duplicated.
+
+Transaction milestone worker retries.
+
+Document upload fails midway.
+
+Redis unavailable.
+
+AI unavailable.
+
+Database transaction rolls back.
+
+Expected behavior must be deterministic and documented.
+
+============================================================
+66. FRONTEND VERIFICATION
+============================================================
+
+Run:
+
+npx tsc --noEmit
+
+npm run lint
+
+npm run build
+
+Then verify actual UI behavior.
+
+Do not mark UI complete based only on compilation.
+
+Test:
+
+- empty
+- loading
+- error
+- unauthorized
+- expired session
+- cancelled deal
+- closed deal
+- missing payment
+- blocked transaction
+- reservation expiry
+
+============================================================
+67. PERFORMANCE
+============================================================
+
+Benchmark:
+
+- deal list
+- deal detail
+- transaction detail
+- offer list
+- negotiation timeline
+- transaction timeline
+- booking search
+- revenue aggregation
+
+Prevent:
+
+N+1
+unbounded pagination
+unbounded timelines
+huge document lists
+unbounded transaction history
+
+============================================================
+68. OBSERVABILITY
+============================================================
+
+Emit safe metrics for:
+
+- deal created
+- offer created
+- offer accepted
+- reservation created
+- reservation expired
+- booking confirmed
+- transaction closed
+- transaction cancelled
+- payment failure
+- milestone overdue
+- deal stalled
+
+No PII in metric labels.
+
+Use existing Part 17 observability architecture.
+
+============================================================
+69. AUDIT
+============================================================
+
+Create a transaction audit matrix.
+
+For every important mutation:
+
+actor
+tenant
+action
+target
+old state
+new state
+request/correlation ID
+timestamp
+reason
+
+============================================================
+70. DOCUMENTATION
+============================================================
+
+Create:
+
+WEFYLABS_PART18_BASELINE.md
+
+WEFYLABS_DEAL_ARCHITECTURE.md
+
+WEFYLABS_TRANSACTION_STATE_MACHINE.md
+
+WEFYLABS_BOOKING_RULES.md
+
+WEFYLABS_DEAL_SECURITY.md
+
+WEFYLABS_PART18_AI_BOUNDARY.md
+
+WEFYLABS_PART18_TEST_REPORT.md
+
+WEFYLABS_PART18_FINAL_REPORT.md
+
+============================================================
+71. FINAL TEST ACCOUNTING
+============================================================
+
+Report exact values:
+
+PART 18:
+X/Y PASS
+Z FAIL
+N SKIPPED
+
+REGRESSION:
+X/Y PASS
+
+FULL REPOSITORY:
+X/Y PASS
+Z FAIL
+N SKIPPED
+
+FRONTEND:
+TypeScript:
+PASS/FAIL
+
+Lint:
+PASS/FAIL
+
+Build:
+PASS/FAIL
+
+MIGRATION:
+Current head:
+<actual>
+
+Multiple heads:
+YES/NO
+
+SECURITY:
+Tenant isolation:
+PASS/PARTIAL/FAIL
+
+Double-booking:
+PASS/PARTIAL/FAIL
+
+Financial mutation safety:
+PASS/PARTIAL/FAIL
+
+AI boundary:
+PASS/PARTIAL/FAIL
+
+============================================================
+72. FINAL BUSINESS CAPABILITY MATRIX
+============================================================
+
+| Capability | Status | Evidence |
+|---|---|---|
+| Opportunity → Deal | | |
+| Offer management | | |
+| Negotiation history | | |
+| Reservation | | |
+| Double-booking prevention | | |
+| Booking | | |
+| Transaction workspace | | |
+| Milestones | | |
+| Payment recording | | |
+| Payment processing | | |
+| Documents | | |
+| Commission | | |
+| Closing | | |
+| Cancellation | | |
+| Post-sale | | |
+| Revenue attribution | | |
+| Revenue Intelligence integration | | |
+| Predictive Intelligence integration | | |
+| Revenue Autopilot integration | | |
+| Customer 360 | | |
+| Property 360 | | |
+| AI Deal Intelligence | | |
+| Tenant isolation | | |
+| Auditability | | |
+
+============================================================
+73. FINAL STATUS
+============================================================
+
+Choose exactly one:
+
+VERIFIED
+PARTIALLY VERIFIED
+READY FOR DEPLOYMENT
+BLOCKED — OWNER ACTION REQUIRED
+NOT READY
+
+Base this entirely on evidence.
+
+Do not use promotional language.
+
+============================================================
+74. CRITICAL FINAL RULE
+============================================================
+
+DO NOT STOP AT ANALYSIS.
+
+DO NOT ONLY WRITE DOCUMENTATION.
+
+DO NOT ONLY WRITE TESTS.
+
+DO NOT BUILD A MOCK DEMO.
+
+IMPLEMENT THE ACTUAL DEAL, BOOKING AND TRANSACTION OPERATING SYSTEM IN THE EXISTING WEFYLABS CODEBASE.
+
+Reuse Parts 1–17.
+
+Integrate with:
+
+Native CRM
+Customer 360
+Property Intelligence
+Matching
+AI Workforce
+Revenue Intelligence
+Revenue Autopilot
+Predictive Intelligence
+Communication Hub
+Calendar
+Audit
+Observability
+Security
+
+Then:
+
+IMPLEMENT
+→ TEST
+→ INTEGRATE
+→ RUN REAL E2E
+→ VERIFY
+→ DOCUMENT
+→ REPORT EXACT RESULTS.
+
+NEVER FABRICATE SUCCESS.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-24T16:48:29+05:30.
+
+The user's current state is as follows:
+Active Document: c:\Users\aamir\OneDrive\Desktop\crm real state\WEFYLABS_PART17_FINAL_REPORT.md (LANGUAGE_MARKDOWN)
+Cursor is on line: 347
+Other open documents:
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\tests\test_part17_security.py (LANGUAGE_PYTHON)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\tests\test_part17_reliability.py (LANGUAGE_PYTHON)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\WEFYLABS_PART17_FINAL_REPORT.md (LANGUAGE_MARKDOWN)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\presentation\api\v1\crm_services_router.py (LANGUAGE_PYTHON)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\models\__init__.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (High) to Claude Sonnet 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

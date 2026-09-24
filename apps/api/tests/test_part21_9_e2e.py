@@ -1039,17 +1039,12 @@ class TestAlembicVerification:
         assert len(head_lines) == 1, (
             f"Expected exactly 1 Alembic head, found {len(head_lines)}.\n{output}"
         )
-        assert (
-            "0024_onboarding_activation_demo" in head_lines[0]
-            or "0023_agent_command_center" in head_lines[0]
-            or "0022_ai_matching_engine" in head_lines[0]
-            or "0021_property_inventory_crm" in head_lines[0]
-            or "0020_followup_automation_engine" in head_lines[0]
-            or "0019_copilot_conversations" in head_lines[0]
-            or "0018_pre_branding_blockers" in head_lines[0]
-            or "0017_razorpay_billing" in head_lines[0]
-            or "0016_lead_sources_alignment" in head_lines[0]
-        ), f"Unrecognized migration head: {head_lines[0]}"
+        # The head moves forward as new parts add migrations, so assert the
+        # invariant (a single, well-formed head) rather than a hardcoded list.
+        revision = head_lines[0].split()[0]
+        assert revision and revision.split("_")[0].isdigit(), (
+            f"Unrecognized migration head: {head_lines[0]}"
+        )
 
     def test_migration_chain_expected_files_present(self):
         """All expected migration files must be present."""
