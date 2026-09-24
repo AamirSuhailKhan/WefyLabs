@@ -605,6 +605,12 @@ from app.models.marketing_models import (
     ProjectLaunch,
     CampaignListingLink,
 )
+from app.models.portal_models import (
+    CustomerPortalInvite,
+    CustomerSupportRequest,
+    CustomerPaymentProof,
+    CustomerTransactionAcknowledgement,
+)
 
 __all__ = __all__ + [
     "CampaignObjective",
@@ -626,4 +632,8 @@ __all__ = __all__ + [
     "CampaignEvent",
     "ProjectLaunch",
     "CampaignListingLink",
+    "CustomerPortalInvite",
+    "CustomerSupportRequest",
+    "CustomerPaymentProof",
+    "CustomerTransactionAcknowledgement",
 ]

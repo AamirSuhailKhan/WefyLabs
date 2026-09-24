@@ -272,7 +272,7 @@ def upgrade() -> None:
         sa.Column("organization_id", sa.String(36), nullable=False),
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         sa.Column("landing_page_id", sa.String(36), sa.ForeignKey("marketing_landing_pages.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("channel_partner_id", sa.String(36), sa.ForeignKey("channel_partners.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("channel_partner_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("channel_partners.id", ondelete="SET NULL"), nullable=True),
         sa.Column("destination_url", sa.Text, nullable=False),
         sa.Column("utm_source", sa.String(255), nullable=True),
         sa.Column("utm_medium", sa.String(255), nullable=True),

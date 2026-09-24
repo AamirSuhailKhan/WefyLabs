@@ -143,7 +143,7 @@ class GoogleAdapter(BaseLLMAdapter):
         # Resolve legacy model name aliases
         self._model = _MODEL_ALIAS.get(model, model)
         if model != self._model:
-            logger.info(f"[GoogleAdapter] Model alias resolved: {model} → {self._model}")
+            logger.info(f"[GoogleAdapter] Model alias resolved: {model} -> {self._model}")
 
     @property
     def provider_name(self) -> str:

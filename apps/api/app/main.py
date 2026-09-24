@@ -405,6 +405,10 @@ app.include_router(inventory_router, prefix=settings.API_V1_STR)
 from app.modules.marketing import marketing_router
 app.include_router(marketing_router, prefix=settings.API_V1_STR)
 
+# ─── Part 21 — Customer Portal, Digital Deal Room & Transaction Collaboration OS ─
+from app.modules.portal import portal_router
+app.include_router(portal_router, prefix=settings.API_V1_STR)
+
 
 
 @app.get("/metrics", response_class=PlainTextResponse, tags=["Observability"])
