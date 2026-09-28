@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, level-1 ]
   pull_request:
     branches: [ main ]
 
@@ -66,12 +66,17 @@ jobs:
           cd apps/api
           poetry install --no-interaction --no-root
 
+      # ── Phase 0 P0.6: secret scan FAILS CI. The previous step swallowed the
+      # exit code with '|| true', so committed secrets never failed the build.
       - name: ── SECRET SCAN ── Detect accidental secret commits
         run: |
           cd apps/api
           poetry run pip install detect-secrets --quiet
-          poetry run detect-secrets scan --baseline .secrets.baseline . 2>/dev/null || true
-          echo "[INFO] Secret scan complete — check output for any flagged items."
+          if [ -f .secrets.baseline ]; then
+            poetry run detect-secrets scan --baseline .secrets.baseline .
+          else
+            poetry run detect-secrets scan --list-all-plugins .
+          fi
 
       - name: ── MIGRATION INTEGRITY ── Verify single Alembic head
         env:
@@ -107,7 +112,7 @@ jobs:
           poetry run pytest -v --tb=short
 
   lint:
-    name: Linting Codebase
+    name: Linting & Security Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -124,11 +129,10 @@ jobs:
       - name: Run Python Linter (Ruff)
         run: ruff check apps/api
 
+      # ── Phase 0 P0.6: Bandit findings FAIL CI (no error suppression).
       - name: ── SECURITY SCAN ── Bandit Static Analysis
         run: |
-          echo "[CI] Running Bandit security scan on production code..."
           bandit -r apps/api/app -ll -ii -x apps/api/app/tests,apps/api/tests
-          echo "[OK] Bandit scan complete — no HIGH severity issues."
 
   frontend:
     name: Frontend Security & Build Check
@@ -152,9 +156,7 @@ jobs:
       - name: ── SECURITY SCAN ── npm audit (fail on critical)
         run: |
           cd apps/web
-          echo "[CI] Running npm audit — failing on critical vulnerabilities..."
           npm audit --audit-level=critical
-          echo "[OK] No critical npm vulnerabilities found."
 
       - name: TypeScript Check
         run: |
@@ -178,7 +180,7 @@ jobs:
           context: ./apps/api
           file: ./apps/api/Dockerfile.prod
           push: false
-          tags: beetlelabs-api:latest
+          tags: wefylabs-api:latest
 
       - name: Build Web Docker Image
         uses: docker/build-push-action@v5
@@ -186,4 +188,4 @@ jobs:
           context: ./apps/web
           file: ./apps/web/Dockerfile
           push: false
-          tags: beetlelabs-web:latest
+          tags: wefylabs-web:latest

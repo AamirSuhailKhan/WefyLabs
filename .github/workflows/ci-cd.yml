@@ -1,4 +1,4 @@
-name: BeetleLabs DevSecOps Enterprise CI/CD Pipeline
+name: WefyLabs DevSecOps Enterprise CI/CD Pipeline
 
 on:
   push:
@@ -8,8 +8,33 @@ on:
 
 jobs:
   devsecops-pipeline:
-    name: Security Scan, Test, Build & Deploy
+    name: Security Scan, Test, Build & Smoke
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: leadscore_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Source Code
@@ -20,18 +45,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies
+      # ── Phase 0 P0.6: install the REAL dependency graph (requirements.txt),
+      # not an ad-hoc subset, so tests exercise the runtime the Docker image
+      # and production actually use.
+      - name: Install Dependencies (requirements.txt)
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio passlib argon2-cffi cryptography pydantic fastapi httpx bandit safety
+          pip install -r apps/api/requirements.txt
+          pip install pytest pytest-asyncio aiosqlite bandit safety
 
+      # ── Phase 0 P0.6: Bandit findings FAIL the pipeline (no '|| true').
       - name: DevSecOps Code Security Audit (Bandit)
         run: |
-          bandit -r apps/api/app -ll -ii || true
+          bandit -r apps/api/app -ll -ii -x apps/api/app/tests,apps/api/tests
+
+      - name: Dependency Vulnerability Audit (safety)
+        run: |
+          safety check --short-output || safety check --json > safety-report.json
 
       - name: Execute Enterprise Automated Test Suite
+        env:
+          ENV: testing
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_super_secret_jwt_key_ci_environment_32chars
+          SUPABASE_JWT_SECRET: supabase_jwt_secret_test_placeholder_for_ci_only
         run: |
-          python -m pytest apps/api/tests/ -v
+          python -m pytest apps/api/tests/ -v --tb=short
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,8 +82,54 @@ jobs:
           context: ./apps/api
           file: ./apps/api/Dockerfile.prod
           push: false
-          tags: beetlelabs/api:${{ github.sha }}
+          tags: wefylabs/api:${{ github.sha }}
+          load: true
 
-      - name: Verify Health Check Endpoint Smoke Test
+      # ── Phase 0 P0.6: REAL smoke test. The previous step only echoed
+      # "Health smoke tests passed successfully." without launching anything.
+      # Here the production image is started with real PostgreSQL + Redis and
+      # the readiness endpoint must report all dependencies healthy.
+      - name: Real Health & Readiness Smoke Test
         run: |
-          echo "Health smoke tests passed successfully."
+          docker network create smoke-net
+          docker run -d --name smoke-pg --network smoke-net \
+            -e POSTGRES_DB=leadscore -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            postgres:16-alpine
+          docker run -d --name smoke-redis --network smoke-net redis:7-alpine
+
+          docker run -d --name smoke-api --network smoke-net -p 8000:8000 \
+            -e ENV=staging \
+            -e DATABASE_URL=postgresql+asyncpg://postgres:postgres@smoke-pg:5432/leadscore \
+            -e REDIS_URL=redis://smoke-redis:6379/0 \
+            -e SECRET_KEY=smoke_test_super_secret_jwt_key_32chars_min \
+            -e SUPABASE_JWT_SECRET=smoke_supabase_jwt_secret_placeholder_32b \
+            -e GEMINI_API_KEY=AIzaSy_placeholder_smoke_only_not_real \
+            wefylabs/api:${{ github.sha }}
+
+          echo "Waiting for API readiness (max 90s)..."
+          READY=0
+          for i in $(seq 1 45); do
+            HTTP=$(curl -s -o readiness.json -w "%{http_code}" http://localhost:8000/api/v1/health/readiness || true)
+            if [ "$HTTP" = "200" ]; then READY=1; break; fi
+            if [ "$HTTP" = "503" ]; then
+              echo "Readiness returned 503 — dependencies not healthy:"
+              cat readiness.json || true
+            fi
+            sleep 2
+          done
+
+          if [ "$READY" != "1" ]; then
+            echo "━━ FAIL: API never became ready ━━"
+            docker logs smoke-api --tail 80 || true
+            exit 1
+          fi
+
+          echo "Readiness response:"
+          cat readiness.json
+          echo "━━ PASS: real readiness probe executed against the production image ━━"
+
+      - name: Collect Smoke Artifacts on Failure
+        if: failure()
+        run: |
+          docker logs smoke-api > api-smoke-logs.txt 2>&1 || true
+          echo "API smoke logs saved."
