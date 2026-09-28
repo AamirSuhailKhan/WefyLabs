@@ -58,7 +58,11 @@ from app.modules.communication.canonical_service import (
     sanitize_customer_text,
     verify_meta_hmac_signature,
 )
-from app.modules.communication.channels.enums import Channel, IMPLEMENTED_CHANNELS
+from app.modules.communication.channels.enums import (
+    Channel,
+    IMPLEMENTED_CHANNELS,
+    POLICY_DISABLED_CHANNELS,
+)
 from app.modules.communication.channels.status import ChannelStatusService
 
 
@@ -858,4 +862,14 @@ async def test_20_communication_health_reporting():
     assert "whatsapp" in health["channels"]
     assert "email" in health["channels"]
     assert "sms" in health["channels"]
-    assert Channel.WHATSAPP in IMPLEMENTED_CHANNELS
+    # Phase 0 provider-truth: WhatsApp is implemented but POLICY-DISABLED
+    # (WHATSAPP_ENABLED=False until provider verification completes). The health
+    # report must reflect the honest state, and the test must assert the honest
+    # state rather than demanding WhatsApp be marked implemented prematurely.
+    from app.config import settings as _settings
+
+    assert Channel.WHATSAPP in POLICY_DISABLED_CHANNELS
+    assert Channel.WHATSAPP not in IMPLEMENTED_CHANNELS
+    assert health["channels"]["whatsapp"]["enabled"] is bool(_settings.WHATSAPP_ENABLED)
+    if not _settings.WHATSAPP_ENABLED:
+        assert health["channels"]["whatsapp"]["status"] in ("DISABLED", "CONFIG_REQUIRED")

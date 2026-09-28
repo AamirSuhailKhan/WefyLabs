@@ -100,14 +100,14 @@ export default function LandingPage() {
   // Region-specific hero subheadline
   const getHeroSubheadline = () => {
     switch (region.code) {
-      case 'AE': return 'Dubai real estate brokers lose 12 hours/week on unqualified Property Finder leads. Our AI bot qualifies every lead on WhatsApp and scores them';
-      case 'GB': return 'Estate agents lose 10+ hours/week chasing unqualified Rightmove leads. Our AI bot qualifies every lead on WhatsApp and scores them';
-      case 'SG': return 'Singapore property agents lose 10 hours/week on cold PropertyGuru leads. Our AI bot qualifies every lead on WhatsApp and scores them';
-      case 'US': return 'Real estate agents lose 10+ hours/week on Zillow leads that never convert. Our AI bot qualifies every lead and scores them';
-      case 'AU': return 'Aussie real estate agents lose hours every week on unqualified REA leads. Our AI bot qualifies every lead on WhatsApp and scores them';
-      case 'CA': return 'Canadian realtors lose 10+ hours/week on Realtor.ca leads that never close. Our AI bot qualifies every lead and scores them';
+      case 'AE': return 'Dubai real estate brokers lose 12 hours/week on unqualified Property Finder leads. Our AI qualifies every lead in real time and scores them';
+      case 'GB': return 'Estate agents lose 10+ hours/week chasing unqualified Rightmove leads. Our AI qualifies every lead in real time and scores them';
+      case 'SG': return 'Singapore property agents lose 10 hours/week on cold PropertyGuru leads. Our AI qualifies every lead in real time and scores them';
+      case 'US': return 'Real estate agents lose 10+ hours/week on Zillow leads that never convert. Our AI qualifies every lead and scores them';
+      case 'AU': return 'Aussie real estate agents lose hours every week on unqualified REA leads. Our AI qualifies every lead in real time and scores them';
+      case 'CA': return 'Canadian realtors lose 10+ hours/week on Realtor.ca leads that never close. Our AI qualifies every lead and scores them';
       case 'IN':
-      default:   return 'Indian real estate brokers lose 15 hours/week calling unqualified leads. Our AI bot chats with every lead on WhatsApp and scores them';
+      default:   return 'Indian real estate brokers lose 15 hours/week calling unqualified leads. Our AI chats with every inbound lead and scores them';
     }
   };
 
@@ -129,7 +129,7 @@ export default function LandingPage() {
   const faqs = [
     {
       q: 'Do I need to know how to code to use WefyLabs?',
-      a: 'No coding required. WefyLabs works entirely over WhatsApp. Just forward a lead\'s phone number and our AI handles the rest.',
+      a: 'No coding required. WefyLabs connects to your lead sources and channels. Our AI handles qualification, scoring, and follow-ups automatically.',
     },
     {
       q: "What happens when a lead doesn't reply?",
@@ -137,7 +137,7 @@ export default function LandingPage() {
     },
     {
       q: 'How long does it take to set up?',
-      a: 'Under 2 minutes. Sign up, connect your WhatsApp, and start forwarding leads immediately.',
+      a: 'Under 2 minutes. Sign up, import your leads or properties, and start qualifying immediately.',
     },
     {
       q: 'Can I integrate WefyLabs with my existing CRM?',
@@ -153,10 +153,22 @@ export default function LandingPage() {
     },
   ];
 
-  const handleWaitlistSubmit = (e: React.FormEvent) => {
+  const handleWaitlistSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!waitlistEmail) return;
-    setWaitlistJoined(true);
+    try {
+      await fetch('/api/v1/lead-acquisition/public-capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'waitlist_landing',
+          email: waitlistEmail,
+          metadata: { region: region.code }
+        })
+      }).catch(() => null);
+    } finally {
+      setWaitlistJoined(true);
+    }
   };
 
   // Hero headline words for word-by-word stagger
@@ -272,10 +284,10 @@ export default function LandingPage() {
           <ScrollReveal>
             <div className="text-center mb-12">
               <h2 className="text-4xl md:text-5xl font-bold mb-4 mono-headline">
-                AI qualifies your leads on WhatsApp
+                AI qualifies and scores your inbound leads
               </h2>
               <p className="text-[17px] text-[#4A4A4A] max-w-xl mx-auto leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
-                No scripts. No manual calling. Just forward a lead's number and watch the AI chat, ask questions, and score them like a senior broker.
+                No scripts. No manual calling. Connect your lead sources and watch the AI chat, extract requirements, and score prospects like a senior broker.
               </p>
             </div>
 
@@ -316,7 +328,7 @@ export default function LandingPage() {
                     <div className="space-y-3 text-xs text-[#4A4A4A]" style={{ fontFamily: 'Inter, sans-serif' }}>
                       <div className="flex gap-2.5">
                         <span className="text-[#1A1A1A] font-bold shrink-0">1.</span>
-                        <span>Initiating WhatsApp conversation and sending greeting...</span>
+                        <span>Initiating AI qualification conversation and greeting...</span>
                       </div>
                       <div className="flex gap-2.5">
                         <span className="text-[#1A1A1A] font-bold shrink-0">2.</span>
@@ -398,7 +410,7 @@ export default function LandingPage() {
                 {[
                   { end: regionStats.coldPct, suffix: '%', label: `of ${regionStats.platform} leads are cold or fake`, sub: 'based on industry data' },
                   { end: 15, suffix: '+', label: 'hours wasted per week', sub: 'on unqualified prospects' },
-                  { end: 2, suffix: ' min', label: 'to qualify with AI', sub: 'using AI WhatsApp bot' },
+                  { end: 2, suffix: ' min', label: 'to qualify with AI', sub: 'using autonomous AI agent' },
                 ].map((stat, i) => (
                   <motion.div
                     key={i}
@@ -424,7 +436,7 @@ export default function LandingPage() {
                 Stop chasing. Start closing deals at scale.
               </h2>
               <p className="text-[17px] text-[#4A4A4A] max-w-2xl mx-auto leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
-                WefyLabs multiplies your output without multiplying your hours. Use WhatsApp to engage leads, and let AI agents qualify and score them automatically.
+                WefyLabs multiplies your output without multiplying your hours. Engage leads across email, web, and CRM, and let AI agents qualify and score them automatically.
               </p>
             </div>
           </ScrollReveal>
