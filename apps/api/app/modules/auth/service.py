@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.broker import Broker, default_trial_ends_at
-from app.modules.auth.schemas import RegisterRequest, OAuthCallbackRequest
+from app.modules.auth.schemas import RegisterRequest
 
 def hash_password(password: str) -> str:
     """Hashes password using PBKDF2-HMAC-SHA256 with random salt."""
@@ -124,69 +124,31 @@ async def authenticate_broker(db: AsyncSession, email: str, password: str) -> Br
         )
     return broker
 
-async def sync_oauth_broker(db: AsyncSession, req: OAuthCallbackRequest) -> Broker:
-    stmt = select(Broker).where(Broker.email == req.email)
+async def get_or_create_test_broker(db: AsyncSession, email: str, name: Optional[str] = None) -> Broker:
+    """Test/development-only identity fixture.
+
+    Phase 0 P0.1: this REPLACES the former caller-controlled OAuth identity
+    path. It is invoked exclusively by the isolated ``/auth/test/identity``
+    endpoint, which is compiled out of production builds. It must never be
+    called from any production authentication flow.
+    """
+    if settings.ENV.lower() in ("production", "prod"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found."
+        )
+    stmt = select(Broker).where(Broker.email == email)
     existing = (await db.execute(stmt)).scalars().first()
-
     if existing:
-        # Broker already registered via OAuth or email
-        if req.name and req.name != existing.name:
-            existing.name = req.name
-        # Note: Do NOT overwrite real data with None from callback
-        if req.agency_name:
-            existing.agency_name = req.agency_name
-        if req.city:
-            existing.city = req.city
-        await db.commit()
-        await db.refresh(existing)
         return existing
-
-    # Create new broker for first-time OAuth callback
-    is_onboarded = True if (req.phone and req.whatsapp_number) else False
     new_broker = Broker(
-        email=req.email,
-        name=req.name,
-        phone=req.phone,
-        whatsapp_number=req.whatsapp_number,
-        agency_name=req.agency_name,
-        city=req.city or ("Bengaluru" if is_onboarded else None),
+        email=email,
+        name=name or "Test Broker",
         subscription_status="trial",
         trial_ends_at=default_trial_ends_at(),
-        onboarding_status="ONBOARDED" if is_onboarded else "AUTHENTICATED_NOT_ONBOARDED"
+        onboarding_status="AUTHENTICATED_NOT_ONBOARDED"
     )
     db.add(new_broker)
-    await db.flush()
-
-    if is_onboarded:
-        org = Organization(
-            id=uuid.uuid4(),
-            name=req.agency_name or f"{req.name}'s Agency",
-            slug=f"org-{uuid.uuid4().hex[:6]}",
-            plan="pro",
-            country_code="IN"
-        )
-        db.add(org)
-        await db.flush()
-
-        member = OrganizationMember(
-            organization_id=org.id,
-            broker_id=new_broker.id,
-            role="owner"
-        )
-        db.add(member)
-
-        user = User(
-            id=new_broker.id,
-            email=new_broker.email,
-            name=new_broker.name,
-            phone=new_broker.phone,
-            whatsapp_number=new_broker.whatsapp_number,
-            organization_id=str(org.id),
-            auth_provider="google",
-            subscription_status="active"
-        )
-        db.add(user)
-
     await db.commit()
     await db.refresh(new_broker)
     return new_broker
@@ -195,8 +157,30 @@ import secrets
 import urllib.parse
 import httpx
 
-# In-memory tracking for consumed codes to prevent replay attacks
-_used_oauth_codes: set[str] = set()
+# Phase 0 P0.1: distributed OAuth state + replay protection (Redis, TTL-bound,
+# one-time, session-bound). Replaces the former process-local _used_oauth_codes
+# set which did not protect against replay across multiple workers.
+from app.common.auth.oauth_state import (
+    consume_authorization_code,
+    issue_oauth_state,
+    consume_oauth_state,
+    OAuthStateError,
+    OAuthStateMissing,
+    OAuthStateReplayed,
+    OAuthStateSessionMismatch,
+    OAuthStateExpired,
+)
+
+# Kept as a deprecated alias so any stale import fails loudly at import time
+# with a clear message instead of silently working.
+def __getattr__(name: str):
+    if name == "_used_oauth_codes":
+        raise AttributeError(
+            "_used_oauth_codes was removed in Phase 0 (P0.1). "
+            "Authorization-code replay is now distributed via "
+            "app.common.auth.oauth_state.consume_authorization_code()."
+        )
+    raise AttributeError(name)
 
 def validate_google_client_id(client_id: Optional[str]) -> bool:
     """Validates that Google OAuth Client ID is well-formed and not a placeholder."""
@@ -221,11 +205,22 @@ def validate_google_client_id(client_id: Optional[str]) -> bool:
         return False
     return lower_val.endswith(".apps.googleusercontent.com")
 
-def generate_google_auth_url(redirect_uri: Optional[str] = None) -> tuple[str, str]:
-    """Generates the real Google OAuth 2.0 authorization URL with CSRF state."""
+def generate_google_auth_url(
+    redirect_uri: Optional[str] = None,
+    session_id: str = "",
+) -> tuple[str, str]:
+    """Generates the real Google OAuth 2.0 authorization URL with CSRF state.
+
+    Phase 0 P0.1: ``session_id`` is mandatory — the state is stored server-side
+    and bound to the initiating browser session. Without a session the flow is
+    refused instead of issuing an unbound state.
+    """
     client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
 
-    state = secrets.token_hex(24)
+    # Phase 0 P0.1: server-generated, server-stored, session-bound one-time
+    # state. The session id is supplied by the transport layer (router) so the
+    # state is cryptographically bound to the initiating browser session.
+    state = issue_oauth_state(session_id)
     target_redirect = redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
 
     # In non-testing environments, reject unconfigured placeholder Client IDs gracefully
@@ -249,104 +244,155 @@ def generate_google_auth_url(redirect_uri: Optional[str] = None) -> tuple[str, s
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{query_string}"
     return auth_url, state
 
-async def exchange_google_oauth_code(db: AsyncSession, req: GoogleExchangeRequest) -> Broker:
+async def exchange_google_oauth_code(
+    db: AsyncSession,
+    req: GoogleExchangeRequest,
+    session_id: str = "",
+) -> Broker:
     """
     Exchanges Google OAuth code for verified identity and securely resolves or links broker profile.
     Guarantees no duplicate account or organization creation on identity linking.
+
+    Phase 0 P0.1: ``session_id`` is mandatory. The CSRF state returned by the
+    caller is validated against the server-side store and consumed atomically.
     """
+    session_id = (session_id or "").strip()
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth session context is required."
+        )
     if not req.code or not req.code.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Authorization code is required."
         )
 
-    # Replay protection check
-    if req.code in _used_oauth_codes:
+    # ── Phase 0 P0.1: mock identity paths removed from production code ──
+    # The previous implementation accepted caller-supplied email/name (or a
+    # 'test_code_' prefix) as a verified Google identity: any caller could mint
+    # a session for ANY email address. Test authentication is served exclusively
+    # by the isolated test-only fixture endpoint (router, testing env only).
+    if getattr(req, "email", None) or getattr(req, "name", None) or req.code.startswith("test_code_"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Caller-supplied OAuth identity is not accepted. Use the verified Google OAuth flow."
+        )
+
+    # ── Phase 0 P0.1: distributed one-time replay protection ─────────────
+    # Atomic Redis SET-NX with TTL, shared across all workers.
+    try:
+        consume_authorization_code(req.code)
+    except OAuthStateReplayed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Authorization code has already been consumed or is invalid."
         )
-    _used_oauth_codes.add(req.code)
+    except OAuthStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"OAuth replay protection unavailable: {exc}"
+        )
 
     verified_email: Optional[str] = None
     verified_name: Optional[str] = None
 
-    # Support testing mock payload if provided in test/dev
-    if req.email:
-        verified_email = req.email
-        verified_name = req.name or "Google User"
-    elif req.code.startswith("test_code_"):
-        # For unit/integration tests
-        code_part = req.code.replace("test_code_", "")
-        verified_email = f"{code_part}@example.com" if "@" not in code_part else code_part
-        verified_name = f"Google {code_part.capitalize()}"
-    else:
-        # Production Google Token & UserInfo Exchange
-        try:
-            target_redirect = req.redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                token_res = await client.post(
-                    "https://oauth2.googleapis.com/token",
-                    data={
-                        "code": req.code,
-                        "client_id": settings.GOOGLE_CLIENT_ID,
-                        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                        "redirect_uri": target_redirect,
-                        "grant_type": "authorization_code"
-                    }
-                )
-                if token_res.status_code != 200:
-                    err_json = {}
-                    try:
-                        err_json = token_res.json()
-                    except Exception:
-                        pass
-                    err_code = err_json.get("error", "")
-                    err_desc = err_json.get("error_description", "")
-                    
-                    if err_code == "invalid_client":
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Google OAuth client authentication failed (invalid_client). Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
-                        )
-                    elif err_code == "redirect_uri_mismatch":
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Google OAuth redirect URI mismatch: '{target_redirect}' does not match authorized URIs in Google Cloud Console."
-                        )
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail=f"Failed to authenticate with Google OAuth token service: {err_desc or err_code or token_res.status_code}"
-                        )
-                token_data = token_res.json()
-                access_token = token_data.get("access_token")
-
-                # Fetch verified userinfo
-                userinfo_res = await client.get(
-                    "https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {access_token}"}
-                )
-                if userinfo_res.status_code != 200:
+    # Production Google Token & UserInfo Exchange
+    try:
+        target_redirect = req.redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            token_res = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": req.code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": target_redirect,
+                    "grant_type": "authorization_code"
+                }
+            )
+            if token_res.status_code != 200:
+                err_json = {}
+                try:
+                    err_json = token_res.json()
+                except Exception:
+                    pass
+                err_code = err_json.get("error", "")
+                err_desc = err_json.get("error_description", "")
+                
+                if err_code == "invalid_client":
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Failed to retrieve verified Google profile identity."
+                        detail="Google OAuth client authentication failed (invalid_client). Check GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
                     )
-                userinfo = userinfo_res.json()
-                verified_email = userinfo.get("email")
-                verified_name = userinfo.get("name") or "Google User"
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Google OAuth provider communication error: {str(e)}"
+                elif err_code == "redirect_uri_mismatch":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Google OAuth redirect URI mismatch: '{target_redirect}' does not match authorized URIs in Google Cloud Console."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Failed to authenticate with Google OAuth token service: {err_desc or err_code or token_res.status_code}"
+                    )
+            token_data = token_res.json()
+            access_token = token_data.get("access_token")
+
+            # Fetch verified userinfo
+            userinfo_res = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
             )
+            if userinfo_res.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Failed to retrieve verified Google profile identity."
+                )
+            userinfo = userinfo_res.json()
+            verified_email = userinfo.get("email")
+            verified_name = userinfo.get("name") or "Google User"
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Google OAuth provider communication error: {str(e)}"
+        )
 
     if not verified_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google account did not return a verified email address."
+        )
+
+    # ── Phase 0 P0.1: OAuth CSRF state validation (session-bound, one-time) ──
+    # MUST be provided when the flow was initiated with server-side state.
+    try:
+        consume_oauth_state(req.state, session_id)
+    except OAuthStateSessionMismatch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state does not belong to this session."
+        )
+    except OAuthStateReplayed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state has already been used."
+        )
+    except OAuthStateExpired:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state has expired. Please restart sign-in."
+        )
+    except OAuthStateMissing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing, unknown, or invalid OAuth state."
+        )
+    except OAuthStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"OAuth state validation unavailable: {exc}"
         )
 
     # Resolve existing broker for safe identity linking

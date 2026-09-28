@@ -108,11 +108,17 @@ async def test_login_and_auth_me(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_oauth_callback(db_session: AsyncSession):
+    """Phase 0 P0.1: the caller-controlled /auth/callback identity path was
+    REMOVED (it allowed session minting for any email). The isolated
+    /auth/test/identity fixture replaces it for tests/dev only, and profile
+    fields can no longer be asserted by the caller.
+    """
     async def override_get_db():
         yield db_session
     app.dependency_overrides[get_db] = override_get_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Legacy endpoint is gone
         cb_payload = {
             "email": "googleuser@example.com",
             "name": "Google Broker",
@@ -120,17 +126,23 @@ async def test_oauth_callback(db_session: AsyncSession):
             "city": "Mumbai"
         }
         res = await ac.post("/api/v1/auth/callback", json=cb_payload)
-        assert res.status_code == 200
-        data = res.json()
+        assert res.status_code == 404
+
+        # Isolated test fixture mints a session without caller-controlled profile
+        res_fix = await ac.post("/api/v1/auth/test/identity", json={
+            "email": "googleuser@example.com",
+            "name": "Google Broker"
+        })
+        assert res_fix.status_code == 200
+        data = res_fix.json()
         assert "access_token" in data
         assert data["broker"]["email"] == "googleuser@example.com"
-        assert data["broker"]["city"] == "Mumbai"
+        # No fake profile data: onboarding stays actionable
+        assert data["broker"]["onboarding_status"] == "AUTHENTICATED_NOT_ONBOARDED"
 
-        # Subsequent callback sync updates profile
-        cb_payload["agency_name"] = "Updated Google Realty"
-        res_sync = await ac.post("/api/v1/auth/callback", json=cb_payload)
-        assert res_sync.status_code == 200
-        assert res_sync.json()["broker"]["agency_name"] == "Updated Google Realty"
+        # Idempotent — no duplicate broker
+        res_fix2 = await ac.post("/api/v1/auth/test/identity", json={"email": "googleuser@example.com"})
+        assert res_fix2.status_code == 200
 
     app.dependency_overrides.clear()
 
@@ -225,16 +237,13 @@ async def test_google_oauth_url_and_exchange(db_session: AsyncSession):
         assert "redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback" in url_data["auth_url"]
         assert "state=" in url_data["auth_url"]
 
-        # 3. Exchange authorization code for verified broker session
+        # 3. Exchange with the legacy mock identity path is rejected: state is
+        # mandatory and caller identity is not accepted (Phase 0 P0.1).
         exchange_res = await ac.post("/api/v1/auth/google/exchange", json={
             "code": "test_code_oauthbroker",
             "redirect_uri": "http://localhost:3000/auth/callback"
         })
-        assert exchange_res.status_code == 200
-        ex_data = exchange_res.json()
-        assert "access_token" in ex_data
-        assert ex_data["broker"]["email"] == "oauthbroker@example.com"
-        assert ex_data["broker"]["onboarding_status"] == "AUTHENTICATED_NOT_ONBOARDED"
+        assert exchange_res.status_code == 422
 
     # Reset environment to testing
     settings.ENV = "testing"

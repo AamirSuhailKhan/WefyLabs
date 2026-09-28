@@ -9,7 +9,20 @@ from app.dependencies import get_db, check_auth_rate_limit
 from app.models.broker import Broker
 from app.models.organization import Organization, OrganizationMember
 from app.models.user import User
-from app.modules.auth.service import hash_password, create_access_token, _used_oauth_codes
+import os
+
+from app.modules.auth.service import hash_password, create_access_token
+from app.common.auth.oauth_state import (
+    issue_oauth_state,
+    consume_oauth_state,
+    consume_authorization_code,
+    reset_memory_store,
+    OAuthStateReplayed,
+)
+
+# Phase 0 P0.1: pin testing environment BEFORE app modules load so the OAuth
+# state store deterministically uses its bounded in-memory backend.
+os.environ.setdefault("ENV", "testing")
 
 @pytest.fixture(autouse=True)
 def override_test_dependencies(db_session: AsyncSession):
@@ -17,9 +30,11 @@ def override_test_dependencies(db_session: AsyncSession):
         yield db_session
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[check_auth_rate_limit] = lambda: None
+    reset_memory_store()
     yield
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(check_auth_rate_limit, None)
+    reset_memory_store()
 
 @pytest.mark.asyncio
 async def test_1_direct_email_login_correct_password(db_session: AsyncSession):
@@ -76,7 +91,13 @@ async def test_3_direct_email_login_nonexistent_account():
 
 @pytest.mark.asyncio
 async def test_4_google_existing_onboarded_user(db_session: AsyncSession):
-    """TEST 4: Google existing onboarded user -> returns token with ONBOARDED status."""
+    """TEST 4: Google exchange with an invalid state is rejected (mock identity removed).
+
+    Phase 0 P0.1: caller-supplied email/name and 'test_code_' mock identities are
+    no longer accepted. The old mock path returned the broker profile; now the
+    request is rejected (400) because state and real provider verification are
+    mandatory.
+    """
     email = f"google_onboarded_{uuid.uuid4().hex[:6]}@example.com"
     broker = Broker(
         email=email,
@@ -94,29 +115,25 @@ async def test_4_google_existing_onboarded_user(db_session: AsyncSession):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.post(
             "/api/v1/auth/google/exchange",
-            json={"code": f"test_code_{uuid.uuid4().hex}", "email": email, "name": "Existing Google Broker"}
+            json={"code": f"test_code_{uuid.uuid4().hex}", "state": "stale-state-value-1234"}
         )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["broker"]["email"] == email
-        assert data["broker"]["onboarding_status"] == "ONBOARDED"
+        assert res.status_code == 400
 
 @pytest.mark.asyncio
-async def test_5_google_new_user(db_session: AsyncSession):
-    """TEST 5: Google new user -> returns token with AUTHENTICATED_NOT_ONBOARDED status (No fake data)."""
-    email = f"new_google_{uuid.uuid4().hex[:6]}@example.com"
+async def test_5_google_new_user_rejects_missing_state(db_session: AsyncSession):
+    """TEST 5: Google exchange without server-issued state -> rejected (400).
+
+    Phase 0 P0.1: state is mandatory; the pre-hardening endpoint created brokers
+    from caller identity. Now there is no identity path without verified state.
+    """
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.post(
             "/api/v1/auth/google/exchange",
-            json={"code": f"test_code_{uuid.uuid4().hex}", "email": email, "name": "New Google User"}
+            json={"code": f"real_looking_code_{uuid.uuid4().hex}"}
         )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["broker"]["email"] == email
-        assert data["broker"]["onboarding_status"] == "AUTHENTICATED_NOT_ONBOARDED"
-        assert data["broker"]["phone"] is None
-        assert data["broker"]["agency_name"] is None
+        # 422: schema rejects the request outright — state is mandatory
+        assert res.status_code in (400, 422)
 
 @pytest.mark.asyncio
 async def test_6_google_incomplete_user_redirect_state(db_session: AsyncSession):
@@ -153,26 +170,108 @@ async def test_7_google_auth_url_generation():
 
 @pytest.mark.asyncio
 async def test_8_google_oauth_failure_empty_code():
-    """TEST 8: Google OAuth failure on empty or blank code -> rejected (400)."""
+    """TEST 8: Google OAuth failure on empty or blank code -> rejected (422/400)."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.post("/api/v1/auth/google/exchange", json={"code": ""})
-        assert res.status_code == 400
+        # Empty code fails state validation (422 schema / 400 service) before
+        # any provider interaction.
+        assert res.status_code in (400, 422)
 
 @pytest.mark.asyncio
 async def test_9_google_callback_replay_rejected(db_session: AsyncSession):
-    """TEST 9: Replaying an authorization code -> rejected (400)."""
+    """TEST 9: Replaying an authorization code -> rejected (400).
+
+    Phase 0 P0.1: replay protection is distributed (Redis SET-NX with TTL,
+    backed by the bounded in-memory store in tests) and is enforced BEFORE any
+    provider interaction, so both replays are rejected identically.
+    """
     code = f"unique_replay_code_{uuid.uuid4().hex}"
-    email = f"replay_{uuid.uuid4().hex[:6]}@example.com"
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        # First exchange succeeds
-        res1 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "email": email, "name": "Replay User"})
-        assert res1.status_code == 200
+        # First use consumes the code and then fails at the provider boundary
+        # (no mock identity in testing) — the exact failure code is irrelevant.
+        res1 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": "state-value-12345678"})
+        assert res1.status_code in (400, 401, 422, 502)
 
-        # Second exchange with identical code is rejected
-        res2 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "email": email, "name": "Replay User"})
+        # Second exchange with the same code is rejected as a REPLAY before any
+        # provider interaction — this is the distributed one-time guarantee.
+        res2 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": "state-value-12345678"})
         assert res2.status_code == 400
+        assert "consumed" in res2.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_9b_caller_supplied_identity_rejected(db_session: AsyncSession):
+    """TEST 9b: Caller-supplied email/name (former mock identity) is rejected."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.post(
+            "/api/v1/auth/google/exchange",
+            json={"code": f"code_{uuid.uuid4().hex}", "state": "state-value-12345678",
+                  "email": f"attacker_{uuid.uuid4().hex[:6]}@example.com", "name": "Attacker"},
+        )
+        # 400 (identity fields rejected) or 422 (extra-forbidden schema)
+        assert res.status_code in (400, 422)
+
+
+@pytest.mark.asyncio
+async def test_9c_oauth_state_full_security_matrix(db_session: AsyncSession):
+    """TEST 9c: OAuth state security matrix — valid, wrong-session, replay,
+    expired, missing. Distributed store semantics proven at the unit level.
+    """
+    sid_a = "session-a-aaaaaaaaaaaaaaaaaaaa"
+    sid_b = "session-b-bbbbbbbbbbbbbbbbbbbb"
+
+    # Valid state + correct session -> PASS
+    state = issue_oauth_state(sid_a)
+    consume_oauth_state(state, sid_a)  # must not raise
+
+    # Wrong session -> FAIL
+    state = issue_oauth_state(sid_a)
+    from app.common.auth.oauth_state import OAuthStateSessionMismatch
+    with pytest.raises(OAuthStateSessionMismatch):
+        consume_oauth_state(state, sid_b)
+
+    # Missing state -> FAIL
+    from app.common.auth.oauth_state import OAuthStateMissing
+    with pytest.raises(OAuthStateMissing):
+        consume_oauth_state("nonexistent-state-value", sid_a)
+    with pytest.raises(OAuthStateMissing):
+        consume_oauth_state(None, sid_a)
+
+    # Reused state -> FAIL (one-time consumption)
+    with pytest.raises(OAuthStateReplayed):
+        consume_oauth_state(state, sid_a)  # already consumed above
+
+    # Reused authorization code -> FAIL
+    code = f"authz-code-{uuid.uuid4().hex}"
+    consume_authorization_code(code)
+    with pytest.raises(OAuthStateReplayed):
+        consume_authorization_code(code)
+
+
+@pytest.mark.asyncio
+async def test_9d_test_identity_endpoint_isolated_and_functional(db_session: AsyncSession):
+    """TEST 9d: The isolated test-identity endpoint works in testing env and
+    differs from the production OAuth flow.
+    """
+    from app.config import settings as _settings
+    if _settings.ENV.lower() in ("production", "prod"):
+        pytest.skip("test identity endpoint is compiled out in production")
+
+    email = f"fixture_{uuid.uuid4().hex[:6]}@example.com"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.post("/api/v1/auth/test/identity", json={"email": email, "name": "Fixture User"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["broker"]["email"] == email
+        assert data["broker"]["onboarding_status"] == "AUTHENTICATED_NOT_ONBOARDED"
+
+        # Second call is idempotent — no duplicate broker
+        res2 = await ac.post("/api/v1/auth/test/identity", json={"email": email})
+        assert res2.status_code == 200
 
 @pytest.mark.asyncio
 async def test_10_existing_email_signs_in_with_google_no_duplicate(db_session: AsyncSession):
@@ -226,14 +325,13 @@ async def test_10_existing_email_signs_in_with_google_no_duplicate(db_session: A
     # 2. Broker signs in with Google OAuth using same email
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Phase 0 P0.1: identity linking through caller-controlled exchange is
+        # gone; mock identity requests are now rejected outright.
         res = await ac.post(
             "/api/v1/auth/google/exchange",
-            json={"code": f"test_code_{uuid.uuid4().hex}", "email": email, "name": "Original Broker"}
+            json={"code": f"test_code_{uuid.uuid4().hex}", "state": "stale-state-value-1234"}
         )
-        assert res.status_code == 200
-        data = res.json()
-        assert data["broker"]["email"] == email
-        assert data["broker"]["onboarding_status"] == "ONBOARDED"
+        assert res.status_code == 400
 
     # Verify no duplicate broker, user, or organization exists
     brokers_count = (await db_session.execute(select(Broker).where(Broker.email == email))).scalars().all()

@@ -1,0 +1,1 @@
+"""Shared authentication infrastructure primitives."""

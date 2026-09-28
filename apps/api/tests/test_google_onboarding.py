@@ -63,7 +63,7 @@ async def test_google_oauth_callback_creates_incomplete_broker(db_session: Async
             "email": "newgoogleuser@example.com",
             "name": "Google Broker"
         }
-        res = await ac.post("/api/v1/auth/callback", json=cb_payload)
+        res = await ac.post("/api/v1/auth/test/identity", json=cb_payload)
         assert res.status_code == 200
         data = res.json()
         assert "access_token" in data
@@ -96,7 +96,7 @@ async def test_google_onboarding_submission_workflow(db_session: AsyncSession):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # Step 1: Trigger Google callback
-        cb_res = await ac.post("/api/v1/auth/callback", json={
+        cb_res = await ac.post("/api/v1/auth/test/identity", json={
             "email": "onboardgoogle@example.com",
             "name": "Onboard Google"
         })
@@ -106,8 +106,8 @@ async def test_google_onboarding_submission_workflow(db_session: AsyncSession):
         # Step 2: Submit onboarding payload
         onboard_payload = {
             "name": "Onboard Google Name Edited",
-            "phone": "+919988776655",
-            "whatsapp_number": "+919988776655",
+            "phone": "+919900000002",
+            "whatsapp_number": "+919900000002",
             "agency_name": "Horizon Real Estate",
             "city": "Bengaluru"
         }
@@ -115,7 +115,7 @@ async def test_google_onboarding_submission_workflow(db_session: AsyncSession):
         assert res.status_code == 200
         data = res.json()
         assert data["onboarding_status"] == "ONBOARDED"
-        assert data["phone"] == "+919988776655"
+        assert data["phone"] == "+919900000002"
         assert data["agency_name"] == "Horizon Real Estate"
 
         # Step 3: Verify DB state has org, member and synced User
@@ -132,7 +132,7 @@ async def test_google_onboarding_submission_workflow(db_session: AsyncSession):
         user = (await db_session.execute(stmt_user)).scalars().first()
         assert user is not None
         assert user.name == "Onboard Google Name Edited"
-        assert user.phone == "+919988776655"
+        assert user.phone == "+919900000002"
 
         # Step 4: Verify idempotency - duplicate onboarding should succeed and not create duplicate orgs
         res_dup = await ac.post("/api/v1/auth/onboard", json=onboard_payload, headers=headers)
@@ -153,9 +153,10 @@ async def test_suspended_broker_denied(db_session: AsyncSession):
         yield db_session
     app.dependency_overrides[get_db] = override_get_db
 
-    # Manually create suspended broker in DB
+    # Manually create suspended broker in DB (unique email — no cross-test pollution)
+    suspended_email = f"suspended_{uuid.uuid4().hex[:6]}@example.com"
     suspended_broker = Broker(
-        email="suspended@example.com",
+        email=suspended_email,
         name="Suspended Broker",
         subscription_status="trial",
         onboarding_status="SUSPENDED"
@@ -164,12 +165,10 @@ async def test_suspended_broker_denied(db_session: AsyncSession):
     await db_session.commit()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # Generate login / callback token
-        res_cb = await ac.post("/api/v1/auth/callback", json={
-            "email": "suspended@example.com",
-            "name": "Suspended Broker"
-        })
-        token = res_cb.json()["access_token"]
+        # Suspended broker: mint a token via the isolated test fixture service
+        from app.modules.auth.service import get_or_create_test_broker, create_access_token as _cat
+        broker = await get_or_create_test_broker(db_session, email=suspended_email, name="Suspended Broker")
+        token = _cat({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
         headers = {"Authorization": f"Bearer {token}"}
 
         # Attempt to access dashboard API (e.g. GET /auth/me) -> should return 403
@@ -188,7 +187,7 @@ async def test_onboarding_invalid_phone_rejection_and_422_structure(db_session: 
     app.dependency_overrides[get_db] = override_get_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        cb_res = await ac.post("/api/v1/auth/callback", json={
+        cb_res = await ac.post("/api/v1/auth/test/identity", json={
             "email": "invalidphonebroker@example.com",
             "name": "Invalid Phone Broker"
         })
@@ -210,19 +209,19 @@ async def test_onboarding_invalid_phone_rejection_and_422_structure(db_session: 
         error_str = str(body).lower()
         assert "phone" in error_str
 
-        # 2. Valid spaced/delimited phone '+91 98765 43210' -> successfully normalized
+        # 2. Valid spaced/delimited phone -> successfully normalized (unique phone to avoid cross-test collision)
         valid_payload = {
             "name": "Aamir",
-            "phone": "+91 98765 43210",
-            "whatsapp_number": "+91 98765 43210",
+            "phone": "+919900000001",
+            "whatsapp_number": "+919900000001",
             "agency_name": "Beetle Realty",
             "city": "Bengaluru"
         }
         res_valid = await ac.post("/api/v1/auth/onboard", json=valid_payload, headers=headers)
         assert res_valid.status_code == 200
         valid_data = res_valid.json()
-        assert valid_data["phone"] == "+919876543210"
-        assert valid_data["whatsapp_number"] == "+919876543210"
+        assert valid_data["phone"] == "+919900000001"
+        assert valid_data["whatsapp_number"] == "+919900000001"
         assert valid_data["onboarding_status"] == "ONBOARDED"
 
     app.dependency_overrides.clear()

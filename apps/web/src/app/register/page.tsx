@@ -61,6 +61,7 @@ function RegisterContent() {
       const redirectUri = `${window.location.origin}/auth/callback`;
       const data = await api.auth.getGoogleAuthUrl(redirectUri);
       if (data?.auth_url) {
+        api.auth.setOAuthState(data.state);
         window.location.href = data.auth_url;
       } else {
         throw new Error('Google OAuth configuration unavailable.');

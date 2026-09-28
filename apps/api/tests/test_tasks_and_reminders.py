@@ -34,8 +34,8 @@ def override_rate_limit():
 
 async def create_test_broker(ac: AsyncClient, email: str, name: str) -> tuple[str, str]:
     """Helper to register and onboard a test broker, returning (broker_id, access_token)."""
-    cb_res = await ac.post("/api/v1/auth/callback", json={"email": email, "name": name})
-    token = cb_res.json()["access_token"]
+    fix_res = await ac.post("/api/v1/auth/test/identity", json={"email": email, "name": name})
+    token = fix_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
     # Onboard

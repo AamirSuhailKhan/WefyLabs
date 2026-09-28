@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.dependencies import get_db, get_current_broker, check_auth_rate_limit
 from app.models.broker import Broker
 from app.schemas.broker import BrokerResponse
 from sqlalchemy import select
+import hashlib
+import secrets
 import uuid
 from app.models.user import User
 from app.models.organization import Organization, OrganizationMember
@@ -12,27 +15,77 @@ from typing import Optional
 from app.modules.auth.schemas import (
     RegisterRequest,
     LoginRequest,
-    OAuthCallbackRequest,
     AuthTokenResponse,
     OnboardRequest,
     GoogleAuthUrlResponse,
-    GoogleExchangeRequest
+    GoogleExchangeRequest,
 )
 from app.modules.auth.service import (
     register_broker,
     authenticate_broker,
-    sync_oauth_broker,
+    get_or_create_test_broker,
     create_access_token,
     generate_google_auth_url,
-    exchange_google_oauth_code
+    exchange_google_oauth_code,
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+# ─── Phase 0 P0.1 — OAuth session binding ──────────────────────────────────
+# The OAuth CSRF state is stored server-side and bound to an opaque session id
+# carried by an HttpOnly cookie. The cookie carries no identity and no token:
+# it only lets the server prove that the callback came from the same browser
+# that initiated the flow.
+OAUTH_SESSION_COOKIE = "wefylabs_oauth_sid"
+_OAUTH_SESSION_COOKIE_MAX_AGE = 1800  # 30 minutes — covers the OAuth round-trip
+
+
+def _oauth_cookie_secure() -> bool:
+    return settings.ENV.lower() in ("production", "prod", "staging")
+
+
+def _resolve_or_create_oauth_session(request: Request, response: Response) -> str:
+    """Returns the opaque OAuth session id, minting the cookie when absent."""
+    existing = request.cookies.get(OAUTH_SESSION_COOKIE)
+    if existing and len(existing) >= 16:
+        return existing
+    session_id = secrets.token_urlsafe(32)
+    response.set_cookie(
+        OAUTH_SESSION_COOKIE,
+        session_id,
+        max_age=_OAUTH_SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=_oauth_cookie_secure(),
+        path="/",
+    )
+    return session_id
+
+
+def _resolve_oauth_session(request: Request) -> str:
+    """Read-only session resolution for the exchange step (never mints cookies).
+
+    Falls back to a client fingerprint when the cookie is unavailable. The
+    fingerprint binds the state to the originating browser context without
+    storing any personal identifier.
+    """
+    existing = request.cookies.get(OAUTH_SESSION_COOKIE)
+    if existing and len(existing) >= 16:
+        return existing
+    ua = request.headers.get("user-agent", "")
+    ip = request.client.host if request.client else "unknown"
+    return hashlib.sha256(f"oauth-sid|{ip}|{ua}".encode("utf-8")).hexdigest()
+
+
 @router.get("/google/url", response_model=GoogleAuthUrlResponse)
-async def get_google_auth_url(redirect_uri: Optional[str] = None):
-    """Returns the Google OAuth 2.0 Authorization URL with CSRF state."""
-    auth_url, state = generate_google_auth_url(redirect_uri)
+async def get_google_auth_url(
+    redirect_uri: Optional[str] = None,
+    request: Request = None,
+    response: Response = None,
+):
+    """Returns the Google OAuth 2.0 Authorization URL with server-issued state."""
+    session_id = _resolve_or_create_oauth_session(request, response)
+    auth_url, state = generate_google_auth_url(redirect_uri, session_id=session_id)
     return GoogleAuthUrlResponse(auth_url=auth_url, state=state)
 
 @router.post(
@@ -40,9 +93,14 @@ async def get_google_auth_url(redirect_uri: Optional[str] = None):
     response_model=AuthTokenResponse,
     dependencies=[Depends(check_auth_rate_limit)]
 )
-async def google_exchange(req: GoogleExchangeRequest, db: AsyncSession = Depends(get_db)):
-    """Exchanges Google authorization code for verified session and token."""
-    broker = await exchange_google_oauth_code(db, req)
+async def google_exchange(
+    req: GoogleExchangeRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Exchanges Google authorization code for a verified session and token."""
+    session_id = _resolve_oauth_session(request)
+    broker = await exchange_google_oauth_code(db, req, session_id=session_id)
     token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
     return AuthTokenResponse(
         access_token=token,
@@ -70,19 +128,6 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 )
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     broker = await authenticate_broker(db, req.email, req.password)
-    token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
-    return AuthTokenResponse(
-        access_token=token,
-        broker=BrokerResponse.model_validate(broker)
-    )
-
-@router.post(
-    "/callback",
-    response_model=AuthTokenResponse,
-    dependencies=[Depends(check_auth_rate_limit)]
-)
-async def oauth_callback(req: OAuthCallbackRequest, db: AsyncSession = Depends(get_db)):
-    broker = await sync_oauth_broker(db, req)
     token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
     return AuthTokenResponse(
         access_token=token,
@@ -277,4 +322,41 @@ async def delete_account_me(
         db=db,
         broker_id=current_broker.id
     )
+
+
+# ─── Phase 0 P0.1 — Isolated test identity fixture ─────────────────────────
+# Production authentication code and test authentication are deliberately
+# separate. This endpoint: (a) exists only when the process runs in the
+# 'testing'/'development' environments, (b) is a DIFFERENT endpoint from the
+# real OAuth flow — it can never be reached by the production code path, and
+# (c) is additionally compiled out at import time in production.
+if settings.ENV.lower() not in ("production", "prod"):
+    from pydantic import BaseModel as _BaseModel
+
+    class TestIdentityRequest(_BaseModel):
+        email: str
+        name: Optional[str] = None
+
+    @router.post(
+        "/test/identity",
+        response_model=AuthTokenResponse,
+        include_in_schema=settings.ENV.lower() in ("testing", "test", "development", "dev"),
+        dependencies=[Depends(check_auth_rate_limit)],
+        summary="[TEST/DEV ONLY] Mint a session for a test identity. Hard-disabled in production.",
+    )
+    async def test_identity_endpoint(
+        req: TestIdentityRequest,
+        db: AsyncSession = Depends(get_db),
+    ):
+        if settings.ENV.lower() in ("production", "prod", "staging"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found."
+            )
+        broker = await get_or_create_test_broker(db, email=req.email, name=req.name)
+        token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
+        return AuthTokenResponse(
+            access_token=token,
+            broker=BrokerResponse.model_validate(broker)
+        )
 

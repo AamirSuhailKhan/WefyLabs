@@ -21,18 +21,6 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-class OAuthCallbackRequest(BaseModel):
-    email: EmailStr
-    name: str = Field(..., max_length=255)
-    phone: Optional[str] = Field(None, max_length=20)
-    whatsapp_number: Optional[str] = Field(None, max_length=20)
-    agency_name: Optional[str] = Field(None, max_length=255)
-    city: Optional[str] = Field("Bengaluru", max_length=100)
-
-    @field_validator("phone", "whatsapp_number", mode="before")
-    def validate_phone_numbers(cls, v: Optional[str]) -> Optional[str]:
-        return validate_and_normalize_indian_phone(v)
-
 class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -70,9 +58,15 @@ class GoogleAuthUrlResponse(BaseModel):
     state: str
 
 class GoogleExchangeRequest(BaseModel):
+    """Payload for exchanging a Google authorization code for a session.
+
+    Phase 0 P0.1: the server verifies identity exclusively through the Google
+    token endpoint. Caller-supplied identity fields are not accepted (extra
+    fields are rejected outright), and the OAuth CSRF state issued by
+    ``/auth/google/url`` is mandatory.
+    """
+    model_config = {"extra": "forbid"}
+
     code: str
-    state: Optional[str] = None
+    state: str = Field(..., min_length=8, description="Server-issued one-time OAuth state")
     redirect_uri: Optional[str] = None
-    # For automated tests / mock exchange:
-    email: Optional[EmailStr] = None
-    name: Optional[str] = None

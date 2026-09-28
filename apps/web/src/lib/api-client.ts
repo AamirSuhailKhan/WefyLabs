@@ -270,10 +270,30 @@ export const api = {
 
     me: () => fetcher<Broker>('/auth/me'),
 
-    getGoogleAuthUrl: (redirectUri?: string) => {
-      const url = redirectUri ? `/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}` : '/auth/google/url';
-      return fetcher<{ auth_url: string; state: string }>(url);
-    },
+  getGoogleAuthUrl: (redirectUri?: string) => {
+    const url = redirectUri ? `/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}` : '/auth/google/url';
+    return fetcher<{ auth_url: string; state: string }>(url);
+  },
+
+  // Phase 0 P0.1 — OAuth CSRF state is stored client-side and echoed to the
+  // exchange step so a state minted for one flow cannot be replayed in another.
+  // (Server-side binding + one-time consumption is enforced by the backend.)
+  setOAuthState: (state: string): void => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('wefylabs_oauth_state', state);
+    }
+  },
+  getOAuthState: (): string | null => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('wefylabs_oauth_state');
+    }
+    return null;
+  },
+  clearOAuthState: (): void => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('wefylabs_oauth_state');
+    }
+  },
 
     exchangeGoogleCode: async (params: { code: string; state?: string; redirect_uri?: string }) => {
       const res = await fetcher<{ access_token: string; token_type: string; broker: Broker }>('/auth/google/exchange', {

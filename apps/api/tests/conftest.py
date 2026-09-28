@@ -1,10 +1,17 @@
 import asyncio
+import os
 from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
-from app.models import Base, Broker, Lead
+# Phase 0 P0.1: pin the testing environment BEFORE any application module is
+# imported. This guarantees the OAuth state/replay store uses its bounded
+# in-memory backend (deterministic tests) and mock-disabled production paths
+# stay disabled regardless of the developer's local .env.
+os.environ.setdefault("ENV", "testing")
+
+from app.models import Base, Broker, Lead  # noqa: E402
 
 # In-memory SQLite for fast isolated testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

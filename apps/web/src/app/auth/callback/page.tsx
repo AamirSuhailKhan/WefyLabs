@@ -40,8 +40,23 @@ function AuthCallbackContent() {
         return;
       }
 
+      // Phase 0 P0.1 — CSRF state must be present and match the one issued at
+      // flow start. Mismatch or absence means the round-trip was not initiated
+      // by this browser.
       const callbackType = searchParams.get('type');
       const isCalendarCallback = callbackType === 'calendar';
+
+      if (!isCalendarCallback) {
+        const expectedState = api.auth.getOAuthState();
+        api.auth.clearOAuthState();
+        if (!state || !expectedState || state !== expectedState) {
+          setErrorMessage('Invalid or expired sign-in session. Please try signing in again.');
+          setTimeout(() => {
+            router.push(`/login?error=${encodeURIComponent('Invalid OAuth state.')}`);
+          }, 2000);
+          return;
+        }
+      }
 
       try {
         if (isCalendarCallback) {
@@ -54,7 +69,7 @@ function AuthCallbackContent() {
         const redirectUri = `${window.location.origin}/auth/callback`;
         const res = await api.auth.exchangeGoogleCode({
           code,
-          state,
+          state: state as string,
           redirect_uri: redirectUri
         });
 
