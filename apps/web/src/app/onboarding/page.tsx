@@ -219,11 +219,14 @@ export default function OnboardingPage() {
 
   const handleFinalizeWorkspace = async () => {
     setSubmitting(true);
+    setError('');
     try {
       await api.onboarding.updateStep('ACTIVATED', 'complete');
       router.push('/dashboard');
     } catch (err: any) {
-      router.push('/dashboard');
+      setError(err?.message || 'Workspace activation failed. Please review your setup and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
