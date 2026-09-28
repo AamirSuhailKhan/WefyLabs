@@ -103,6 +103,17 @@ class EnterpriseSettings(BaseSettings):
     RAZORPAY_ACCOUNT_ID: Optional[str] = None
     PAYMENTS_EMERGENCY_PAUSE: bool = False
 
+    # Object Storage Configuration (Phase 0 P0.3)
+    STORAGE_BACKEND: str = "local"  # "local" | "s3" | "test"
+    STORAGE_LOCAL_DIR: str = "storage_data"
+    STORAGE_BUCKET_NAME: Optional[str] = None
+    STORAGE_ENDPOINT_URL: Optional[str] = None
+    STORAGE_REGION: str = "us-east-1"
+    STORAGE_ACCESS_KEY_ID: Optional[str] = None
+    STORAGE_SECRET_ACCESS_KEY: Optional[str] = None
+    STORAGE_SIGNING_SECRET: Optional[str] = None
+    ALLOW_LOCAL_STORAGE_IN_PROD: bool = False
+
     # Supabase Auth
     SUPABASE_URL: str = "https://placeholder.supabase.co"
     SUPABASE_JWT_SECRET: str = DEFAULT_SUPABASE_SECRET
@@ -289,6 +300,11 @@ class EnterpriseSettings(BaseSettings):
                     errors.append("GOOGLE_CLIENT_ID must be a valid Google OAuth Client ID ending with '.apps.googleusercontent.com' in production!")
                 if not self.GOOGLE_CLIENT_SECRET or "placeholder" in self.GOOGLE_CLIENT_SECRET.lower():
                     errors.append("GOOGLE_CLIENT_SECRET cannot be a placeholder in production!")
+
+            # 8. Durable Object Storage Safety (Phase 0 P0.3)
+            if self.ENV.lower() in ("production", "prod") and not self.ALLOW_LOCAL_STORAGE_IN_PROD:
+                if self.STORAGE_BACKEND.lower() == "local":
+                    errors.append("STORAGE_BACKEND cannot be 'local' in production! Ephemeral container filesystem will lose customer documents on redeploy. Configure 's3' (AWS S3/R2/MinIO) or set ALLOW_LOCAL_STORAGE_IN_PROD=true if persistent volume is attached.")
 
             if errors:
                 error_msg = "\n".join(f" - [CRITICAL CONFIG ERROR] {e}" for e in errors)

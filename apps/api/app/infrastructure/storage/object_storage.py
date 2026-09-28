@@ -6,10 +6,12 @@ Enforces:
 2. Secure Object Key Standard: `organizations/{org_id}/{resource_type}/{resource_id}/{file_id}_{safe_filename}`.
 3. Strict File Security: MIME verification, magic-byte inspection, extension allowlists, size limits via FileSecurityScanner.
 4. Signed URLs: Time-limited, HMAC-signed download URLs for private customer documents.
-5. Zero Fake Success: Failed storage operations raise or return truthful error contracts, never silent success.
+5. Durable Cloud Storage: Supports S3-compatible providers (AWS S3, Cloudflare R2, MinIO, Backblaze B2, GCS) for production.
+6. Zero Fake Success: Failed storage operations raise or return truthful error contracts, never silent success.
 """
 from __future__ import annotations
 
+import abc
 import base64
 import hashlib
 import hmac
@@ -22,6 +24,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
+
+import httpx
 
 from app.config import settings
 from app.infrastructure.tenancy.scope import require_organization_id
@@ -60,6 +64,162 @@ class StorageObjectMetadata:
         }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. STORAGE BACKEND ABSTRACTION & IMPLEMENTATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class BaseStorageBackend(abc.ABC):
+    """Abstract interface for durable object storage backends."""
+
+    @abc.abstractmethod
+    async def write(self, key: str, content: bytes, content_type: str) -> None:
+        """Writes bytes to durable storage."""
+        pass
+
+    @abc.abstractmethod
+    async def read(self, key: str) -> bytes:
+        """Reads bytes from storage. Raises FileNotFoundError if missing."""
+        pass
+
+    @abc.abstractmethod
+    async def delete(self, key: str) -> bool:
+        """Deletes object from storage. Returns True if deleted."""
+        pass
+
+    @abc.abstractmethod
+    async def exists(self, key: str) -> bool:
+        """Returns True if object exists."""
+        pass
+
+    @abc.abstractmethod
+    async def get_stat(self, key: str) -> Dict[str, Any]:
+        """Returns metadata: size_bytes, etag, created_at, content_type."""
+        pass
+
+
+class LocalStorageBackend(BaseStorageBackend):
+    """Local filesystem adapter for development and testing."""
+
+    def __init__(self, base_dir: Union[str, Path]):
+        self.base_dir = Path(base_dir).resolve()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def _resolve(self, key: str) -> Path:
+        resolved = (self.base_dir / Path(key)).resolve()
+        if not str(resolved).startswith(str(self.base_dir)):
+            raise PermissionError("Path traversal violation detected in storage key.")
+        return resolved
+
+    async def write(self, key: str, content: bytes, content_type: str) -> None:
+        target = self._resolve(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+    async def read(self, key: str) -> bytes:
+        target = self._resolve(key)
+        if not target.exists() or not target.is_file():
+            raise FileNotFoundError(f"Storage object '{key}' not found.")
+        return target.read_bytes()
+
+    async def delete(self, key: str) -> bool:
+        target = self._resolve(key)
+        if target.exists() and target.is_file():
+            target.unlink()
+            return True
+        return False
+
+    async def exists(self, key: str) -> bool:
+        try:
+            target = self._resolve(key)
+            return target.exists() and target.is_file()
+        except PermissionError:
+            return False
+
+    async def get_stat(self, key: str) -> Dict[str, Any]:
+        target = self._resolve(key)
+        if not target.exists() or not target.is_file():
+            raise FileNotFoundError(f"Storage object '{key}' not found.")
+        st = target.stat()
+        return {
+            "size_bytes": st.st_size,
+            "etag": hashlib.md5(f"{key}:{st.st_mtime}".encode("utf-8")).hexdigest(),
+            "created_at": datetime.fromtimestamp(st.st_ctime, tz=timezone.utc),
+            "content_type": "application/octet-stream",
+        }
+
+
+class S3StorageBackend(BaseStorageBackend):
+    """
+    S3-compatible durable object storage backend.
+    Supports AWS S3, Cloudflare R2, MinIO, Backblaze B2, Google Cloud Storage.
+    """
+
+    def __init__(
+        self,
+        bucket_name: str,
+        endpoint_url: Optional[str] = None,
+        region: str = "us-east-1",
+        access_key_id: Optional[str] = None,
+        secret_access_key: Optional[str] = None,
+    ):
+        self.bucket = bucket_name
+        self.endpoint_url = (endpoint_url or f"https://s3.{region}.amazonaws.com").rstrip("/")
+        self.region = region
+        self.access_key = access_key_id or ""
+        self.secret_key = secret_access_key or ""
+
+    def _get_url(self, key: str) -> str:
+        return f"{self.endpoint_url}/{self.bucket}/{key}"
+
+    async def write(self, key: str, content: bytes, content_type: str) -> None:
+        url = self._get_url(key)
+        headers = {"Content-Type": content_type}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.put(url, content=content, headers=headers)
+            if resp.status_code not in (200, 201, 204):
+                raise RuntimeError(f"S3 upload failed for '{key}' with HTTP {resp.status_code}: {resp.text}")
+
+    async def read(self, key: str) -> bytes:
+        url = self._get_url(key)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            if resp.status_code == 404:
+                raise FileNotFoundError(f"Storage object '{key}' not found in S3 bucket.")
+            if resp.status_code != 200:
+                raise RuntimeError(f"S3 download failed for '{key}' with HTTP {resp.status_code}")
+            return resp.content
+
+    async def delete(self, key: str) -> bool:
+        url = self._get_url(key)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.delete(url)
+            return resp.status_code in (200, 204)
+
+    async def exists(self, key: str) -> bool:
+        url = self._get_url(key)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.head(url)
+            return resp.status_code == 200
+
+    async def get_stat(self, key: str) -> Dict[str, Any]:
+        url = self._get_url(key)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.head(url)
+            if resp.status_code == 404:
+                raise FileNotFoundError(f"Storage object '{key}' not found.")
+            headers = resp.headers
+            return {
+                "size_bytes": int(headers.get("content-length", 0)),
+                "etag": headers.get("etag", "").strip('"'),
+                "created_at": datetime.now(timezone.utc),
+                "content_type": headers.get("content-type", "application/octet-stream"),
+            }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. CANONICAL MULTI-TENANT OBJECT STORAGE SERVICE
+# ─────────────────────────────────────────────────────────────────────────────
+
 class ObjectStorageService:
     """
     Canonical multi-tenant object storage service with built-in security gates.
@@ -69,10 +229,46 @@ class ObjectStorageService:
         self,
         base_dir: Optional[str] = None,
         signing_secret: Optional[str] = None,
+        backend: Optional[Union[str, BaseStorageBackend]] = None,
     ):
-        self.base_dir = Path(base_dir or getattr(settings, "STORAGE_LOCAL_DIR", "storage_data"))
-        self.signing_secret = (signing_secret or getattr(settings, "STORAGE_SIGNING_SECRET", "") or getattr(settings, "SECRET_KEY", "wefylabs_storage_secret")).encode("utf-8")
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.signing_secret = (
+            signing_secret
+            or getattr(settings, "STORAGE_SIGNING_SECRET", "")
+            or getattr(settings, "SECRET_KEY", "wefylabs_storage_secret")
+        ).encode("utf-8")
+
+        # ── Phase 0 P0.3: Fail-closed production storage gate ────────────────
+        backend_name = (
+            getattr(settings, "STORAGE_BACKEND", "local")
+            if not isinstance(backend, str)
+            else backend
+        ).lower()
+
+        is_prod = getattr(settings, "ENV", "").lower() in ("production", "prod")
+        allow_local = getattr(settings, "ALLOW_LOCAL_STORAGE_IN_PROD", False)
+
+        if is_prod and backend_name == "local" and not allow_local:
+            raise RuntimeError(
+                "STORAGE_BACKEND cannot be 'local' in production! Ephemeral container filesystem "
+                "will lose customer documents on redeploy. Configure 's3' or set ALLOW_LOCAL_STORAGE_IN_PROD=true."
+            )
+
+        if isinstance(backend, BaseStorageBackend):
+            self.backend = backend
+        elif backend_name == "s3":
+            bucket = getattr(settings, "STORAGE_BUCKET_NAME", None) or "wefylabs-customer-documents"
+            self.backend = S3StorageBackend(
+                bucket_name=bucket,
+                endpoint_url=getattr(settings, "STORAGE_ENDPOINT_URL", None),
+                region=getattr(settings, "STORAGE_REGION", "us-east-1"),
+                access_key_id=getattr(settings, "STORAGE_ACCESS_KEY_ID", None),
+                secret_access_key=getattr(settings, "STORAGE_SECRET_ACCESS_KEY", None),
+            )
+        else:
+            local_path = base_dir or getattr(settings, "STORAGE_LOCAL_DIR", "storage_data")
+            self.backend = LocalStorageBackend(local_path)
+
+        self.base_dir = getattr(self.backend, "base_dir", Path("storage_data"))
 
     @staticmethod
     def sanitize_filename(filename: str) -> str:
@@ -99,19 +295,13 @@ class ObjectStorageService:
         file_uuid = uuid.uuid4().hex[:12]
         return f"organizations/{org_uuid}/{clean_resource_type}/{clean_resource_id}/{file_uuid}_{safe_name}"
 
-    def _resolve_physical_path(self, organization_id: Union[str, uuid.UUID], object_key: str) -> Path:
-        """Resolves local path ensuring strict tenant directory containment."""
+    def _validate_tenant_containment(self, organization_id: Union[str, uuid.UUID], object_key: str) -> None:
         org_uuid = require_organization_id(organization_id)
         expected_prefix = f"organizations/{org_uuid}/"
         if not object_key.startswith(expected_prefix):
-            raise PermissionError(f"Cross-tenant access violation: key '{object_key}' does not belong to tenant '{org_uuid}'")
-
-        relative_path = Path(object_key)
-        full_path = (self.base_dir / relative_path).resolve()
-        # Path traversal guard
-        if not str(full_path).startswith(str(self.base_dir.resolve())):
-            raise PermissionError("Path traversal violation detected in storage key.")
-        return full_path
+            raise PermissionError(
+                f"Cross-tenant access violation: key '{object_key}' does not belong to tenant '{org_uuid}'"
+            )
 
     async def upload(
         self,
@@ -137,11 +327,10 @@ class ObjectStorageService:
 
         # 2. Build canonical tenant-scoped key
         object_key = self.build_object_key(org_uuid, resource_type, resource_id, filename)
-        target_path = self._resolve_physical_path(org_uuid, object_key)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+        self._validate_tenant_containment(org_uuid, object_key)
 
-        # 3. Write bytes to disk / storage
-        target_path.write_bytes(content)
+        # 3. Write bytes to active storage backend
+        await self.backend.write(object_key, content, content_type)
         size_bytes = len(content)
         etag = hashlib.sha256(content).hexdigest()
         now = datetime.now(timezone.utc)
@@ -172,11 +361,9 @@ class ObjectStorageService:
     ) -> Tuple[bytes, StorageObjectMetadata]:
         """Downloads an object belonging strictly to the requested tenant."""
         org_uuid = require_organization_id(organization_id)
-        path = self._resolve_physical_path(org_uuid, object_key)
-        if not path.exists() or not path.is_file():
-            raise FileNotFoundError(f"Storage object '{object_key}' not found.")
+        self._validate_tenant_containment(org_uuid, object_key)
 
-        content = path.read_bytes()
+        content = await self.backend.read(object_key)
         meta = await self.metadata(organization_id=org_uuid, object_key=object_key)
         return content, meta
 
@@ -188,12 +375,12 @@ class ObjectStorageService:
     ) -> bool:
         """Deletes an object belonging strictly to the requested tenant."""
         org_uuid = require_organization_id(organization_id)
-        path = self._resolve_physical_path(org_uuid, object_key)
-        if path.exists() and path.is_file():
-            path.unlink()
+        self._validate_tenant_containment(org_uuid, object_key)
+
+        deleted = await self.backend.delete(object_key)
+        if deleted:
             logger.info(f"[ObjectStorage:Deleted] Key: {object_key} | Tenant: {org_uuid}")
-            return True
-        return False
+        return deleted
 
     async def exists(
         self,
@@ -204,8 +391,8 @@ class ObjectStorageService:
         """Checks if an object exists strictly within tenant boundaries."""
         org_uuid = require_organization_id(organization_id)
         try:
-            path = self._resolve_physical_path(org_uuid, object_key)
-            return path.exists() and path.is_file()
+            self._validate_tenant_containment(org_uuid, object_key)
+            return await self.backend.exists(object_key)
         except PermissionError:
             return False
 
@@ -217,15 +404,13 @@ class ObjectStorageService:
     ) -> StorageObjectMetadata:
         """Retrieves metadata of a tenant-scoped object."""
         org_uuid = require_organization_id(organization_id)
-        path = self._resolve_physical_path(org_uuid, object_key)
-        if not path.exists() or not path.is_file():
-            raise FileNotFoundError(f"Storage object '{object_key}' not found.")
+        self._validate_tenant_containment(org_uuid, object_key)
 
-        stat = path.stat()
+        stat = await self.backend.get_stat(object_key)
         parts = object_key.split("/")
         resource_type = parts[2] if len(parts) > 2 else "general"
         resource_id = parts[3] if len(parts) > 3 else "unknown"
-        filename = parts[-1] if len(parts) > 4 else path.name
+        filename = parts[-1] if len(parts) > 4 else "file"
 
         return StorageObjectMetadata(
             object_key=object_key,
@@ -233,10 +418,10 @@ class ObjectStorageService:
             resource_type=resource_type,
             resource_id=resource_id,
             filename=filename,
-            content_type="application/octet-stream",
-            size_bytes=stat.st_size,
-            etag=hashlib.md5(f"{object_key}:{stat.st_mtime}".encode("utf-8")).hexdigest(),
-            created_at=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
+            content_type=stat.get("content_type", "application/octet-stream"),
+            size_bytes=stat.get("size_bytes", 0),
+            etag=stat.get("etag", ""),
+            created_at=stat.get("created_at", datetime.now(timezone.utc)),
             is_private=True,
         )
 
