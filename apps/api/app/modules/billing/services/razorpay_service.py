@@ -27,6 +27,7 @@ from fastapi import HTTPException, status
 
 from app.config import settings
 from app.models.broker import Broker
+from app.models.billing_models import Plan, PlanVersion
 from app.models.subscription import Subscription
 from app.models.payment_models import (
     PaymentOrder,
@@ -158,6 +159,51 @@ class RazorpayProductionService:
             or "placeholder" in key_id.lower()
         )
 
+    async def _resolve_amount_from_catalog(self, plan_id: str) -> Optional[int]:
+        """Phase 0 P0.4 — resolve the authoritative amount (paise) from the
+        canonical DB catalog for a static plan key like 'pro_monthly'.
+
+        Mapping: plan_type + period -> catalog plan code + interval. Returns
+        None when the canonical catalog has no matching active version, so the
+        caller can decide fallback (non-prod) vs fail-closed (prod).
+        """
+        plan_info = PLANS.get(plan_id)
+        if not plan_info:
+            return None
+        plan_code = plan_info.get("plan_type")          # starter | professional | enterprise
+        catalog_code = {"starter": "starter", "professional": "pro", "enterprise": "enterprise"}.get(plan_code)
+        if not catalog_code:
+            return None
+        interval = "monthly" if plan_info.get("period") == "monthly" else "annual"
+        try:
+            stmt = (
+                select(Plan, PlanVersion)
+                .join(PlanVersion, PlanVersion.plan_id == Plan.id)
+                .where(
+                    and_(
+                        Plan.code == catalog_code,
+                        Plan.is_active.is_(True),
+                        PlanVersion.interval == interval,
+                    )
+                )
+                .order_by(desc(PlanVersion.version))
+                .limit(1)
+            )
+            row = (await self.db.execute(stmt)).first()
+            if not row:
+                return None
+            _plan, version = row
+            return int((version.price * 100).to_integral_value())
+        except Exception as exc:
+            # Catalog unavailable is a hard error in prod, tolerated fallback in tests
+            logger.error(f"[Billing] Catalog amount resolution failed for '{plan_id}': {exc}")
+            if settings.ENV in ("production", "prod", "staging"):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Canonical billing catalog is unavailable. Payment refused."
+                )
+            return None
+
     # ─── 1. Order Creation ────────────────────────────────────────────────────
     async def create_payment_order(
         self,
@@ -183,7 +229,24 @@ class RazorpayProductionService:
             )
 
         plan_info = PLANS[plan_id]
-        amount_paise = plan_info["amount"]
+
+        # ── Phase 0 P0.4: amount is resolved from the CANONICAL catalog ──────
+        # One authority: the database-driven catalog (catalog_service). The
+        # static PLANS table is now presentation/metadata only. In production
+        # a catalog miss fails closed instead of silently charging a possibly
+        # divergent hardcoded price.
+        amount_paise = await self._resolve_amount_from_catalog(plan_id)
+        if amount_paise is None:
+            if settings.ENV in ("production", "prod", "staging"):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Plan '{plan_id}' is not present in the canonical catalog. Payment refused."
+                )
+            amount_paise = plan_info["amount"]
+            logger.warning(
+                f"[Billing] Plan '{plan_id}' missing from canonical catalog; "
+                "falling back to static amount in non-production."
+            )
 
         # ── Idempotency Check ──────────────────────────────────────────────────
         if request.idempotency_key:
@@ -300,11 +363,11 @@ class RazorpayProductionService:
 
         secret_key = secret or settings.RAZORPAY_KEY_SECRET
 
-        # Test mode bypass for test automation
-        if (
-            (settings.ENV in ("testing", "test") or secret_key == "secret_placeholder")
-            and razorpay_signature == "valid_test_signature"
-        ):
+        # Phase 0 P0.4: signature-bypass is TESTING-ONLY. The previous rule also
+        # triggered on the literal 'secret_placeholder' credential, which meant a
+        # production deployment with a misconfigured secret would accept the
+        # magic string 'valid_test_signature' for arbitrary payments.
+        if settings.ENV in ("testing", "test") and razorpay_signature == "valid_test_signature":
             return True
 
         msg = f"{razorpay_order_id}|{razorpay_payment_id}".encode("utf-8")
@@ -491,10 +554,9 @@ class RazorpayProductionService:
 
         secret_key = secret or settings.RAZORPAY_WEBHOOK_SECRET
 
-        if (
-            (settings.ENV in ("testing", "test") or secret_key == "whsec_placeholder")
-            and signature_header == "valid_test_signature"
-        ):
+        # Phase 0 P0.4: webhook signature-bypass is TESTING-ONLY (was previously
+        # also reachable with the 'whsec_placeholder' credential in any env).
+        if settings.ENV in ("testing", "test") and signature_header == "valid_test_signature":
             return True
 
         expected = hmac.new(
