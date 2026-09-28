@@ -222,6 +222,7 @@ def test_production_accepts_valid_razorpay_credentials():
         GOOGLE_CLIENT_ID="123456789-abcdef.apps.googleusercontent.com",
         GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
         KNOWLEDGE_OCR_PROVIDER="tesseract",
+        STORAGE_BACKEND="s3",
     )
     assert prod_settings.RAZORPAY_KEY_ID == "rzp_live_real_production_key_123"
 

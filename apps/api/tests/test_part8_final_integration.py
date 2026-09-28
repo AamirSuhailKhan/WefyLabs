@@ -501,9 +501,11 @@ class TestPhaseOSystemContracts:
         import pathlib
         # Resolve the apps/api directory regardless of test runner CWD
         api_root = pathlib.Path(__file__).parent.parent  # apps/api
+        import sys
         result = subprocess.run(
-            ["python", "-m", "alembic", "heads"],
-            capture_output=True, text=True, cwd=str(api_root)
+            [sys.executable, "-m", "alembic", "heads"],
+            capture_output=True, text=True, cwd=str(api_root),
+            stdin=subprocess.DEVNULL
         )
         output = result.stdout + result.stderr
         # Accept 0027 or any later migration head as valid

@@ -154,6 +154,7 @@ def test_production_environment_requires_only_gemini_and_local_ocr():
         GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
         KNOWLEDGE_OCR_PROVIDER="tesseract",
         KNOWLEDGE_EMBEDDING_PROVIDER="gemini",
+        STORAGE_BACKEND="s3",
     )
     assert settings.GEMINI_API_KEY == "AIzaSy_valid_production_gemini_key_12345"
     assert settings.KNOWLEDGE_OCR_PROVIDER == "tesseract"

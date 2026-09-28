@@ -107,6 +107,7 @@ class TestProductionOCRPolicy:
             GOOGLE_CLIENT_ID="123456789-abcdef.apps.googleusercontent.com",
             GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
             KNOWLEDGE_OCR_PROVIDER="tesseract",
+            STORAGE_BACKEND="s3",
         )
         assert s.KNOWLEDGE_OCR_PROVIDER == "tesseract"
 
@@ -124,5 +125,6 @@ class TestProductionOCRPolicy:
             GOOGLE_CLIENT_ID="123456789-abcdef.apps.googleusercontent.com",
             GOOGLE_CLIENT_SECRET="google_prod_secret_123456789",
             KNOWLEDGE_OCR_PROVIDER="local",
+            STORAGE_BACKEND="s3",
         )
         assert s.KNOWLEDGE_OCR_PROVIDER == "local"
