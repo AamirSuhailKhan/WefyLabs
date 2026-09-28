@@ -7,12 +7,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, Menu, X, LogOut, Settings, Clock, AlertTriangle,
   ChevronDown, CheckSquare, BookOpen, Sparkles, Building2,
-  Users, Briefcase, BarChart3, Megaphone, ShieldCheck
+  Users, Briefcase, BarChart3, Megaphone, ShieldCheck, Search,
+  MessageSquare, Calendar, TrendingUp
 } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { useBroker } from '@/lib/auth-context';
 import { WefyLabsLogo } from './WefyLabsLogo';
 import { getEntitlementBadge, EntitlementState, DEFAULT_ENTITLEMENT_STATE } from '@/lib/entitlements';
+import { openCommandMenu } from '@/components/ui/CommandMenu';
 
 interface NavWorkspace {
   label: string;
@@ -24,60 +26,69 @@ interface NavWorkspace {
 
 const PRIMARY_WORKSPACES: NavWorkspace[] = [
   {
-    label: 'Command Center',
+    label: 'Home',
     href: '/dashboard',
     matchPrefixes: ['/dashboard'],
   },
   {
-    label: 'CRM',
-    href: '/dashboard/crm',
-    matchPrefixes: ['/dashboard/crm', '/dashboard/leads', '/dashboard/pipeline', '/dashboard/lead-capture'],
+    label: 'Inbox',
+    href: '/dashboard/inbox',
+    matchPrefixes: ['/dashboard/inbox'],
+  },
+  {
+    label: 'Leads',
+    href: '/dashboard/leads',
+    matchPrefixes: ['/dashboard/leads', '/dashboard/lead-capture', '/dashboard/crm/leads'],
     subItems: [
-      { label: 'Overview', href: '/dashboard/crm' },
       { label: 'Leads Directory', href: '/dashboard/leads' },
-      { label: 'Pipeline Kanban', href: '/dashboard/pipeline' },
-      { label: 'Lead Capture', href: '/dashboard/lead-capture' },
-      { label: 'Activities', href: '/dashboard/crm/activities' },
+      { label: 'Lead Capture Hub', href: '/dashboard/lead-capture' },
+      { label: 'Customer Activities', href: '/dashboard/crm/activities' },
     ],
   },
   {
-    label: 'Deals',
+    label: 'Properties',
+    href: '/dashboard/properties',
+    matchPrefixes: ['/dashboard/properties', '/dashboard/inventory', '/dashboard/matching'],
+    subItems: [
+      { label: 'Property Search & Detail', href: '/dashboard/properties' },
+      { label: 'Supply & Unit Inventory', href: '/dashboard/inventory' },
+      { label: 'AI Unit Matching', href: '/dashboard/matching' },
+    ],
+  },
+  {
+    label: 'Pipeline',
     href: '/dashboard/deals',
-    matchPrefixes: ['/dashboard/deals'],
-  },
-  {
-    label: 'Inventory',
-    href: '/dashboard/inventory',
-    matchPrefixes: ['/dashboard/inventory', '/dashboard/matching'],
+    matchPrefixes: ['/dashboard/deals', '/dashboard/pipeline', '/dashboard/crm/pipeline'],
     subItems: [
-      { label: 'Supply & Units', href: '/dashboard/inventory' },
-      { label: 'Unit Matching', href: '/dashboard/matching' },
+      { label: 'Commercial Deals & Bookings', href: '/dashboard/deals' },
+      { label: 'Pipeline Kanban Board', href: '/dashboard/pipeline' },
     ],
   },
   {
-    label: 'Marketing',
-    href: '/dashboard/marketing',
-    matchPrefixes: ['/dashboard/marketing'],
-    subItems: [
-      { label: 'Campaigns', href: '/dashboard/marketing' },
-      { label: 'Listing Studio', href: '/dashboard/marketing/listings' },
-      { label: 'Project Launches', href: '/dashboard/marketing/launches' },
-      { label: 'Landing Pages', href: '/dashboard/marketing/landing-pages' },
-    ],
+    label: 'Tasks',
+    href: '/dashboard/tasks',
+    matchPrefixes: ['/dashboard/tasks', '/dashboard/crm/tasks'],
   },
   {
-    label: 'Partners',
-    href: '/dashboard/partners',
-    matchPrefixes: ['/dashboard/partners'],
+    label: 'Calendar',
+    href: '/dashboard/calendar',
+    matchPrefixes: ['/dashboard/calendar'],
   },
   {
-    label: 'Intelligence',
+    label: 'Revenue',
     href: '/dashboard/revenue-intelligence',
     matchPrefixes: ['/dashboard/revenue-intelligence', '/dashboard/analytics'],
     subItems: [
-      { label: 'Revenue Funnel', href: '/dashboard/revenue-intelligence' },
-      { label: 'Predictive AI', href: '/dashboard/analytics/predictions' },
+      { label: 'Revenue Command Center', href: '/dashboard/revenue-intelligence' },
+      { label: 'Intelligence OS (Moat & Benchmarks)', href: '/dashboard/intelligence' },
+      { label: 'Executive Analytics', href: '/dashboard/analytics' },
+      { label: 'Predictive Propensity', href: '/dashboard/analytics/predictions' },
     ],
+  },
+  {
+    label: 'Settings',
+    href: '/dashboard/settings',
+    matchPrefixes: ['/dashboard/settings'],
   },
 ];
 
@@ -233,7 +244,34 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
           </div>
 
           {/* Right: Actions, Entitlement & Profile */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Universal Search Trigger */}
+            <button
+              onClick={() => openCommandMenu()}
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[#D4D0C8] bg-white text-[#6B6B6B] hover:text-[#1A1A1A] hover:border-[#1A1A1A] text-xs transition-colors shadow-2xs cursor-pointer"
+              title="Universal Search (⌘K / Ctrl+K)"
+              aria-label="Universal Search"
+            >
+              <Search className="w-3.5 h-3.5 text-gray-500" />
+              <span className="hidden xl:inline text-[11px] font-medium text-gray-600">Search CRM...</span>
+              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-[#F0EDE8] border border-[#D4D0C8] text-gray-600 font-semibold">⌘K</kbd>
+            </button>
+
+            {/* AI Copilot Trigger */}
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('wefylabs:toggle-copilot'));
+                }
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-teal-200 bg-teal-50/80 text-[#0F766E] hover:bg-teal-100 hover:border-teal-400 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              title="AI Copilot"
+              aria-label="Toggle AI Copilot"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
+              <span className="text-[11px]">AI Copilot</span>
+            </button>
+
             {/* Entitlement Status Pill */}
             {badge.variant === 'success' ? (
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">
@@ -358,6 +396,32 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
               exit={{ opacity: 0, height: 0 }}
               className="lg:hidden bg-[#FAF7F2] border-b border-[#D4D0C8] px-4 py-3 space-y-1 shadow-lg max-h-[80vh] overflow-y-auto"
             >
+              {/* Mobile Quick Triggers: Search & AI Copilot */}
+              <div className="grid grid-cols-2 gap-2 pb-2 mb-2 border-b border-[#D4D0C8]">
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    openCommandMenu();
+                  }}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border border-[#D4D0C8] rounded-xl text-xs font-semibold text-[#1A1A1A]"
+                >
+                  <Search className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Search ⌘K</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('wefylabs:toggle-copilot'));
+                    }
+                  }}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-teal-50 border border-teal-200 rounded-xl text-xs font-semibold text-[#0F766E]"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                  <span>AI Copilot</span>
+                </button>
+              </div>
+
               {PRIMARY_WORKSPACES.map((ws) => {
                 const active = isWorkspaceActive(ws);
                 return (

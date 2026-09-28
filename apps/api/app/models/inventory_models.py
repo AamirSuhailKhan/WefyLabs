@@ -45,27 +45,39 @@ class ProjectStatus:
 
 
 class UnitInventoryStatus:
-    AVAILABLE   = "available"
-    RESERVED    = "reserved"
-    BOOKED      = "booked"
-    SOLD        = "sold"
-    BLOCKED     = "blocked"
-    UNDER_OFFER = "under_offer"
-    RETURNED    = "returned"
+    AVAILABLE         = "available"
+    HOLD              = "hold"
+    RESERVED          = "reserved"
+    UNDER_NEGOTIATION = "under_negotiation"
+    BOOKED            = "booked"
+    ALLOCATED         = "allocated"
+    SOLD              = "sold"
+    BLOCKED           = "blocked"
+    UNDER_OFFER       = "under_offer"
+    RETURNED          = "returned"
+    UNAVAILABLE       = "unavailable"
+    UNKNOWN           = "unknown"
 
     VALID_TRANSITIONS = {
-        "available":   {"reserved", "blocked", "under_offer"},
-        "reserved":    {"available", "booked", "blocked"},
-        "under_offer": {"reserved", "available", "booked"},
-        "booked":      {"sold", "returned"},
-        "returned":    {"available"},
-        "blocked":     {"available"},
-        "sold":        set(),
+        "available":         {"reserved", "blocked", "under_offer", "hold", "under_negotiation", "unavailable"},
+        "hold":              {"available", "reserved", "blocked", "under_negotiation"},
+        "reserved":          {"available", "booked", "blocked", "allocated", "under_negotiation"},
+        "under_offer":       {"reserved", "available", "booked", "allocated"},
+        "under_negotiation": {"reserved", "available", "booked", "allocated", "hold"},
+        "booked":            {"sold", "returned", "available"},
+        "allocated":         {"sold", "returned", "available"},
+        "returned":          {"available"},
+        "blocked":           {"available"},
+        "unavailable":       {"available", "unknown"},
+        "unknown":           {"available", "unavailable"},
+        "sold":              set(),
     }
 
     @classmethod
     def can_transition(cls, from_status: str, to_status: str) -> bool:
-        return to_status in cls.VALID_TRANSITIONS.get(from_status, set())
+        f = (from_status or "").strip().lower()
+        t = (to_status or "").strip().lower()
+        return t in cls.VALID_TRANSITIONS.get(f, set())
 
 
 class ChannelPartnerStatus:
@@ -353,6 +365,8 @@ class ProjectUnitStatusLog(Base, TimestampMixin):
     deal_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     outbox_event_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     metadata_json: Mapped[Optional[Dict]] = mapped_column(JSONBType, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="crm", nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     unit: Mapped["ProjectUnit"] = relationship("ProjectUnit", back_populates="status_logs")
     __table_args__ = (
         Index("ix_unit_status_log_unit", "unit_id"),

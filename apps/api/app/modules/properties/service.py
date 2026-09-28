@@ -31,12 +31,27 @@ from app.services.property_ai_valuation_service import PropertyAIValuationServic
 from app.infrastructure.cache.query_cache import AsyncQueryCacheService
 from app.infrastructure.events.event_bus import DomainEventBus, DomainEvent, StandardDomainEvents, ActorContext
 
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker
+from app.infrastructure.ai_gateway.gateway import AIGateway
+
 logger = logging.getLogger("beetlelabs.properties.service")
 
 
 class PropertyService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _resolve_tenant_org_id(self, broker: Broker, explicit_org_id: Optional[Union[str, uuid.UUID]] = None) -> uuid.UUID:
+        if explicit_org_id is not None:
+            return explicit_org_id if isinstance(explicit_org_id, uuid.UUID) else uuid.UUID(str(explicit_org_id))
+        broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        return await resolve_organization_id_for_broker(self.db, broker_id, requested_organization_id=explicit_org_id, allow_fallback=True)
+
+    def _tenant_filter(self, broker_id: uuid.UUID, org_id: uuid.UUID):
+        return or_(
+            PropertyListing.organization_id == org_id,
+            and_(PropertyListing.organization_id.is_(None), PropertyListing.broker_id == broker_id)
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # 1. Core Property CRUD & Codes
@@ -45,12 +60,14 @@ class PropertyService:
     async def create_property(
         self,
         broker: Broker,
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
         """Creates a canonical property listing with tenant scoping and audit log."""
         broker_id = broker.id
         if isinstance(broker_id, str):
             broker_id = uuid.UUID(broker_id)
+        org_id = await self._resolve_tenant_org_id(broker, organization_id or data.get("organization_id"))
 
         # Generate unique human-readable property code if not provided
         property_code = data.get("property_code")
@@ -74,6 +91,7 @@ class PropertyService:
                 assigned_agent_id = None
 
         listing = PropertyListing(
+            organization_id=org_id,
             broker_id=broker_id,
             property_code=property_code,
             share_token=share_token,
@@ -135,9 +153,9 @@ class PropertyService:
         # Flush so the DB assigns listing.id before we reference it in the audit log
         await self.db.flush()
 
-        # Audit Log — resource_id is now populated
+        # Audit Log — resource_id is now populated with canonical organization_id
         audit = AuditLog(
-            organization_id=broker_id,
+            organization_id=org_id,
             actor_id=broker_id,
             actor_type="user",
             action="property.create",
@@ -151,13 +169,13 @@ class PropertyService:
         await self.db.refresh(listing)
 
         # Invalidate tenant search and matching cache and emit domain event
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:matches")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:matches")
         try:
             await DomainEventBus.publish(
                 DomainEvent(
                     event_type=StandardDomainEvents.PROPERTY_CREATED,
-                    organization_id=str(broker_id),
+                    organization_id=str(org_id),
                     payload={"property_id": str(listing.id), "title": listing.title}
                 )
             )
@@ -169,18 +187,20 @@ class PropertyService:
     async def get_property(
         self,
         property_id: str | uuid.UUID,
-        broker: Broker
+        broker: Broker,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
-        """Fetches property strictly scoped to authenticated organization."""
+        """Fetches property strictly scoped to authenticated organization with dual-read support."""
         broker_id = broker.id
         if isinstance(broker_id, str):
             broker_id = uuid.UUID(broker_id)
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
         p_uuid = uuid.UUID(str(property_id)) if not isinstance(property_id, uuid.UUID) else property_id
 
         stmt = select(PropertyListing).where(
             PropertyListing.id == p_uuid,
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None)
         )
         res = await self.db.execute(stmt)
@@ -196,11 +216,13 @@ class PropertyService:
         self,
         property_id: str | uuid.UUID,
         broker: Broker,
-        updates: Dict[str, Any]
+        updates: Dict[str, Any],
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
         """Updates property with price history tracking and audit logging."""
-        prop = await self.get_property(property_id, broker)
+        prop = await self.get_property(property_id, broker, organization_id)
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
         # Check for price change
         if "price" in updates and updates["price"] is not None:
@@ -220,7 +242,7 @@ class PropertyService:
 
         # Update fields
         for field, val in updates.items():
-            if field in ("price", "price_change_reason", "id", "broker_id", "created_at"):
+            if field in ("price", "price_change_reason", "id", "broker_id", "organization_id", "created_at"):
                 continue
             if hasattr(prop, field) and val is not None:
                 if field == "assigned_agent_id" and isinstance(val, str):
@@ -238,7 +260,7 @@ class PropertyService:
             prop.extended_fields = ext
 
         audit = AuditLog(
-            organization_id=broker_id,
+            organization_id=org_id,
             actor_id=broker_id,
             actor_type="user",
             action="property.update",
@@ -252,14 +274,14 @@ class PropertyService:
         await self.db.refresh(prop)
 
         # Invalidate property, search, and matching cache and emit domain event
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:matches")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:matches")
         try:
             await DomainEventBus.publish(
                 DomainEvent(
                     event_type=StandardDomainEvents.PROPERTY_UPDATED,
-                    organization_id=str(broker_id),
+                    organization_id=str(org_id),
                     payload={"property_id": str(prop.id), "status": prop.status, "price": prop.price}
                 )
             )
@@ -271,16 +293,19 @@ class PropertyService:
     async def archive_property(
         self,
         property_id: str | uuid.UUID,
-        broker: Broker
+        broker: Broker,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
         """Safely archives property (status=ARCHIVED, deleted_at=now)."""
-        prop = await self.get_property(property_id, broker)
+        prop = await self.get_property(property_id, broker, organization_id)
+        broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
         prop.status = "archived"
         prop.deleted_at = datetime.now(timezone.utc)
 
         audit = AuditLog(
-            organization_id=broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id)),
-            actor_id=broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id)),
+            organization_id=org_id,
+            actor_id=broker_id,
             actor_type="user",
             action="property.archive",
             resource_type="property",
@@ -292,15 +317,14 @@ class PropertyService:
         await self.db.refresh(prop)
 
         # Invalidate property, search, and matching cache and emit domain event
-        b_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:property:{prop.id}")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:search")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{b_id}:matches")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:matches")
         try:
             await DomainEventBus.publish(
                 DomainEvent(
                     event_type=StandardDomainEvents.PROPERTY_ARCHIVED,
-                    organization_id=str(b_id),
+                    organization_id=str(org_id),
                     payload={"property_id": str(prop.id)}
                 )
             )
@@ -318,7 +342,8 @@ class PropertyService:
         property_id: str | uuid.UUID,
         broker: Broker,
         new_price: float,
-        reason: str = "Market adjustment"
+        reason: str = "Market adjustment",
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
         """
         Dedicated price update that writes PropertyPriceHistory atomically.
@@ -331,8 +356,9 @@ class PropertyService:
                 detail="New price must be greater than zero."
             )
 
-        prop = await self.get_property(property_id, broker)
+        prop = await self.get_property(property_id, broker, organization_id)
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
         old_price = prop.price
 
         if abs(new_price - old_price) < 0.01:
@@ -359,7 +385,7 @@ class PropertyService:
         # Audit log
         direction = "reduced" if new_price < old_price else "increased"
         audit = AuditLog(
-            organization_id=broker_id,
+            organization_id=org_id,
             actor_id=broker_id,
             actor_type="user",
             action="property.price_update",
@@ -374,13 +400,13 @@ class PropertyService:
         await self.db.refresh(prop)
 
         # Invalidate property intelligence cache and search cache
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
         try:
             await DomainEventBus.publish(
                 DomainEvent(
                     event_type=StandardDomainEvents.PROPERTY_PRICE_CHANGED,
-                    organization_id=str(broker_id),
+                    organization_id=str(org_id),
                     payload={
                         "property_id": str(prop.id),
                         "old_price": old_price,
@@ -423,15 +449,17 @@ class PropertyService:
         assigned_agent_id: Optional[str] = None,
         sort_by: str = "newest",
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> Dict[str, Any]:
-        """Powerful, indexed, multi-attribute property inventory search."""
+        """Powerful, indexed, multi-attribute property inventory search with tenant scoping."""
         broker_id = broker.id
         if isinstance(broker_id, str):
             broker_id = uuid.UUID(broker_id)
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
         stmt = select(PropertyListing).where(
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None)
         )
 
@@ -533,19 +561,21 @@ class PropertyService:
         self,
         property_id: str | uuid.UUID,
         broker: Broker,
-        lead_id: Optional[str | uuid.UUID] = None
+        lead_id: Optional[str | uuid.UUID] = None,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> PropertyListing:
         """
-        Atomic reservation with concurrency conflict protection.
+        Atomic reservation with concurrency conflict protection and tenant scoping.
         Guarantees exactly one reservation succeeds when multiple workers or agents race.
         """
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
         p_uuid = property_id if isinstance(property_id, uuid.UUID) else uuid.UUID(str(property_id))
 
-        # Check existing status atomically
+        # Check existing status atomically with tenant filter
         stmt = select(PropertyListing).where(
             PropertyListing.id == p_uuid,
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None)
         )
         res = await self.db.execute(stmt)
@@ -570,12 +600,13 @@ class PropertyService:
                 property_id=prop.id,
                 broker=broker,
                 status="RESERVED",
-                notes="Property reserved by agent."
+                notes="Property reserved by agent.",
+                organization_id=org_id
             )
 
         # Audit Log
         audit = AuditLog(
-            organization_id=broker_id,
+            organization_id=org_id,
             actor_id=broker_id,
             actor_type="user",
             action="property.reserve",
@@ -589,13 +620,13 @@ class PropertyService:
         await self.db.refresh(prop)
 
         # Invalidate property and search cache and emit domain event
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:property:{prop.id}")
-        AsyncQueryCacheService.invalidate_tag(f"tenant:{broker_id}:search")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:property:{prop.id}")
+        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
         try:
             await DomainEventBus.publish(
                 DomainEvent(
                     event_type=StandardDomainEvents.PROPERTY_AVAILABILITY_CHANGED,
-                    organization_id=str(broker_id),
+                    organization_id=str(org_id),
                     payload={"property_id": str(prop.id), "status": "reserved", "lead_id": str(lead_id) if lead_id else None}
                 )
             )
@@ -676,13 +707,15 @@ class PropertyService:
         self,
         broker: Broker,
         data: Dict[str, Any],
-        exclude_id: Optional[uuid.UUID] = None
+        exclude_id: Optional[uuid.UUID] = None,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> List[Dict[str, Any]]:
         """
         Scans existing inventory for potential duplicates based on
         (city, locality, project_name, unit_number) or (city, address, unit_number).
         """
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
         city = (data.get("city") or "").strip().lower()
         project = (data.get("project_name") or "").strip().lower()
         unit = (data.get("unit_number") or "").strip().lower()
@@ -713,7 +746,7 @@ class PropertyService:
             return []
 
         stmt = select(PropertyListing).where(
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None),
             or_(*conditions)
         )
@@ -730,7 +763,8 @@ class PropertyService:
                 "title": p.title,
                 "project_name": p.project_name,
                 "unit_number": p.unit_number,
-                "status": p.status
+                "status": p.status,
+                "price": float(p.price)
             } for p in duplicates
         ]
 
@@ -747,22 +781,31 @@ class PropertyService:
         interest_level: str = "medium",
         match_score: float = 0.0,
         notes: Optional[str] = None,
-        source: str = "manual"
+        source: str = "manual",
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> LeadPropertyInterest:
-        """Creates or updates a many-to-many Lead ↔ Property interest record."""
+        """Creates or updates a many-to-many Lead ↔ Property interest record with tenant scoping."""
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
         lead_uuid = lead_id if isinstance(lead_id, uuid.UUID) else uuid.UUID(str(lead_id))
         prop_uuid = property_id if isinstance(property_id, uuid.UUID) else uuid.UUID(str(property_id))
 
-        # Verify lead belongs to organization
-        lead_stmt = select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker_id)
+        # Verify lead belongs to organization (dual-read)
+        lead_filter = or_(
+            Lead.organization_id == org_id,
+            and_(Lead.organization_id.is_(None), Lead.broker_id == broker_id)
+        )
+        lead_stmt = select(Lead).where(Lead.id == lead_uuid, lead_filter)
         lead_res = await self.db.execute(lead_stmt)
         lead = lead_res.scalars().first()
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found.")
 
         # Verify property belongs to organization
-        prop_stmt = select(PropertyListing).where(PropertyListing.id == prop_uuid, PropertyListing.broker_id == broker_id)
+        prop_stmt = select(PropertyListing).where(
+            PropertyListing.id == prop_uuid,
+            self._tenant_filter(broker_id, org_id)
+        )
         prop_res = await self.db.execute(prop_stmt)
         prop = prop_res.scalars().first()
         if not prop:
@@ -770,7 +813,10 @@ class PropertyService:
 
         # Check existing interest
         existing_stmt = select(LeadPropertyInterest).where(
-            LeadPropertyInterest.organization_id == broker_id,
+            or_(
+                LeadPropertyInterest.organization_id == org_id,
+                LeadPropertyInterest.organization_id == broker_id
+            ),
             LeadPropertyInterest.lead_id == lead_uuid,
             LeadPropertyInterest.property_id == prop_uuid
         )
@@ -788,7 +834,7 @@ class PropertyService:
                 interest.match_score = match_score
         else:
             interest = LeadPropertyInterest(
-                organization_id=broker_id,
+                organization_id=org_id,
                 lead_id=lead_uuid,
                 property_id=prop_uuid,
                 status=status.upper(),
@@ -806,7 +852,7 @@ class PropertyService:
         act = Activity(
             actor_id=broker_id,
             lead_id=lead_uuid,
-            organization_id=str(broker_id),
+            organization_id=str(org_id),
             activity_type="property_interest_linked",
             title=f"Interested in {prop.title}",
             description=f"Status: {status.upper()} | Source: {source}",
@@ -821,17 +867,22 @@ class PropertyService:
     async def list_interested_leads(
         self,
         property_id: str | uuid.UUID,
-        broker: Broker
+        broker: Broker,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> List[Dict[str, Any]]:
         """Lists all leads interested in a property with relationship status and details."""
-        prop = await self.get_property(property_id, broker)
+        prop = await self.get_property(property_id, broker, organization_id)
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
         stmt = select(LeadPropertyInterest, Lead).join(
             Lead, LeadPropertyInterest.lead_id == Lead.id
         ).where(
             LeadPropertyInterest.property_id == prop.id,
-            LeadPropertyInterest.organization_id == broker_id
+            or_(
+                LeadPropertyInterest.organization_id == org_id,
+                LeadPropertyInterest.organization_id == broker_id
+            )
         ).order_by(LeadPropertyInterest.interested_at.desc())
 
         res = await self.db.execute(stmt)
@@ -864,7 +915,8 @@ class PropertyService:
         broker: Broker,
         scheduled_at: datetime,
         duration_minutes: int = 60,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> Dict[str, Any]:
         """
         Coordinates a site visit:
@@ -874,7 +926,8 @@ class PropertyService:
         - Records Activity feed entry
         """
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
-        prop = await self.get_property(property_id, broker)
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
+        prop = await self.get_property(property_id, broker, organization_id)
         lead_uuid = lead_id if isinstance(lead_id, uuid.UUID) else uuid.UUID(str(lead_id))
 
         # 1. Update/create interest record
@@ -883,7 +936,8 @@ class PropertyService:
             property_id=prop.id,
             broker=broker,
             status="VISIT_SCHEDULED",
-            notes=f"Site visit booked for {scheduled_at.isoformat()}"
+            notes=f"Site visit booked for {scheduled_at.isoformat()}",
+            organization_id=org_id
         )
 
         # 2. Create Meeting
@@ -916,7 +970,7 @@ class PropertyService:
         act = Activity(
             actor_id=broker_id,
             lead_id=lead_uuid,
-            organization_id=str(broker_id),
+            organization_id=str(org_id),
             activity_type="meeting_scheduled",
             title="Site Visit Scheduled",
             description=f"Scheduled visit for {prop.title} on {scheduled_at.strftime('%Y-%m-%d %H:%M UTC')}",
@@ -1051,12 +1105,17 @@ class PropertyService:
     # 8. Inventory Analytics & Lead Demand Intelligence
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def get_inventory_analytics(self, broker: Broker) -> Dict[str, Any]:
-        """Calculates live inventory counts, price benchmarks, and status breakdowns."""
+    async def get_inventory_analytics(
+        self,
+        broker: Broker,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
+    ) -> Dict[str, Any]:
+        """Calculates live inventory counts, price benchmarks, and status breakdowns with tenant scoping."""
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
         stmt = select(PropertyListing).where(
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None)
         )
         res = await self.db.execute(stmt)
@@ -1111,18 +1170,27 @@ class PropertyService:
             "price_bands": price_bands
         }
 
-    async def get_demand_vs_inventory(self, broker: Broker) -> List[Dict[str, Any]]:
-        """Compares lead budget and location demand against live available inventory."""
+    async def get_demand_vs_inventory(
+        self,
+        broker: Broker,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
+    ) -> List[Dict[str, Any]]:
+        """Compares lead budget and location demand against live available inventory with tenant scoping."""
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
 
-        # Get active leads
-        leads_stmt = select(Lead).where(Lead.broker_id == broker_id, Lead.deleted_at.is_(None))
+        # Get active leads with dual-read
+        lead_filter = or_(
+            Lead.organization_id == org_id,
+            and_(Lead.organization_id.is_(None), Lead.broker_id == broker_id)
+        )
+        leads_stmt = select(Lead).where(lead_filter, Lead.deleted_at.is_(None))
         leads_res = await self.db.execute(leads_stmt)
         leads = leads_res.scalars().all()
 
         # Get available inventory
         props_stmt = select(PropertyListing).where(
-            PropertyListing.broker_id == broker_id,
+            self._tenant_filter(broker_id, org_id),
             PropertyListing.deleted_at.is_(None),
             PropertyListing.status == "available"
         )
@@ -1168,9 +1236,11 @@ class PropertyService:
         self,
         broker: Broker,
         file_content: bytes,
-        filename: str = "inventory.csv"
+        filename: str = "inventory.csv",
+        dry_run: bool = False,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> Dict[str, Any]:
-        """Validates CSV with FileSecurityScanner, maps headers, and imports inventory."""
+        """Validates CSV with FileSecurityScanner, maps headers, checks duplicates/conflicts, and supports dry-run preview."""
         valid, err = FileSecurityScanner.scan_file(filename, file_content)
         if not valid:
             raise HTTPException(status_code=400, detail=f"File security rejected: {err}")
@@ -1180,17 +1250,22 @@ class PropertyService:
 
         imported_count = 0
         duplicate_count = 0
+        updated_count = 0
         failed_count = 0
         errors = []
+        row_results = []
 
+        org_id = await self._resolve_tenant_org_id(broker, organization_id)
+
+        idx = 0
         for idx, row in enumerate(reader, start=1):
             try:
-                # Normalize keys
                 r = {k.strip().lower(): v.strip() for k, v in row.items() if k and v}
                 title = r.get("title") or r.get("property_name") or r.get("name")
                 if not title:
                     failed_count += 1
                     errors.append(f"Row {idx}: Missing title.")
+                    row_results.append({"row": idx, "status": "invalid", "reason": "Missing title"})
                     continue
 
                 price = float(r.get("price", 0))
@@ -1217,26 +1292,52 @@ class PropertyService:
                     "owner_phone": r.get("owner_phone")
                 }
 
-                # Check duplicates
-                dupes = await self.detect_duplicates(broker, prop_data)
+                # Check duplicates with tenant scoping
+                dupes = await self.detect_duplicates(broker, prop_data, organization_id=org_id)
                 if dupes:
-                    duplicate_count += 1
-                    # Skip duplicate creation
+                    existing = dupes[0]
+                    # Check if price or status changed
+                    price_diff = abs(float(existing.get("price", 0)) - price) > 0.01
+                    status_diff = existing.get("status") != prop_data["status"]
+                    if price_diff or status_diff:
+                        if not dry_run:
+                            await self.update_property(
+                                existing["id"], broker,
+                                {"price": price, "status": prop_data["status"]},
+                                organization_id=org_id
+                            )
+                        updated_count += 1
+                        row_results.append({"row": idx, "status": "updated", "property_id": existing["id"], "code": existing.get("property_code")})
+                    else:
+                        duplicate_count += 1
+                        row_results.append({"row": idx, "status": "unchanged", "property_id": existing["id"], "code": existing.get("property_code")})
                     continue
 
-                await self.create_property(broker, prop_data)
+                if not dry_run:
+                    created = await self.create_property(broker, prop_data, organization_id=org_id)
+                    row_results.append({"row": idx, "status": "created", "property_id": str(created.id), "code": created.property_code})
+                else:
+                    row_results.append({"row": idx, "status": "valid_preview", "title": title, "price": price})
                 imported_count += 1
             except Exception as e:
                 failed_count += 1
                 errors.append(f"Row {idx}: {str(e)}")
+                row_results.append({"row": idx, "status": "failed", "error": str(e)})
 
         return {
-            "total_rows": idx if "idx" in locals() else 0,
-            "imported": imported_count,
+            "total_rows": idx,
+            "dry_run": dry_run,
+            "created": imported_count if not dry_run else 0,
+            "imported": imported_count if not dry_run else 0,
+            "updated": updated_count,
+            "unchanged": duplicate_count,
+            "duplicates": duplicate_count,
             "duplicates_skipped": duplicate_count,
             "failed": failed_count,
-            "errors": errors[:10]  # Cap error list
+            "row_results": row_results[:50],
+            "errors": errors[:10]
         }
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # 10. AI Grounded Property Description
@@ -1244,9 +1345,11 @@ class PropertyService:
 
     async def generate_ai_description(
         self,
-        property_data: Dict[str, Any]
+        property_data: Dict[str, Any],
+        broker: Optional[Broker] = None,
+        organization_id: Optional[Union[str, uuid.UUID]] = None
     ) -> Dict[str, Any]:
-        """Generates grounded marketing description without hallucinating non-existent facts."""
+        """Generates grounded marketing description without hallucinating non-existent facts using canonical AIGateway."""
         title = property_data.get("title", "Property")
         bhk = property_data.get("bedrooms", 2)
         prop_type = property_data.get("property_type", "Apartment")
@@ -1261,13 +1364,14 @@ class PropertyService:
         )
 
         try:
-            from app.config import settings
-            api_key = getattr(settings, "GEMINI_API_KEY", None)
-            if api_key and api_key != "mock-gemini-key":
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+            resolved_org_id = None
+            if organization_id:
+                resolved_org_id = organization_id if isinstance(organization_id, uuid.UUID) else uuid.UUID(str(organization_id))
+            elif broker:
+                resolved_org_id = await self._resolve_tenant_org_id(broker)
 
+            if resolved_org_id:
+                gateway = AIGateway(self.db)
                 prompt = (
                     f"Write a compelling, professional 50-word real estate listing description for:\n"
                     f"- Title: {title}\n"
@@ -1277,9 +1381,15 @@ class PropertyService:
                     f"- Amenities: {amenities}\n\n"
                     f"Rules: Strictly stick to provided facts. Do not invent amenities, metro distances, or guarantees."
                 )
-                resp = model.generate_content(prompt)
-                if resp.text:
-                    return {"description": resp.text.strip(), "ai_generated": True}
+                res = await gateway.complete(
+                    organization_id=resolved_org_id,
+                    feature="property_marketing",
+                    task_type="description_generation",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=200,
+                )
+                if res.success and res.content:
+                    return {"description": res.content.strip(), "ai_generated": True}
         except Exception as exc:
             logger.warning(f"AI description generation fallback to deterministic: {exc}")
 

@@ -188,10 +188,15 @@ class PropertySearchCriteria(BaseModel):
     bedrooms: Optional[int] = None
     bathrooms: Optional[int] = None
     furnishing: Optional[str] = None
+    facing: Optional[str] = None
+    possession_status: Optional[str] = None
     construction_status: Optional[str] = None
     amenities: Optional[List[str]] = None
     query: Optional[str] = None
-    sort_by: str = "newest"  # newest | price_asc | price_desc | area_asc | area_desc
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    radius_km: Optional[float] = None
+    sort_by: str = "newest"  # newest | price_asc | price_desc | area_asc | area_desc | distance_asc
     page: int = Field(1, ge=1)
     limit: int = Field(20, ge=1, le=100)
 
@@ -217,9 +222,38 @@ class PropertySearchResultItem(BaseModel):
     status: str
     is_available: bool
     construction_status: str
+    facing: Optional[str] = None
     amenities: List[str] = Field(default_factory=list)
     primary_image_url: Optional[str] = None
     last_updated_at: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    distance_km: Optional[float] = None
+
+
+class FieldFreshnessDTO(BaseModel):
+    field_name: str
+    status: str  # LIVE | FRESH | STALE | UNKNOWN
+    is_fresh: bool
+    age_seconds: Optional[float] = None
+    ttl_seconds: Optional[int] = None
+    observed_at: Optional[str] = None
+
+
+class PropertyDataConflictDTO(BaseModel):
+    conflict_id: Optional[str] = None
+    property_id: Optional[str] = None
+    unit_id: Optional[str] = None
+    field_name: str
+    current_value: Optional[str] = None
+    competing_value: Optional[str] = None
+    current_source: str
+    competing_source: str
+    resolution_status: str = "UNRESOLVED"
+    resolution_reason: Optional[str] = None
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[str] = None
+    observed_at: Optional[str] = None
 
 
 class PropertySearchResponse(BaseModel):

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List, Any, Dict
-from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File, Form, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +11,7 @@ from app.models.broker import Broker
 from app.models.property_models import PropertyListing
 from app.modules.properties.service import PropertyService
 from app.services.property_ai_valuation_service import PropertyAIValuationService
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker
 
 router = APIRouter(prefix="/properties", tags=["Property Inventory & Property CRM"])
 
@@ -194,10 +195,12 @@ async def list_properties_endpoint(
     sort_by: str = Query("newest"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Lists property inventory with multi-attribute filtering, sorting, and pagination."""
+    """Lists property inventory with multi-attribute filtering, sorting, and pagination (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
     result = await service.search_and_filter(
         broker=current_broker,
@@ -219,99 +222,48 @@ async def list_properties_endpoint(
         assigned_agent_id=assigned_agent_id,
         sort_by=sort_by,
         page=page,
-        limit=limit
+        limit=limit,
+        organization_id=org_id
     )
-
-    # If new broker has no properties yet and no search active, seed 2 initial demo properties
-    if result["total"] == 0 and not search and (not property_type or property_type == "all"):
-        broker_id = current_broker.id if isinstance(current_broker.id, uuid.UUID) else uuid.UUID(str(current_broker.id))
-        seed1 = PropertyListing(
-            broker_id=broker_id,
-            property_code="PROP-DEMO1",
-            title="Luxury 3BHK Penthouse in Marina Gate",
-            description="Ultra luxury penthouse with full skyline view",
-            property_category="residential",
-            property_type="penthouse",
-            transaction_category="resale",
-            status="available",
-            price=28500000.0,
-            currency_code="INR",
-            area_value=2450.0,
-            area_unit="sqft",
-            bedrooms=3,
-            bathrooms=4,
-            parking_spaces=2,
-            project_name="Marina Gate",
-            city="Bengaluru",
-            locality="Indiranagar",
-            amenities=["Infinity Pool", "Private Gym", "Valet Parking", "Clubhouse"],
-            extended_fields={"amenities": ["Infinity Pool", "Private Gym", "Valet Parking", "Clubhouse"]}
-        )
-        seed2 = PropertyListing(
-            broker_id=broker_id,
-            property_code="PROP-DEMO2",
-            title="Modern 2BHK Apartment in Downtown Heights",
-            description="Contemporary apartment close to tech hubs",
-            property_category="residential",
-            property_type="apartment",
-            transaction_category="resale",
-            status="available",
-            price=12500000.0,
-            currency_code="INR",
-            area_value=1350.0,
-            area_unit="sqft",
-            bedrooms=2,
-            bathrooms=2,
-            parking_spaces=1,
-            project_name="Downtown Heights",
-            city="Bengaluru",
-            locality="Koramangala",
-            amenities=["Concierge", "Underground Parking", "Garden Area"],
-            extended_fields={"amenities": ["Concierge", "Underground Parking", "Garden Area"]}
-        )
-        db.add(seed1)
-        db.add(seed2)
-        await db.commit()
-        result = {
-            "total": 2,
-            "page": 1,
-            "limit": limit,
-            "items": [service.serialize_property(seed1), service.serialize_property(seed2)]
-        }
-
     return result
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_property_endpoint(
     req: PropertyCreateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Create a new property listing with valuation benchmarks and audit log."""
+    """Create a new property listing with valuation benchmarks and audit log (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.create_property(current_broker, req.model_dump())
+    prop = await service.create_property(current_broker, req.model_dump(), organization_id=org_id)
     return service.serialize_property(prop)
 
 
 @router.get("/dashboard")
 async def get_inventory_dashboard_endpoint(
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Returns inventory KPIs, status breakdown, price bands, and category distribution."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    return await service.get_inventory_analytics(current_broker)
+    return await service.get_inventory_analytics(current_broker, organization_id=org_id)
 
 
 @router.get("/demand-analytics")
 async def get_demand_analytics_endpoint(
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Compares lead demand preferences against available property inventory."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    return await service.get_demand_vs_inventory(current_broker)
+    return await service.get_demand_vs_inventory(current_broker, organization_id=org_id)
 
 
 @router.get("/public/{share_token}")
@@ -369,12 +321,14 @@ async def record_visit_outcome_endpoint(
 @router.get("/{property_id}")
 async def get_property_endpoint(
     property_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Get single property details by ID (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.get_property(property_id, current_broker)
+    prop = await service.get_property(property_id, current_broker, organization_id=org_id)
     return service.serialize_property(prop)
 
 
@@ -382,12 +336,14 @@ async def get_property_endpoint(
 async def update_property_endpoint(
     property_id: str,
     req: PropertyUpdateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Update property details with price audit logging."""
+    """Update property details with price audit logging (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.update_property(property_id, current_broker, req.model_dump(exclude_unset=True))
+    prop = await service.update_property(property_id, current_broker, req.model_dump(exclude_unset=True), organization_id=org_id)
     return service.serialize_property(prop)
 
 
@@ -395,16 +351,19 @@ async def update_property_endpoint(
 async def update_property_price_endpoint(
     property_id: str,
     req: PropertyPriceUpdateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Updates property price, creates price history audit record, and triggers revenue opportunity evaluation."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
     prop = await service.update_price(
         property_id=property_id,
         broker=current_broker,
         new_price=req.new_price,
-        reason=req.reason
+        reason=req.reason,
+        organization_id=org_id
     )
     # Background trigger revenue autopilot evaluation for price change matches
     try:
@@ -419,12 +378,14 @@ async def update_property_price_endpoint(
 @router.delete("/{property_id}")
 async def delete_property_endpoint(
     property_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Soft-deletes and archives a property listing."""
+    """Soft-deletes and archives a property listing (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.archive_property(property_id, current_broker)
+    await service.archive_property(property_id, current_broker, organization_id=org_id)
     return {"status": "success", "message": f"Property {property_id} archived successfully."}
 
 
@@ -432,34 +393,40 @@ async def delete_property_endpoint(
 async def reserve_property_endpoint(
     property_id: str,
     req: ReservePropertyRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Concurrency-safe atomic property reservation."""
+    """Concurrency-safe atomic property reservation (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.reserve_property(property_id, current_broker, lead_id=req.lead_id)
+    prop = await service.reserve_property(property_id, current_broker, lead_id=req.lead_id, organization_id=org_id)
     return service.serialize_property(prop)
 
 
 @router.get("/{property_id}/leads")
 async def get_property_leads_endpoint(
     property_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Lists leads interested in this property."""
+    """Lists leads interested in this property (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    return await service.list_interested_leads(property_id, current_broker)
+    return await service.list_interested_leads(property_id, current_broker, organization_id=org_id)
 
 
 @router.post("/{property_id}/leads")
 async def link_lead_property_endpoint(
     property_id: str,
     req: LeadPropertyLinkRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Links a lead's interest to a property with relationship status and metadata."""
+    """Links a lead's interest to a property with relationship status and metadata (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
     interest = await service.link_lead_property(
         lead_id=req.lead_id,
@@ -468,7 +435,8 @@ async def link_lead_property_endpoint(
         status=req.status or "INTERESTED",
         interest_level=req.interest_level or "medium",
         notes=req.notes,
-        source=req.source or "manual"
+        source=req.source or "manual",
+        organization_id=org_id
     )
     return {
         "status": "success",
@@ -483,10 +451,12 @@ async def link_lead_property_endpoint(
 async def schedule_property_visit_endpoint(
     property_id: str,
     req: ScheduleVisitRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Schedules a site visit, creates meeting and agent task, and records activity."""
+    """Schedules a site visit, creates meeting and agent task, and records activity (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
     return await service.schedule_site_visit(
         lead_id=req.lead_id,
@@ -494,7 +464,8 @@ async def schedule_property_visit_endpoint(
         broker=current_broker,
         scheduled_at=req.scheduled_at,
         duration_minutes=req.duration_minutes or 60,
-        notes=req.notes
+        notes=req.notes,
+        organization_id=org_id
     )
 
 
@@ -502,36 +473,44 @@ async def schedule_property_visit_endpoint(
 @router.post("/import")
 async def import_properties_csv_endpoint(
     file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="Preview import without committing changes"),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Batch imports property inventory from CSV with security scanning and duplicate checking."""
+    """Batch imports property inventory from CSV with security scanning, duplicate checking, and dry-run preview."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     content = await file.read()
     service = PropertyService(db)
     return await service.import_properties_csv(
         broker=current_broker,
         file_content=content,
-        filename=file.filename or "inventory.csv"
+        filename=file.filename or "inventory.csv",
+        dry_run=dry_run,
+        organization_id=org_id
     )
+
 
 
 @router.post("/bulk")
 async def bulk_properties_endpoint(
     req: BulkActionRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Performs bulk operations (archive, status update, agent assignment) on selected properties."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
     processed = 0
     for pid in req.property_ids:
         try:
             if req.action == "archive":
-                await service.archive_property(pid, current_broker)
+                await service.archive_property(pid, current_broker, organization_id=org_id)
             elif req.action == "change_status" and req.status:
-                await service.update_property(pid, current_broker, {"status": req.status})
+                await service.update_property(pid, current_broker, {"status": req.status}, organization_id=org_id)
             elif req.action == "assign_agent" and req.assigned_agent_id:
-                await service.update_property(pid, current_broker, {"assigned_agent_id": req.assigned_agent_id})
+                await service.update_property(pid, current_broker, {"assigned_agent_id": req.assigned_agent_id}, organization_id=org_id)
             processed += 1
         except Exception:
             pass
@@ -541,12 +520,14 @@ async def bulk_properties_endpoint(
 @router.post("/ai-description")
 async def generate_ai_description_endpoint(
     req: AIDescriptionRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Generates a professional marketing description strictly grounded in property facts."""
+    """Generates a professional marketing description strictly grounded in property facts using AIGateway."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    return await service.generate_ai_description(req.model_dump())
+    return await service.generate_ai_description(req.model_dump(), broker=current_broker, organization_id=org_id)
 
 
 @router.get("/{property_id}/valuation")
@@ -555,12 +536,14 @@ async def get_property_valuation_endpoint(
     price: Optional[float] = Query(None),
     area_sqft: Optional[float] = Query(None),
     locality: Optional[str] = Query(None),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
-    """Backwards-compatible AI Automated Property Valuation Benchmark endpoint."""
+    """Backwards-compatible AI Automated Property Valuation Benchmark endpoint (tenant-scoped)."""
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, explicit_org_id=x_organization_id)
     service = PropertyService(db)
-    prop = await service.get_property(property_id, current_broker)
+    prop = await service.get_property(property_id, current_broker, organization_id=org_id)
 
     eval_price = price or float(prop.price)
     eval_area = area_sqft or float(prop.area_value)

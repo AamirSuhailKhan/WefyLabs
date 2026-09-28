@@ -15,7 +15,7 @@ import { MessageSquare, Mail, PhoneCall, FileText, Send, User, Paperclip, Play }
  * can actually send on today.
  */
 
-export type TimelineMessageChannel = 'web' | 'email' | 'sms' | 'call' | 'internal_note' | 'other';
+export type TimelineMessageChannel = 'whatsapp' | 'web' | 'email' | 'sms' | 'call' | 'internal_note' | 'other';
 
 export interface TimelineMessage {
   id: string;
@@ -35,7 +35,7 @@ export interface TimelineMessage {
   delivery_status?: 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown';
 }
 
-type ComposerChannel = 'web' | 'email' | 'sms' | 'internal_note';
+export type ComposerChannel = 'whatsapp' | 'web' | 'email' | 'sms' | 'internal_note';
 
 interface Props {
   messages: TimelineMessage[];
@@ -43,6 +43,11 @@ interface Props {
 }
 
 const CHANNEL_BADGES: Record<string, JSX.Element> = {
+  whatsapp: (
+    <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+      <MessageSquare className="w-3 h-3 text-emerald-600" /> WhatsApp
+    </span>
+  ),
   web: (
     <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-mono px-2 py-0.5 rounded-full">
       <MessageSquare className="w-3 h-3" /> Web Chat
@@ -85,7 +90,7 @@ const DELIVERY_STATUS_LABEL: Record<string, string> = {
 };
 
 export function UnifiedTimeline({ messages, onSendMessage }: Props) {
-  const [activeChannel, setActiveChannel] = useState<ComposerChannel>('web');
+  const [activeChannel, setActiveChannel] = useState<ComposerChannel>('whatsapp');
   const [inputText, setInputText] = useState('');
 
   const handleSend = () => {
@@ -96,6 +101,7 @@ export function UnifiedTimeline({ messages, onSendMessage }: Props) {
   };
 
   const composerChannels: { id: ComposerChannel; label: string }[] = [
+    { id: 'whatsapp', label: 'WhatsApp' },
     { id: 'web', label: 'Web Chat' },
     { id: 'email', label: 'Email' },
     { id: 'sms', label: 'SMS' },

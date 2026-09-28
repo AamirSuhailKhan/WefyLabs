@@ -193,7 +193,7 @@ def build_router_from_env() -> LLMRouter:
     from app.modules.ai_agent.llm_router.adapters.google_adapter import GoogleAdapter
 
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     primary = GoogleAdapter(api_key=gemini_key, model=gemini_model)
     return LLMRouter(primary=primary, fallback=None)

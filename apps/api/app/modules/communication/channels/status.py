@@ -139,21 +139,6 @@ class ChannelStatusService:
                 reason="Unknown or unsupported channel.",
             )
 
-        # WhatsApp is intentionally held out of the Hub for Part 12.
-        if channel is Channel.WHATSAPP:
-            return ChannelStatus(
-                channel=channel.value,
-                state=ChannelEnablementState.DISABLED,
-                enabled=False,
-                configured=await self._provider_configured(provider_key),
-                implemented=False,
-                provider_name=self._provider_name(provider_key),
-                reason=(
-                    "WhatsApp is intentionally disabled. It is not exposed by the "
-                    "Communication Hub and must not be activated in this part."
-                ),
-            )
-
         provider_name = self._provider_name(provider_key)
         if not enabled:
             return ChannelStatus(

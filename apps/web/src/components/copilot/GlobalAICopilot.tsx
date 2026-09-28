@@ -92,6 +92,13 @@ export function GlobalAICopilot() {
     prevMessagesLengthRef.current = messages.length;
   }, [messages.length, isOpen, loading]);
 
+  // Global event listener for navbar / keyboard triggers
+  useEffect(() => {
+    const handleToggle = () => setIsOpen((prev) => !prev);
+    window.addEventListener('wefylabs:toggle-copilot', handleToggle);
+    return () => window.removeEventListener('wefylabs:toggle-copilot', handleToggle);
+  }, []);
+
   // Load conversation list when opened
   useEffect(() => {
     if (isOpen) {

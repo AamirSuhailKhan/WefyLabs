@@ -58,8 +58,13 @@ class CandidateRetrievalService:
             else organization_id
         )
 
+        tenant_filter = or_(
+            PropertyListing.organization_id == broker_uuid,
+            PropertyListing.broker_id == broker_uuid
+        )
+
         conditions = [
-            PropertyListing.broker_id == broker_uuid,
+            tenant_filter,
             PropertyListing.deleted_at.is_(None),
             PropertyListing.status.in_(["available", "active", "ready"]),
         ]
@@ -87,7 +92,7 @@ class CandidateRetrievalService:
                 select(PropertyListing)
                 .where(
                     and_(
-                        PropertyListing.broker_id == broker_uuid,
+                        tenant_filter,
                         PropertyListing.deleted_at.is_(None),
                         PropertyListing.status.in_(["available", "active", "ready"]),
                     )
@@ -97,6 +102,7 @@ class CandidateRetrievalService:
             )
             fallback_res = await self.db.execute(fallback_stmt)
             listings = list(fallback_res.scalars().all())
+
 
         # Optional AVM overpriced filter
         if filter_overpriced:

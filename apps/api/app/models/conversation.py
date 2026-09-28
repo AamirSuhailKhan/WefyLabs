@@ -18,6 +18,12 @@ class Conversation(Base):
         primary_key=True,
         default=uuid.uuid4
     )
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
     lead_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("leads.id", ondelete="CASCADE"),

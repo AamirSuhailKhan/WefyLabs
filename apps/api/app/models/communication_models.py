@@ -102,6 +102,9 @@ class OmnichannelConversation(Base):
     organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     lead_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
 
+    identity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    external_conversation_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+
     # Control: who is currently handling this conversation
     # ai | human | bot | paused
     control_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="ai", index=True)
@@ -149,8 +152,38 @@ class OmnichannelConversation(Base):
         "ConversationControl", back_populates="conversation", uselist=False, cascade="all, delete-orphan"
     )
 
+    # ── Canonical Properties (Master Build 03) ──────────────────────────────
+    @property
+    def conversation_id(self) -> str:
+        return self.id
+
+    @property
+    def channel(self) -> str:
+        return self.preferred_channel
+
+    @property
+    def provider(self) -> str:
+        return "whatsapp_cloud" if self.preferred_channel == "whatsapp" else self.preferred_channel
+
+    @property
+    def assigned_agent(self) -> Optional[str]:
+        return self.assigned_agent_id
+
+    @property
+    def state(self) -> str:
+        return self.status
+
+    @state.setter
+    def state(self, val: str) -> None:
+        self.status = val
+
+    @property
+    def ai_enabled(self) -> bool:
+        return self.control_mode == "ai"
+
     __table_args__ = (
         Index("ix_omni_conv_org_lead", "organization_id", "lead_id"),
+        Index("ix_omni_conv_org_identity", "organization_id", "identity_id"),
         Index("ix_omni_conv_org_status", "organization_id", "status"),
         Index("ix_omni_conv_org_mode", "organization_id", "control_mode"),
     )
@@ -271,11 +304,15 @@ class ChannelMessage(Base):
     )
     organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     lead_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    identity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
     # Channel metadata
     channel: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     provider_name: Mapped[str] = mapped_column(String(50), nullable=False, default="unknown")
     provider_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    external_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    external_conversation_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    reply_to_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     # Message direction
     direction: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -290,6 +327,7 @@ class ChannelMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     content_structured: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)
     # For rich messages: buttons, list items, template params
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONBType, default=dict, nullable=True)
 
     # Sender/Recipient
     sender_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
@@ -317,6 +355,7 @@ class ChannelMessage(Base):
 
     # Timestamps
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -338,6 +377,26 @@ class ChannelMessage(Base):
     )
 
     @property
+    def message_id(self) -> str:
+        return self.id
+
+    @property
+    def provider(self) -> str:
+        return self.provider_name
+
+    @property
+    def content_type(self) -> str:
+        return self.message_type
+
+    @property
+    def status(self) -> str:
+        return self.delivery_status
+
+    @status.setter
+    def status(self, val: str) -> None:
+        self.delivery_status = val
+
+    @property
     def resolved_sender_type(self) -> str:
         """Resolves sender type to canonical spec: CUSTOMER | AI_AGENT | HUMAN_AGENT | SYSTEM."""
         if self.sender_type:
@@ -353,7 +412,9 @@ class ChannelMessage(Base):
     __table_args__ = (
         Index("ix_channel_msg_conv_created", "conversation_id", "created_at"),
         Index("ix_channel_msg_org_channel", "organization_id", "channel"),
+        Index("ix_channel_msg_org_identity", "organization_id", "identity_id"),
         Index("ix_channel_msg_provider_id", "provider_message_id"),
+        Index("ix_channel_msg_ext_msg_id", "external_message_id"),
     )
 
 
@@ -742,3 +803,150 @@ class PresenceRecord(Base):
                          name="uq_presence_org_entity_channel"),
         Index("ix_presence_org_status", "organization_id", "status"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MASTER BUILD 03 — CANONICAL STATE MACHINE, RAW PRESERVATION & MEMORY TRUTH
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CanonicalSenderType:
+    CUSTOMER = "CUSTOMER"
+    HUMAN_AGENT = "HUMAN_AGENT"
+    AI_AGENT = "AI_AGENT"
+    SYSTEM = "SYSTEM"
+
+
+class CanonicalMessageType:
+    TEXT = "text"
+    IMAGE = "image"
+    VIDEO = "video"
+    DOCUMENT = "document"
+    AUDIO = "audio"
+    LOCATION = "location"
+    CONTACT = "contact"
+    TEMPLATE = "template"
+    INTERACTIVE = "interactive"
+    BUTTON = "button"
+    LIST = "list"
+    SYSTEM_EVENT = "system_event"
+
+
+class CanonicalMessageStatus:
+    CREATED = "created"
+    QUEUED = "queued"
+    SENDING = "sending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
+
+
+# Valid state transitions enforced by the canonical communication engine
+VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "created": {"queued", "sending", "failed"},
+    "queued": {"sending", "sent", "failed"},
+    "sending": {"sent", "failed"},
+    "sent": {"delivered", "read", "failed"},
+    "delivered": {"read", "failed"},
+    "read": set(),  # Terminal delivery success
+    "failed": {"queued", "sending"},  # Allowed only via deterministic retry
+}
+
+
+def validate_message_status_transition(current_status: str, new_status: str) -> bool:
+    """
+    Enforces the canonical lifecycle:
+    CREATED → QUEUED → SENDING → SENT → DELIVERED → READ
+    Failure branch: QUEUED → FAILED, SENDING → FAILED, SENT → FAILED
+    Prevents impossible transitions (e.g. read → sent).
+    """
+    curr = (current_status or "created").lower()
+    nxt = (new_status or "").lower()
+    if curr == nxt:
+        return True
+    allowed = VALID_STATUS_TRANSITIONS.get(curr, set())
+    return nxt in allowed
+
+
+# ─── 14. RawCommunicationEvent (Section 12: Immutable Raw Archive) ────────────
+
+class RawCommunicationEvent(Base):
+    """
+    Immutable raw communication event store.
+    Section 12: Every inbound provider event retains raw evidence for
+    replay, audit, compliance, debugging, and dispute resolution.
+    """
+    __tablename__ = "raw_communication_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    provider_event_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    organization_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_payload: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    processing_status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False, index=True)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_raw_comm_provider_event", "provider", "provider_event_id"),
+        Index("ix_raw_comm_org_status", "organization_id", "processing_status"),
+        Index("ix_raw_comm_payload_hash", "payload_hash"),
+    )
+
+
+# ─── 15. ConversationMemoryFact (Sections 27 & 28: Memory with Provenance) ────
+
+class MemoryProvenanceEnum:
+    CUSTOMER_STATED = "CUSTOMER_STATED"
+    AGENT_STATED = "AGENT_STATED"
+    SYSTEM_DERIVED = "SYSTEM_DERIVED"
+    AI_INFERRED = "AI_INFERRED"
+
+
+class ConversationMemoryFact(Base):
+    """
+    Structured AI Conversation Memory items with strict provenance.
+    Section 27 & 28: Provenance tracking ensures AI-inferred facts
+    never silently become customer truth, and customer statements
+    authoritatively supersede previous inferences.
+    """
+    __tablename__ = "conversation_memory_facts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("omnichannel_conversations.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    identity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    lead_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+
+    fact_category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # budget | timeline | preferred_locations | property_preferences | intent | objections | next_action
+    fact_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    fact_value: Mapped[str] = mapped_column(Text, nullable=False)
+    fact_data: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)
+
+    provenance: Mapped[str] = mapped_column(String(30), nullable=False, default=MemoryProvenanceEnum.AI_INFERRED)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    is_authoritative: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    superseded_by_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_memory_facts_conv_cat", "conversation_id", "fact_category"),
+        Index("ix_memory_facts_org_key", "organization_id", "fact_key"),
+    )
+

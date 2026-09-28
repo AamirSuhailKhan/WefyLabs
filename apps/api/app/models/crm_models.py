@@ -104,8 +104,9 @@ class LeadTagAssignment(Base):
 
 class Task(Base):
     """
-    CRM Task entity — follow-up calls, site visit scheduling, proposal delivery.
-    Tenant-isolated via organization_id and workspace_id.
+    Canonical WorkItem — the single unified task/follow-up/action model.
+    Build 07: Extended with type, source, idempotency_key, conversation_id,
+    reason, and full provenance. Backward-compatible (new fields are nullable).
     """
     __tablename__ = "tasks"
 
@@ -118,18 +119,114 @@ class Task(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     due_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    status = Column(String(20), default="pending", nullable=False)  # pending | in_progress | completed | cancelled
+    scheduled_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    status = Column(String(30), default="pending", nullable=False)
+    # status values: pending | scheduled | ready | in_progress | completed | skipped | cancelled | failed | expired
     priority = Column(String(10), default="normal", nullable=False)  # low | normal | high | urgent
     reminder_sent = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # ── Build 07: WorkItem canonical extensions ──────────────────────────────
+    # Type: controlled work item type (FOLLOW_UP, CALL_BACK, SEND_MESSAGE, etc.)
+    task_type = Column(String(50), nullable=True, index=True)
+    # Source: origin of this work item
+    source = Column(String(50), nullable=True)  # CUSTOMER_REQUEST | AI_RECOMMENDATION | WORKFLOW | SYSTEM_SLA | ...
+    # Idempotency: prevents duplicate work items from concurrent creation
+    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)
+    # Correlation: links related work items across the trace
+    correlation_id = Column(String(100), nullable=True, index=True)
+    # Linked entities
+    conversation_id = Column(String(36), nullable=True, index=True)
+    identity_id = Column(String(36), nullable=True, index=True)
+    opportunity_id = Column(String(36), nullable=True, index=True)
+    # Reason: why this task exists (human-readable)
+    reason = Column(Text, nullable=True)
+    # Provenance: traceable back to originating event/message/action/workflow
+    source_event_id = Column(String(100), nullable=True)
+    source_message_id = Column(String(100), nullable=True)
+    source_action_id = Column(String(100), nullable=True)
+    source_workflow_id = Column(String(36), nullable=True)
+    source_agent_run_id = Column(String(36), nullable=True)
+    # Assignment
+    assigned_team = Column(String(100), nullable=True)
+    # Expiry
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     lead = relationship("Lead")
 
     __table_args__ = (
         Index("ix_tasks_org_status", "organization_id", "status"),
         Index("ix_tasks_broker_due", "broker_id", "due_at"),
+        Index("ix_tasks_org_type", "organization_id", "task_type"),
+        Index("ix_tasks_lead_type", "lead_id", "task_type"),
+    )
+
+
+# ── WorkItem type and source controlled vocabularies ────────────────────────
+WORK_ITEM_TYPES = {
+    "FOLLOW_UP", "CALL_BACK", "SEND_MESSAGE", "SEND_PROPERTY",
+    "ASK_QUESTION", "APPOINTMENT_CONFIRMATION", "SITE_VISIT_CONFIRMATION",
+    "POST_VISIT_FOLLOW_UP", "DOCUMENT_REQUEST", "DOCUMENT_REMINDER",
+    "NEGOTIATION_FOLLOW_UP", "REENGAGEMENT", "HUMAN_HANDOFF", "INTERNAL_REVIEW",
+}
+
+WORK_ITEM_SOURCES = {
+    "CUSTOMER_REQUEST", "AI_RECOMMENDATION", "WORKFLOW", "SYSTEM_SLA",
+    "HUMAN_AGENT", "APPOINTMENT", "SITE_VISIT", "PROPERTY_INTERACTION",
+    "REENGAGEMENT_RULE",
+}
+
+WORK_ITEM_STATUSES = {
+    "pending", "scheduled", "ready", "in_progress",
+    "completed", "skipped", "cancelled", "failed", "expired",
+}
+
+
+class Commitment(Base):
+    """
+    Build 07 — Promise / Commitment Engine.
+    Tracks both company commitments ("I'll send the brochure in 10 minutes")
+    and customer commitments ("I'll send documents tomorrow").
+    Both are traceable. Neither is confused with the other.
+    """
+    __tablename__ = "commitments"
+
+    id = Column(String(36), primary_key=True, default=_gen_uuid)
+    organization_id = Column(String(36), nullable=False, index=True)
+    lead_id = Column(String(36), nullable=False, index=True)
+    conversation_id = Column(String(36), nullable=True, index=True)
+    source_message_id = Column(String(100), nullable=True)
+
+    # Who made the commitment: COMPANY or CUSTOMER
+    owner = Column(String(20), nullable=False)  # COMPANY | CUSTOMER
+
+    # What was promised (structured + raw)
+    commitment = Column(Text, nullable=False)
+    commitment_type = Column(String(50), nullable=True)  # CALL_BACK | SEND_DOCUMENT | SEND_BROCHURE | VISIT | OTHER
+
+    # Timing
+    due_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    # Lifecycle
+    status = Column(String(20), default="PENDING", nullable=False, index=True)
+    # PENDING | FULFILLED | MISSED | CANCELLED | EXPIRED
+
+    # If company commitment → linked work item
+    work_item_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+
+    # Audit
+    fulfilled_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_commitments_lead_status", "lead_id", "status"),
+        Index("ix_commitments_org_due", "organization_id", "due_at"),
     )
 
 

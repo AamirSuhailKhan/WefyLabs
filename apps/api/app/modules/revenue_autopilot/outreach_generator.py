@@ -123,16 +123,14 @@ class RevenueOutreachGenerator:
         Falls back seamlessly to deterministic generation if Gemini is offline or unconfigured.
         Returns: (call_brief, email_draft, is_ai_generated, model_used)
         """
-        gemini_key = getattr(settings, "GEMINI_API_KEY", "") or getattr(settings, "GOOGLE_API_KEY", "")
-        if not gemini_key or gemini_key == "mock-gemini-key":
+        org_id = getattr(lead, "organization_id", None) or getattr(opp, "organization_id", None) or getattr(lead, "broker_id", None)
+        if not org_id:
             cb, ed = cls.generate_deterministic_fallback(lead, prop, opp)
             return cb, ed, False, "deterministic_v1"
 
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash")
-            model = genai.GenerativeModel(model_name)
+            from app.infrastructure.ai_gateway.gateway import AIGateway
+            gateway = AIGateway()
 
             lead_data = {
                 "name": cls.sanitize_untrusted_text(lead.name) or "Client",
@@ -190,29 +188,26 @@ Return STRICT JSON with the following structure:
   }}
 }}
 """
-            response = await asyncio.wait_for(
-                model.generate_content_async(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                ),
-                timeout=3.0
+            res = await gateway.complete(
+                organization_id=org_id,
+                feature="revenue_autopilot_outreach",
+                task_type="outreach_generation",
+                messages=[{"role": "user", "content": prompt}],
+                expect_json=True,
+                max_tokens=600,
             )
-            raw_text = response.text.strip()
-            # Clean markdown fences if any
-            if raw_text.startswith("```"):
-                raw_text = re.sub(r"^```(?:json)?\n?", "", raw_text)
-                raw_text = re.sub(r"\n?```$", "", raw_text)
 
-            parsed = json.loads(raw_text)
-            call_brief = parsed.get("call_brief", {})
-            email_draft = parsed.get("email_draft", {})
-            if not call_brief or not email_draft:
-                raise ValueError("Incomplete structured output from Gemini")
+            if res.success and res.structured:
+                call_brief = res.structured.get("call_brief", {})
+                email_draft = res.structured.get("email_draft", {})
+                if call_brief and email_draft:
+                    return call_brief, email_draft, True, res.model
 
-            return call_brief, email_draft, True, model_name
+            cb, ed = cls.generate_deterministic_fallback(lead, prop, opp)
+            return cb, ed, False, "deterministic_v1"
 
         except Exception as exc:
-            logger.warning(f"[OUTREACH_GENERATOR] Gemini call failed ({exc}), falling back to deterministic template.")
+            logger.warning(f"[OUTREACH_GENERATOR] AIGateway call failed ({exc}), falling back to deterministic template.")
             cb, ed = cls.generate_deterministic_fallback(lead, prop, opp)
             return cb, ed, False, "deterministic_v1"
 

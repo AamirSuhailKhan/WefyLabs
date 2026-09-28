@@ -143,16 +143,38 @@ class ActionRegistry:
 
     async def _handle_crm_create_task(self, params: Dict[str, Any], context: Dict[str, Any], org_id: str) -> ActionResult:
         title = params.get("title", "Follow up with customer")
-        lead_id = params.get("lead_id") or context.get("lead_id")
-        broker_id = params.get("broker_id") or context.get("broker_id")
+        lead_id = params.get("lead_id") or context.get("lead_id") or context.get("lead", {}).get("id")
+        broker_id = params.get("broker_id") or context.get("broker_id") or org_id
+        task_type = params.get("task_type", "FOLLOW_UP")
+        due_at = params.get("due_at")
 
-        return ActionResult("SUCCESS", {
-            "task_id": str(uuid.uuid4()),
-            "title": title,
-            "lead_id": str(lead_id),
-            "broker_id": str(broker_id),
-            "status": "PENDING"
-        })
+        from app.modules.follow_up.work_item_service import WorkItemService
+        service = WorkItemService(self.db)
+        try:
+            task = await service.create(
+                organization_id=org_id,
+                broker_id=str(broker_id),
+                task_type=task_type,
+                source="WORKFLOW",
+                title=title,
+                lead_id=str(lead_id) if lead_id else None,
+                description=params.get("description"),
+                priority=params.get("priority", "normal"),
+                due_at=due_at,
+                source_workflow_id=str(context.get("workflow_id")) if context.get("workflow_id") else None,
+                idempotency_key=params.get("idempotency_key"),
+            )
+            return ActionResult("SUCCESS", {
+                "task_id": str(task.id),
+                "title": task.title,
+                "lead_id": str(lead_id) if lead_id else None,
+                "broker_id": str(broker_id),
+                "status": task.status,
+                "task_type": task.task_type,
+            })
+        except Exception as exc:
+            logger.warning(f"[ActionRegistry] WorkItem creation failed: {exc}")
+            return ActionResult("FAILED", {}, str(exc), is_retryable=False)
 
     async def _handle_predictive_predict_conversion(self, params: Dict[str, Any], context: Dict[str, Any], org_id: str) -> ActionResult:
         lead_id = params.get("lead_id") or context.get("lead_id")

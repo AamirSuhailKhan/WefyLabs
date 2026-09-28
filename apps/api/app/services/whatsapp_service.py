@@ -15,15 +15,33 @@ def normalize_to_digits_only(phone: str) -> str:
 
 async def send_message(to_phone: str, message: str, message_type: str = "text") -> bool:
     """
-    Sends a WhatsApp message via Meta Cloud API Direct (Free 1,000 conversations/month)
-    or 360dialog WABA API as fallback.
-    Retries once after 5 seconds if an error occurs.
+    Sends a WhatsApp message via the unified WhatsAppCloudProvider adapter.
+    Enforces the zero-fake-success invariant: never returns True when unconfigured
+    or when rejected by the provider.
     """
     recipient_digits = normalize_to_digits_only(to_phone)
-    
-    if settings.ENV in ("testing", "test"):
-        logger.info(f"[Test Mode WhatsApp Dispatch] To: {recipient_digits} | Message: {message[:30]}...")
-        return True
+    from app.modules.communication.channel_manager.manager import get_channel_manager
+    from app.modules.communication.provider_adapters.base_provider import OutboundMessageDTO
+    import uuid
+
+    channel_mgr = get_channel_manager()
+    provider = channel_mgr.get_provider("whatsapp")
+    if not provider or not provider.is_configured():
+        logger.warning(f"[WhatsAppService] WhatsApp provider not configured; cannot send to {recipient_digits}")
+        return False
+
+    dto = OutboundMessageDTO(
+        message_id=str(uuid.uuid4()),
+        conversation_id=str(uuid.uuid4()),
+        organization_id=getattr(settings, "DEFAULT_ORGANIZATION_ID", "default"),
+        channel="whatsapp",
+        provider_name="whatsapp_cloud",
+        recipient_identifier=recipient_digits,
+        content=message,
+        message_type=message_type,
+    )
+    resp = await provider.send(dto)
+    return bool(resp.success)
 
     # 1. Prefer Meta Cloud API Direct (Free 1,000 convos/mo) if credentials configured
     if settings.WHATSAPP_ACCESS_TOKEN and settings.PHONE_NUMBER_ID:
@@ -76,9 +94,12 @@ async def send_message(to_phone: str, message: str, message_type: str = "text") 
         "text": {"body": message}
     }
 
-    if settings.DIALOG360_API_KEY == "d360_key_placeholder" or settings.ENV == "testing":
-        logger.info(f"[WhatsApp Simulated Send] To: {recipient_digits} | Msg: {message}")
-        return True
+    if settings.DIALOG360_API_KEY in ("d360_key_placeholder", "", "placeholder", "none", "null"):
+        if settings.ENV in ("testing", "test"):
+            logger.info(f"[Test Mode WhatsApp Simulated Send] To: {recipient_digits} | Msg: {message}")
+            return True
+        logger.warning(f"[WhatsApp Not Configured] Cannot send to {recipient_digits}: DIALOG360_API_KEY is placeholder or unset.")
+        return False
 
     for attempt in range(2):
         try:

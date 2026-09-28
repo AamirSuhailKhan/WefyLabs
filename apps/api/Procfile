@@ -1,3 +1,3 @@
-web: /app/entrypoint.sh
-worker: celery -A app.celery_app.celery_app worker --loglevel=info -Q lead_queue,email_queue,whatsapp_queue,notification_queue,analytics_queue,webhook_queue,ai_queue,retry_queue
-beat: celery -A app.celery_app.celery_app beat --loglevel=info
+web: ./entrypoint.sh
+worker: celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=4 -Q lead_queue,email_queue,whatsapp_queue,notification_queue,analytics_queue,webhook_queue,ai_queue,retry_queue,dead_letter_queue,knowledge-ingestion,knowledge-parser,knowledge-ocr,knowledge-extraction,knowledge-chunking,knowledge-embedding,knowledge-indexing,knowledge-reindex,knowledge-deletion,knowledge-evaluation,knowledge-retry,knowledge-dead-letter,calendar-sync,reminders,booking,calendar-conflict,meeting-preparation,no-show-prediction,crm-intelligence-processing,lead-health,sla-monitoring,pipeline-analysis,agent-analysis,anomaly-detection,daily-brief,prediction,forecast,drift-monitoring,batch-prediction,outcome-processing,workflow-trigger,workflow-execution,workflow-actions,workflow-timers,workflow-approvals,memory-decay,memory-retention,sales-loop-orchestration,sales-loop-retry,export_queue,import_queue
+beat: celery -A app.celery_app.celery_app beat --loglevel=info --scheduler celery.beat:PersistentScheduler --pidfile=/tmp/celerybeat.pid --schedule=/tmp/celerybeat-schedule

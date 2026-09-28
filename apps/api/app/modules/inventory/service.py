@@ -392,6 +392,28 @@ class UnitService:
 
             unit.updated_at = now
 
+            # Sync to linked PropertyListing if connected
+            if unit.property_listing_id:
+                try:
+                    from app.models.property_models import PropertyListing
+                    stmt_listing = select(PropertyListing).where(PropertyListing.id == unit.property_listing_id)
+                    listing_res = await self.db.execute(stmt_listing)
+                    listing = listing_res.scalars().first()
+                    if listing:
+                        listing.status = to_status
+                        listing.updated_at = now
+                        from app.infrastructure.cache.query_cache import AsyncQueryCacheService
+                        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:property:{unit.property_listing_id}")
+                        AsyncQueryCacheService.invalidate_tag(f"tenant:{org_id}:search")
+                except Exception as sync_exc:
+                    logger.warning(f"[Unit] Failed to sync status to linked listing {unit.property_listing_id}: {sync_exc}")
+
+            # Recompute project inventory counters
+            try:
+                await ProjectService(self.db).update_project_inventory_counters(unit.project_id)
+            except Exception as cnt_exc:
+                logger.warning(f"[Unit] Failed to update project counters: {cnt_exc}")
+
             # Write status log (append-only)
             log_entry = await self._write_status_log(
                 unit, previous=from_status, new=to_status,
@@ -410,6 +432,7 @@ class UnitService:
                         "unit_id": str(unit.id),
                         "unit_code": unit.unit_code,
                         "project_id": str(unit.project_id),
+                        "property_listing_id": str(unit.property_listing_id) if unit.property_listing_id else None,
                         "from_status": from_status,
                         "to_status": to_status,
                         "deal_id": str(deal_id) if deal_id else None,

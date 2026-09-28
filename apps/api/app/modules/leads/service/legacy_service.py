@@ -24,13 +24,21 @@ async def list_leads(
     source: Optional[str] = None,
     search: Optional[str] = None,
     sort_by: str = "created_at",
-    sort_order: str = "desc"
+    sort_order: str = "desc",
+    organization_id: Optional[uuid.UUID] = None,
 ) -> LeadListResponse:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
     page = max(1, page)
     limit = min(100, max(1, limit))
 
+    if organization_id is not None:
+        tenant_filter = tenant_lead_filter(organization_id, broker_id)
+    else:
+        tenant_filter = Lead.broker_id == broker_id
+
     query = select(Lead).where(
-        Lead.broker_id == broker_id,
+        tenant_filter,
         Lead.deleted_at.is_(None)
     )
 
@@ -80,7 +88,23 @@ async def list_leads(
         pages=pages
     )
 
-async def create_lead(db: AsyncSession, broker_id: uuid.UUID, req: LeadCreate) -> LeadResponse:
+async def create_lead(
+    db: AsyncSession,
+    broker_id: uuid.UUID,
+    req: LeadCreate,
+    organization_id: Optional[uuid.UUID] = None,
+) -> LeadResponse:
+    if organization_id is None:
+        from app.models.organization import OrganizationMember
+        mem_res = await db.execute(
+            select(OrganizationMember.organization_id).where(
+                OrganizationMember.broker_id == broker_id
+            )
+        )
+        found_org = mem_res.scalars().first()
+        if found_org:
+            organization_id = found_org
+
     initial_notes: List[Dict[str, Any]] = []
     if req.notes:
         if isinstance(req.notes, str):
@@ -106,6 +130,7 @@ async def create_lead(db: AsyncSession, broker_id: uuid.UUID, req: LeadCreate) -
             })
 
     lead = Lead(
+        organization_id=organization_id,
         broker_id=broker_id,
         phone=req.phone,
         name=req.name,
@@ -131,7 +156,7 @@ async def create_lead(db: AsyncSession, broker_id: uuid.UUID, req: LeadCreate) -
         now = datetime.now(timezone.utc)
         attribution = SourceAttribution(
             id=str(uuid.uuid4()),
-            organization_id=str(broker_id),
+            organization_id=str(organization_id or broker_id),
             lead_id=str(lead.id),
             channel=req.source or "manual",
             provider="crm_manual",
@@ -146,14 +171,26 @@ async def create_lead(db: AsyncSession, broker_id: uuid.UUID, req: LeadCreate) -
 
     await db.commit()
 
-    return await get_lead_by_id(db, lead.id, broker_id)
+    return await get_lead_by_id(db, lead.id, broker_id, organization_id=organization_id)
 
-async def get_lead_by_id(db: AsyncSession, lead_id: uuid.UUID, broker_id: uuid.UUID) -> LeadResponse:
+async def get_lead_by_id(
+    db: AsyncSession,
+    lead_id: uuid.UUID,
+    broker_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID] = None,
+) -> LeadResponse:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
+    if organization_id is not None:
+        tenant_filter = tenant_lead_filter(organization_id, broker_id)
+    else:
+        tenant_filter = Lead.broker_id == broker_id
+
     stmt = (
         select(Lead)
         .where(
             Lead.id == lead_id,
-            Lead.broker_id == broker_id,
+            tenant_filter,
             Lead.deleted_at.is_(None)
         )
         .options(
@@ -180,11 +217,15 @@ async def update_lead_status(
     db: AsyncSession,
     lead_id: uuid.UUID,
     broker_id: uuid.UUID,
-    new_status: str
+    new_status: str,
+    organization_id: Optional[uuid.UUID] = None,
 ) -> LeadResponse:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
+    tenant_filter = tenant_lead_filter(organization_id, broker_id) if organization_id else (Lead.broker_id == broker_id)
     stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == broker_id,
+        tenant_filter,
         Lead.deleted_at.is_(None)
     )
     result = await db.execute(stmt)
@@ -205,17 +246,21 @@ async def update_lead_status(
     lead.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return await get_lead_by_id(db, lead_id, broker_id)
+    return await get_lead_by_id(db, lead_id, broker_id, organization_id=organization_id)
 
 async def update_lead_stage(
     db: AsyncSession,
     lead_id: uuid.UUID,
     broker_id: uuid.UUID,
-    new_stage: str
+    new_stage: str,
+    organization_id: Optional[uuid.UUID] = None,
 ) -> LeadResponse:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
+    tenant_filter = tenant_lead_filter(organization_id, broker_id) if organization_id else (Lead.broker_id == broker_id)
     stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == broker_id,
+        tenant_filter,
         Lead.deleted_at.is_(None)
     )
     result = await db.execute(stmt)
@@ -235,17 +280,21 @@ async def update_lead_stage(
     lead.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return await get_lead_by_id(db, lead_id, broker_id)
+    return await get_lead_by_id(db, lead_id, broker_id, organization_id=organization_id)
 
 async def add_lead_note(
     db: AsyncSession,
     lead_id: uuid.UUID,
     broker_id: uuid.UUID,
-    note_req: NoteCreate
+    note_req: NoteCreate,
+    organization_id: Optional[uuid.UUID] = None,
 ) -> LeadResponse:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
+    tenant_filter = tenant_lead_filter(organization_id, broker_id) if organization_id else (Lead.broker_id == broker_id)
     stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == broker_id,
+        tenant_filter,
         Lead.deleted_at.is_(None)
     )
     result = await db.execute(stmt)
@@ -270,16 +319,20 @@ async def add_lead_note(
     lead.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
-    return await get_lead_by_id(db, lead_id, broker_id)
+    return await get_lead_by_id(db, lead_id, broker_id, organization_id=organization_id)
 
 async def soft_delete_lead(
     db: AsyncSession,
     lead_id: uuid.UUID,
-    broker_id: uuid.UUID
+    broker_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID] = None,
 ) -> None:
+    from app.infrastructure.tenancy.scope import tenant_lead_filter
+
+    tenant_filter = tenant_lead_filter(organization_id, broker_id) if organization_id else (Lead.broker_id == broker_id)
     stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == broker_id,
+        tenant_filter,
         Lead.deleted_at.is_(None)
     )
     result = await db.execute(stmt)

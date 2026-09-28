@@ -64,13 +64,10 @@ class ReengagementService:
         message_body = deterministic_body
 
         try:
-            from app.config import settings
-            api_key = getattr(settings, "GEMINI_API_KEY", None)
-            if api_key and api_key != "mock-gemini-key":
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
-
+            from app.infrastructure.ai_gateway.gateway import AIGateway
+            org_id = getattr(lead, "organization_id", None) or getattr(lead, "broker_id", None)
+            if org_id:
+                gateway = AIGateway()
                 system_prompt = (
                     "You are a professional real estate assistant. Generate a polite, concise (under 50 words) "
                     "re-engagement message for an inactive client. Strictly use only the provided facts. "
@@ -84,14 +81,21 @@ class ReengagementService:
                     f"Advisor Name: {broker_name}\n\n"
                     "Generate single re-engagement draft:"
                 )
-                response = await model.generate_content_async(
-                    contents=[{"role": "user", "parts": [f"{system_prompt}\n\n{user_prompt}"]}]
+                res = await gateway.complete(
+                    organization_id=org_id,
+                    feature="ai_reengagement",
+                    task_type="reengagement_draft",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=150,
                 )
-                if response and response.text:
-                    message_body = response.text.strip()
+                if res.success and res.content and lead_name.lower() in res.content.lower():
+                    message_body = res.content.strip()
                     ai_generated = True
         except Exception as exc:
-            logger.warning(f"[ReengagementService] Gemini unavailable, using deterministic draft: {exc}")
+            logger.warning(f"[ReengagementService] AIGateway unavailable, using deterministic draft: {exc}")
 
         return {
             "lead_id": str(lead.id),

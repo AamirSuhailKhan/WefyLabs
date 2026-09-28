@@ -27,6 +27,12 @@ class Lead(Base):
         primary_key=True,
         default=uuid.uuid4
     )
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
     broker_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("brokers.id", ondelete="CASCADE"),
@@ -137,6 +143,7 @@ class Lead(Base):
         Index("ix_leads_broker_id_pipeline_stage", "broker_id", "pipeline_stage"),
         Index("ix_leads_broker_deleted_created", "broker_id", "deleted_at", "created_at"),
         Index("ix_leads_country_market", "country_code", "market_id"),
+        Index("ix_leads_org_status", "organization_id", "status"),
     )
 
     broker: Mapped["Broker"] = relationship("Broker", back_populates="leads")
@@ -145,15 +152,11 @@ class Lead(Base):
     follow_ups: Mapped[List["FollowUp"]] = relationship("FollowUp", back_populates="lead", cascade="all, delete-orphan", order_by="FollowUp.scheduled_at.asc()")
     interested_properties: Mapped[List["LeadPropertyInterest"]] = relationship("LeadPropertyInterest", back_populates="lead", cascade="all, delete-orphan")
 
-    @property
-    def organization_id(self) -> str:
-        return str(self.broker_id)
-
     def to_canonical_dict(self) -> Dict[str, Any]:
         """Canonical representation of customer identity and CRM state."""
         return {
             "customer_id": str(self.id),
-            "organization_id": str(self.broker_id),
+            "organization_id": str(self.organization_id or self.broker_id),
             "name": self.name,
             "phone": self.phone,
             "email": self.email,

@@ -830,14 +830,56 @@ export const api = {
     getPartnerPortal: (cpId: string) => fetcher<any>(`/inventory/channel-partners/${cpId}/portal`),
   },
 
-  // Inbox & Unified Timeline
+  // Inbox & Unified Omnichannel Communication (Part 12 & Master Build 10)
   inbox: {
-    getConversations: (leadId: string) =>
-      fetcher<any>(`/leads/${leadId}/conversations`).catch(() => []),
-    sendMessage: (data: { lead_id: string; channel: string; content: string }) =>
-      fetcher<any>('/communication/send', {
+    getInbox: (params?: { channel?: string; status?: string; control_mode?: string; search?: string; page?: number; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.channel && params.channel !== 'all') q.set('channel', params.channel);
+      if (params?.status) q.set('status', params.status);
+      if (params?.control_mode) q.set('control_mode', params.control_mode);
+      if (params?.search) q.set('search', params.search);
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<{ total: number; page: number; limit: number; items: any[] }>(`/communication/v2/inbox${qs}`);
+    },
+    getConversations: (leadId?: string, page = 1, limit = 20) => {
+      if (leadId) {
+        return fetcher<any>(`/communication/v2/conversations?lead_id=${encodeURIComponent(leadId)}&page=${page}&limit=${limit}`)
+          .catch(() => fetcher<any>(`/leads/${leadId}/conversations`).catch(() => []));
+      }
+      return fetcher<{ total: number; page: number; limit: number; items: any[] }>(`/communication/v2/conversations?page=${page}&limit=${limit}`)
+        .catch(() => ({ total: 0, page: 1, limit, items: [] }));
+    },
+    getConversationDetail: (id: string) =>
+      fetcher<any>(`/communication/v2/conversations/${id}`),
+    sendMessage: (payload: { lead_id: string; channel: string; content: string; conversation_id?: string; attachments?: any[] }) =>
+      payload.conversation_id
+        ? fetcher<any>(`/communication/v2/conversations/${payload.conversation_id}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ content: payload.content, channel: payload.channel, attachments: payload.attachments || [] })
+          })
+        : fetcher<any>('/communication/v2/send', {
+            method: 'POST',
+            body: JSON.stringify({ lead_id: payload.lead_id, channel: payload.channel, message_type: 'text', content: payload.content })
+          }).catch(() => fetcher<any>('/communication/send', {
+            method: 'POST',
+            body: JSON.stringify({ lead_id: payload.lead_id, channel: payload.channel, content: payload.content })
+          })),
+    takeover: (conversationId: string, reason?: string) =>
+      fetcher<{ status: string; conversation_id: string; control_mode: string }>(`/communication/v2/conversations/${conversationId}/takeover`, {
         method: 'POST',
-        body: JSON.stringify(data)
+        body: JSON.stringify({ reason: reason || 'Human broker takeover from Omnichannel Inbox' })
+      }),
+    handback: (conversationId: string, notes?: string) =>
+      fetcher<{ status: string; conversation_id: string; control_mode: string }>(`/communication/v2/conversations/${conversationId}/handback`, {
+        method: 'POST',
+        body: JSON.stringify({ notes: notes || 'Handoff back to autonomous AI sales loop' })
+      }),
+    generateAIDraft: (conversationId: string, prompt?: string) =>
+      fetcher<{ draft: string; confidence?: number; rationale?: string }>(`/communication/v2/conversations/${conversationId}/ai-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt: prompt || 'Draft polite follow-up based on latest customer intent and matched properties' })
       })
   },
 
@@ -929,7 +971,27 @@ export const api = {
       body: JSON.stringify({ plan_id: planId })
     }),
 
-    getStatus: () => fetcher<{ subscription_status: string; subscription_plan?: string; trial_ends_at: string; trial_days_remaining: number; razorpay_customer_id?: string; razorpay_subscription_id?: string }>('/billing/status')
+    getStatus: () => fetcher<{ subscription_status: string; subscription_plan?: string; trial_ends_at: string; trial_days_remaining: number; razorpay_customer_id?: string; razorpay_subscription_id?: string }>('/billing/status'),
+
+    // Master Build 13 — Canonical Billing Portal APIs
+    portal: {
+      getCatalog: () => fetcher<any[]>('/billing/portal/catalog').catch(() => []),
+      getSubscription: () => fetcher<any>('/billing/portal/subscription').catch(() => null),
+      getUsage: () => fetcher<any>('/billing/portal/usage').catch(() => null),
+      getEntitlements: () => fetcher<any>('/billing/portal/entitlements').catch(() => null),
+      getInvoices: () => fetcher<any[]>('/billing/portal/invoices').catch(() => []),
+      getCredits: () => fetcher<any>('/billing/portal/credits').catch(() => ({ balance: '0.00', currency: 'INR', entries: [] })),
+      upgradePlan: (planCode: string, interval?: string) =>
+        fetcher<any>('/billing/portal/upgrade', {
+          method: 'POST',
+          body: JSON.stringify({ plan_code: planCode, interval: interval || 'MONTHLY' })
+        }),
+      cancelSubscription: (immediate?: boolean, reason?: string) =>
+        fetcher<any>('/billing/portal/cancel', {
+          method: 'POST',
+          body: JSON.stringify({ immediate: !!immediate, reason })
+        })
+    }
   },
 
   // Part 27 — Follow-Up Automation Engine
@@ -2073,6 +2135,130 @@ export const api = {
       fetcher<SnapshotListDTO>(`/revenue-intelligence/snapshots?limit=${limit}`)
   },
 
+  // ─── Master Build 09 — Revenue Intelligence OS (Canonical) ───────────
+  analyticsOS: {
+    getRevenueSummary: (params?: { date_from?: string; date_to?: string; currency?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.date_from) q.append('date_from', params.date_from);
+      if (params?.date_to) q.append('date_to', params.date_to);
+      if (params?.currency) q.append('currency', params.currency);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/revenue${qStr}`);
+    },
+    getRevenueOverview: (params?: { date_from?: string; date_to?: string; currency?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.date_from) q.append('date_from', params.date_from);
+      if (params?.date_to) q.append('date_to', params.date_to);
+      if (params?.currency) q.append('currency', params.currency);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/overview${qStr}`);
+    },
+    getFunnelSummary: (params?: { date_from?: string; date_to?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.date_from) q.append('date_from', params.date_from);
+      if (params?.date_to) q.append('date_to', params.date_to);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/funnel${qStr}`);
+    },
+    getFunnelVelocity: (params?: { date_from?: string; date_to?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.date_from) q.append('date_from', params.date_from);
+      if (params?.date_to) q.append('date_to', params.date_to);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/funnel/velocity${qStr}`);
+    },
+    getPipelineSummary: () => fetcher<any>('/analytics/pipeline'),
+    recordTouchpoint: (payload: any) =>
+      fetcher<any>('/analytics/attribution/touchpoint', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    computeAttribution: (payload: any) =>
+      fetcher<any>('/analytics/attribution/compute', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getSourceAttribution: (params?: { model?: string; window_days?: number; date_from?: string; date_to?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.model) q.append('model', params.model);
+      if (params?.window_days) q.append('window_days', String(params.window_days));
+      if (params?.date_from) q.append('date_from', params.date_from);
+      if (params?.date_to) q.append('date_to', params.date_to);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/attribution${qStr}`);
+    },
+    generateForecast: (payload: any) =>
+      fetcher<any>('/analytics/forecast', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    reconcileForecast: (snapshotId: string, payload: { actual_revenue?: string; actual_bookings?: number }) =>
+      fetcher<any>(`/analytics/forecast/${snapshotId}/reconcile`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getLeakageReport: (params?: { min_severity?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.min_severity) q.append('min_severity', params.min_severity);
+      const qStr = q.toString() ? `?${q.toString()}` : '';
+      return fetcher<any>(`/analytics/leakage${qStr}`);
+    },
+    scanLeakage: () =>
+      fetcher<any>('/analytics/leakage/scan', { method: 'POST' }),
+    resolveLeakage: (leakageId: string, payload: { resolution_action: string; resolution_outcome: string }) =>
+      fetcher<any>(`/analytics/leakage/${leakageId}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    scanAnomalies: (params?: any) =>
+      fetcher<any>('/analytics/anomalies/scan', {
+        method: 'POST',
+        body: JSON.stringify(params || {}),
+      }),
+    computeUnitEconomics: (payload: any) =>
+      fetcher<any>('/analytics/unit-economics', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    runReconciliation: (payload?: any) =>
+      fetcher<any>('/analytics/reconciliation', {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      }),
+  },
+
+  // ─── Master Build 14 — Competitive Moat & Intelligence OS ─────────────
+  intelligenceOS: {
+    getExecutiveDashboard: (periodType: string = 'MONTHLY') =>
+      fetcher<any>(`/intelligence/dashboards/executive?period_type=${periodType}`),
+    getManagerDashboard: () =>
+      fetcher<any>('/intelligence/dashboards/manager'),
+    getSalesDashboard: () =>
+      fetcher<any>('/intelligence/dashboards/sales'),
+    getMoatMetrics: () =>
+      fetcher<any>('/intelligence/moat/metrics'),
+    getCompetitiveMatrix: () =>
+      fetcher<any>('/intelligence/competitive/matrix'),
+    getChannelAnalytics: () =>
+      fetcher<any>('/intelligence/channels/analytics'),
+    getCoachingSignals: (agentId?: string) =>
+      fetcher<any>(`/intelligence/coaching/signals${agentId ? `?agent_id=${agentId}` : ''}`),
+    getPlaybook: () =>
+      fetcher<any>('/intelligence/playbook'),
+    getBenchmarkComparison: (metric: string = 'conversion_rate') =>
+      fetcher<any>(`/intelligence/benchmarks/compare?metric_name=${metric}`),
+    getInsights: () =>
+      fetcher<any[]>('/intelligence/insights'),
+    getDataQuality: () =>
+      fetcher<any>('/intelligence/data-quality/report'),
+    getLeadJourney: (leadId: string) =>
+      fetcher<any>(`/intelligence/graph/leads/${leadId}/journey`),
+    listOutcomes: (limit: number = 50) =>
+      fetcher<any[]>(`/intelligence/outcomes?limit=${limit}`),
+    evaluateExperiment: (experimentId: string) =>
+      fetcher<any>(`/intelligence/experiments/${experimentId}/evaluate`),
+  },
+
   // Native CRM Core (Part 14)
   crm: {
     getCustomers: (params?: { search?: string; limit?: number; offset?: number }) => {
@@ -2174,6 +2360,23 @@ export const api = {
       fetcher<import('@/types/crm').CRMSearchResponse>(`/crm/search?q=${encodeURIComponent(query)}&limit=${limit}`),
     getDashboard: () =>
       fetcher<import('@/types/crm').CRMDashboardMetrics>('/crm/dashboard')
+  },
+
+  // Master Build 10 — Cross-Entity Global Search
+  search: {
+    global: (query: string, entityTypes?: string[], limit = 20) => {
+      const q = new URLSearchParams();
+      q.set('q', query);
+      if (entityTypes && entityTypes.length > 0) q.set('entity_types', entityTypes.join(','));
+      q.set('limit', String(limit));
+      return fetcher<{ items?: any[]; total?: number; grouped?: Record<string, any[]> }>(`/v1/search?${q.toString()}`)
+        .then(r => (r as any)?.data ?? r)
+        .catch(async () => {
+          // Graceful fallback to CRM cross-entity search
+          const crmRes = await api.crm.search(query, limit);
+          return { items: crmRes?.results || [], total: (crmRes?.results || []).length, grouped: {} };
+        });
+    }
   }
 };
 

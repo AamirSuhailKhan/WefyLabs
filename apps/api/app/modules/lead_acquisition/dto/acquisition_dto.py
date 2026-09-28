@@ -467,6 +467,8 @@ class UniversalSourceType:
     EMAIL = "EMAIL"
     META = "META"
     GOOGLE = "GOOGLE"
+    INDIAMART = "INDIAMART"
+    NINETY_NINE_ACRES = "99ACRES"
     PORTAL = "PORTAL"
     REFERRAL = "REFERRAL"
     PAID_AD = "PAID_AD"
@@ -479,7 +481,8 @@ class UniversalSourceType:
         return {
             cls.WEBSITE, cls.PUBLIC_AI, cls.MANUAL, cls.CSV,
             cls.API, cls.WEBHOOK, cls.EMAIL, cls.META,
-            cls.GOOGLE, cls.PORTAL, cls.REFERRAL, cls.PAID_AD,
+            cls.GOOGLE, cls.INDIAMART, cls.NINETY_NINE_ACRES,
+            cls.PORTAL, cls.REFERRAL, cls.PAID_AD,
             cls.ORGANIC, cls.AI_AGENT, cls.OTHER
         }
 

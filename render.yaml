@@ -54,6 +54,8 @@ services:
         value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       - key: WORKERS
         value: "4"
+      - key: SUPER_ADMIN_EMAILS
+        sync: false
 
 
   # ── 2. WefyLabs Celery Worker ──────────────────────────────────────────────
@@ -62,7 +64,11 @@ services:
     env: python
     rootDir: apps/api
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=4
+    startCommand: >
+      celery -A app.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      -Q lead_queue,email_queue,whatsapp_queue,notification_queue,analytics_queue,webhook_queue,ai_queue,retry_queue,dead_letter_queue,knowledge-ingestion,knowledge-parser,knowledge-ocr,knowledge-extraction,knowledge-chunking,knowledge-embedding,knowledge-indexing,knowledge-reindex,knowledge-deletion,knowledge-evaluation,knowledge-retry,knowledge-dead-letter,calendar-sync,reminders,booking,calendar-conflict,meeting-preparation,no-show-prediction,crm-intelligence-processing,lead-health,sla-monitoring,pipeline-analysis,agent-analysis,anomaly-detection,daily-brief,prediction,forecast,drift-monitoring,batch-prediction,outcome-processing,workflow-trigger,workflow-execution,workflow-actions,workflow-timers,workflow-approvals,memory-decay,memory-retention,sales-loop-orchestration,sales-loop-retry,export_queue,import_queue
     autoDeploy: true
     envVars:
       - key: ENV

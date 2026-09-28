@@ -177,16 +177,19 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             # SDK Fallback if direct REST encounters an issue
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=self._api_key)
-                response = genai.embed_content(
-                    model=f"models/{model}",
-                    content=batch,
-                    task_type="retrieval_document",
+                from google import genai
+                client = genai.Client(api_key=self._api_key)
+                response = client.models.embed_content(
+                    model=model,
+                    contents=batch,
                 )
-                embeddings = response.get("embedding", [])
-                if isinstance(embeddings[0], float):
-                    embeddings = [embeddings]
+                embeddings = []
+                if hasattr(response, "embeddings") and response.embeddings:
+                    embeddings = [getattr(e, "values", []) for e in response.embeddings]
+                elif hasattr(response, "embedding"):
+                    raw = getattr(response, "embedding")
+                    embeddings = [getattr(raw, "values", raw)]
+
                 for j, embedding in enumerate(embeddings):
                     text = batch[j] if j < len(batch) else ""
                     all_results.append(EmbeddingResult(

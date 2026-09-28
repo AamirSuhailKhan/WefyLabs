@@ -91,6 +91,7 @@ class TestProductionLifecycleE2E:
         # ── 4. Ingest Lead ────────────────────────────────────────────────────
         lead = Lead(
             id=uuid.uuid4(),
+            organization_id=org.id,
             broker_id=broker.id,
             name=f"Investor {test_suffix}",
             phone="+919812345678",
@@ -142,7 +143,7 @@ class TestProductionLifecycleE2E:
         q_lead = await db_session.execute(select(Lead).where(Lead.id == lead.id))
         loaded_lead = q_lead.scalar_one()
         assert loaded_lead.name == f"Investor {test_suffix}"
-        assert loaded_lead.organization_id == str(broker.id)
+        assert loaded_lead.organization_id == org.id
 
         # Verify Property Query
         q_prop = await db_session.execute(select(PropertyListing).where(PropertyListing.id == prop.id))

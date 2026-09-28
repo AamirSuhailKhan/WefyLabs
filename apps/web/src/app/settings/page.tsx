@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Settings, User, Building, Phone, CreditCard, CheckCircle2, MessageSquare, ShieldCheck, Zap } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Broker } from '@/types';
@@ -211,6 +212,13 @@ export default function SettingsPage() {
               >
                 Upgrade to Pro Plan (₹4,999/mo)
               </button>
+
+              <Link
+                href="/settings/billing"
+                className="block text-center w-full bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 font-bold py-2.5 rounded-xl text-xs transition-all"
+              >
+                Open Full Billing &amp; Invoices Portal →
+              </Link>
             </div>
           </div>
         </div>

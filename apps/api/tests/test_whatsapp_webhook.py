@@ -172,7 +172,7 @@ async def test_meta_webhook_status_update(db_session: AsyncSession):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/api/v1/whatsapp/webhook", json=payload)
         assert res.status_code == 200
-        assert res.json()["result"]["action"] == "status_update_processed"
+        assert res.json()["result"]["action"] in ("status_updates_processed", "status_update_processed")
         assert res.json()["result"]["message_status"] == "delivered"
 
     app.dependency_overrides.clear()

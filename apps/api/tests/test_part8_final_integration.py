@@ -514,6 +514,16 @@ class TestPhaseOSystemContracts:
                 "0028_revenue_intelligence",
                 "0029_native_crm_indexes",
                 "0030_enterprise_runtime",
+                "0031_tenant_observability",
+                "0032_ai_agent_governance",
+                "0033_marketing_os",
+                "0034_security_governance",
+                "0035_canonical_tenant_foundation",
+                "0036_build07_workitem_commitment",
+                "0038_build08_sales_pipeline",
+                "0039_build09_revenue_intelligence",
+                "0040_master_build_13_billing",
+                "0041_master_build_14_intelligence",
             ]
         )
         assert has_valid_head, (

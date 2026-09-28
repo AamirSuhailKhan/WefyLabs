@@ -22,6 +22,7 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "property_listings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     broker_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("brokers.id", ondelete="CASCADE"), nullable=False, index=True)
     property_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     share_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
@@ -149,10 +150,6 @@ class PropertyListing(Base, TimestampMixin, SoftDeleteMixin):
     def built_up_area_sqft(self, val: float):
         self.area_value = val
 
-    @property
-    def organization_id(self) -> str:
-        return str(self.broker_id)
-
 
 class PropertyMedia(Base, TimestampMixin):
     """Media assets: Floor plans, Photos, Virtual 360 Tours, Documents."""
@@ -181,11 +178,53 @@ class PropertyPriceHistory(Base):
     property_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("property_listings.id", ondelete="CASCADE"), nullable=False, index=True)
     old_price: Mapped[float] = mapped_column(Float, nullable=False)
     new_price: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
+    price_type: Mapped[str] = mapped_column(String(50), default="LIST_PRICE", nullable=False)
+    unit_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(100), default="manual", nullable=False)
+    effective_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     changed_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     property_listing: Mapped["PropertyListing"] = relationship("PropertyListing", back_populates="price_history")
+
+
+class PropertyDataConflict(Base, TimestampMixin):
+    """
+    Model representing conflicting field facts between sources (e.g. Developer Feed vs Portal vs CSV).
+    Never silently overwrites authoritative data; records competing values and resolution lifecycle.
+    """
+    __tablename__ = "property_data_conflicts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("property_listings.id", ondelete="CASCADE"), nullable=True, index=True)
+    unit_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    current_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    competing_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    current_source: Mapped[str] = mapped_column(String(100), nullable=False)
+    competing_source: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    competing_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    resolution_status: Mapped[str] = mapped_column(String(50), default="UNRESOLVED", nullable=False, index=True)
+    resolution_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolved_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    conflict_metadata: Mapped[Optional[dict]] = mapped_column(JSONBType, nullable=True)
+
+    __table_args__ = (
+        Index("ix_pdc_org_status", "organization_id", "resolution_status"),
+        Index("ix_pdc_prop_field", "property_id", "field_name"),
+    )
 
 
 class LeadPropertyInterest(Base, TimestampMixin):

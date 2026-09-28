@@ -62,8 +62,10 @@ from app.modules.lead_acquisition.services.lead_campaign_service import LeadCamp
 from app.modules.lead_acquisition.services.prospect_service import ProspectService
 from app.modules.lead_acquisition.services.acquisition_event_service import AcquisitionEventService
 from app.modules.lead_acquisition.services.acquisition_quality_service import score_and_save
-from app.modules.lead_acquisition.connectors.meta_connector import MetaLeadAdsConnector
-from app.modules.lead_acquisition.connectors.google_connector import GoogleLeadFormConnector
+from app.modules.lead_acquisition.connectors import (
+    MetaLeadAdsConnector, GoogleLeadFormConnector,
+    IndiaMartConnector, NinetyNineAcresConnector
+)
 from app.modules.lead_acquisition.metrics.acquisition_metrics import (
     record_acquisition_received, record_acquisition_success, record_acquisition_failure,
     record_prospect_created, record_duplicate, record_import, record_rejected,
@@ -458,7 +460,7 @@ async def receive_acquisition_webhook(
     Never accepts organization_id from request body.
     """
     provider_clean = provider.lower()
-    SUPPORTED_PROVIDERS = {"meta", "google", "generic", "zapier", "hubspot", "salesforce"}
+    SUPPORTED_PROVIDERS = {"meta", "google", "indiamart", "99acres", "generic", "zapier", "hubspot", "salesforce"}
     if provider_clean not in SUPPORTED_PROVIDERS:
         record_webhook_failure(provider, "unsupported_provider")
         raise HTTPException(status_code=400, detail=f"Unsupported webhook provider: {provider}")
@@ -633,7 +635,108 @@ async def receive_acquisition_webhook(
             "identity_outcome": res.identity_outcome,
         })
 
-    # ── 3. GENERIC / PARTNER WEBHOOK ──────────────────────────────────────────
+    # ── 3. INDIAMART LEAD PUSH WEBHOOK ────────────────────────────────────────
+    elif provider_clean == "indiamart":
+        indiamart_connector = IndiaMartConnector()
+        expected_key = config.get("glusr_crm_key") or config.get("glusr_crm_key_encrypted") or config.get("key") or source.webhook_secret_hash
+        provided_key = payload.get("glusr_crm_key") or payload.get("key") or request.query_params.get("glusr_crm_key") or token
+        if expected_key:
+            if not indiamart_connector.verify_webhook_key(expected_key, provided_key):
+                record_webhook_failure("indiamart", "invalid_key")
+                raise HTTPException(status_code=401, detail="Invalid IndiaMART webhook key")
+
+        normalized = indiamart_connector.parse_submission(payload)
+        lead_ext_id = normalized.get("external_id") or secrets.token_hex(8)
+
+        intake_dto = CanonicalLeadIntakeDTO(
+            source_type=UniversalSourceType.INDIAMART,
+            external_source="indiamart",
+            external_lead_id=lead_ext_id,
+            name=normalized.get("name"),
+            phone=normalized.get("phone"),
+            email=normalized.get("email"),
+            message=normalized.get("message"),
+            budget=normalized.get("budget"),
+            property_type=normalized.get("property_type"),
+            preferred_locations=normalized.get("preferred_locations", []),
+            city=normalized.get("city"),
+            source_id=source.id,
+            source_metadata=normalized.get("source_metadata"),
+            utm_source=normalized.get("utm_source", "indiamart"),
+            utm_medium=normalized.get("utm_medium", "b2b_portal"),
+            utm_campaign=normalized.get("utm_campaign"),
+            idempotency_key=f"indiamart:{lead_ext_id}",
+        )
+
+        res = await u_svc.ingest_lead(
+            organization_id=org_id,
+            dto=intake_dto,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent"),
+            raw_payload=payload,
+        )
+        record_acquisition_success(org_id, "INDIAMART")
+        return create_success_response(data={
+            "event_id": res.event_id,
+            "lead_id": res.lead_id,
+            "status": "processed" if not res.is_duplicate else "duplicate",
+            "provider": "indiamart",
+            "is_duplicate": res.is_duplicate,
+            "identity_outcome": res.identity_outcome,
+        })
+
+    # ── 4. 99ACRES REAL ESTATE PORTAL WEBHOOK ──────────────────────────────────
+    elif provider_clean == "99acres":
+        portal_connector = NinetyNineAcresConnector()
+        expected_key = config.get("portal_key") or config.get("portal_key_encrypted") or config.get("key") or source.webhook_secret_hash
+        provided_key = payload.get("portal_key") or payload.get("key") or request.query_params.get("portal_key") or token
+        if expected_key:
+            if not portal_connector.verify_webhook_key(expected_key, provided_key):
+                record_webhook_failure("99acres", "invalid_key")
+                raise HTTPException(status_code=401, detail="Invalid 99acres webhook key")
+
+        normalized = portal_connector.parse_submission(payload)
+        lead_ext_id = normalized.get("external_id") or secrets.token_hex(8)
+
+        intake_dto = CanonicalLeadIntakeDTO(
+            source_type=UniversalSourceType.NINETY_NINE_ACRES,
+            external_source="99acres",
+            external_lead_id=lead_ext_id,
+            name=normalized.get("name"),
+            phone=normalized.get("phone"),
+            email=normalized.get("email"),
+            message=normalized.get("message"),
+            budget=normalized.get("budget"),
+            property_type=normalized.get("property_type"),
+            property_id=normalized.get("property_id"),
+            preferred_locations=normalized.get("preferred_locations", []),
+            city=normalized.get("city"),
+            source_id=source.id,
+            source_metadata=normalized.get("source_metadata"),
+            utm_source=normalized.get("utm_source", "99acres"),
+            utm_medium=normalized.get("utm_medium", "portal"),
+            utm_campaign=normalized.get("utm_campaign"),
+            idempotency_key=f"99acres:{lead_ext_id}",
+        )
+
+        res = await u_svc.ingest_lead(
+            organization_id=org_id,
+            dto=intake_dto,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("User-Agent"),
+            raw_payload=payload,
+        )
+        record_acquisition_success(org_id, "99ACRES")
+        return create_success_response(data={
+            "event_id": res.event_id,
+            "lead_id": res.lead_id,
+            "status": "processed" if not res.is_duplicate else "duplicate",
+            "provider": "99acres",
+            "is_duplicate": res.is_duplicate,
+            "identity_outcome": res.identity_outcome,
+        })
+
+    # ── 5. GENERIC / PARTNER WEBHOOK ──────────────────────────────────────────
     contact_phone = payload.get("phone") or payload.get("phone_number") or payload.get("contact_phone")
     contact_email = payload.get("email") or payload.get("contact_email")
     contact_name = payload.get("name") or payload.get("full_name")
@@ -743,6 +846,54 @@ async def google_connector_status(
         "status": conn_status,
         "is_configured": conn_status in ("CONFIGURED", "VERIFIED"),
         "note": "Requires google_key or customer_id in LeadSource configuration" if conn_status == "CONFIGURATION_REQUIRED" else None,
+    })
+
+
+@router.get("/indiamart/status", response_model=APIResponse)
+async def indiamart_connector_status(
+    source_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_broker=Depends(get_current_broker),
+):
+    """Check IndiaMART Push connector configuration status."""
+    org_id = _get_org_id(current_broker)
+    configuration = None
+    if source_id:
+        source_svc = LeadSourceService(db)
+        source = await source_svc.get_source(org_id, source_id)
+        if source:
+            configuration = source.configuration
+    connector = IndiaMartConnector()
+    conn_status = connector.get_status(configuration)
+    return create_success_response(data={
+        "provider": "indiamart",
+        "status": conn_status,
+        "is_configured": conn_status in ("CONFIGURED", "VERIFIED"),
+        "note": "Requires glusr_crm_key in LeadSource configuration" if conn_status == "CONFIGURATION_REQUIRED" else None,
+    })
+
+
+@router.get("/99acres/status", response_model=APIResponse)
+async def ninety_nine_acres_connector_status(
+    source_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_broker=Depends(get_current_broker),
+):
+    """Check 99acres Portal connector configuration status."""
+    org_id = _get_org_id(current_broker)
+    configuration = None
+    if source_id:
+        source_svc = LeadSourceService(db)
+        source = await source_svc.get_source(org_id, source_id)
+        if source:
+            configuration = source.configuration
+    connector = NinetyNineAcresConnector()
+    conn_status = connector.get_status(configuration)
+    return create_success_response(data={
+        "provider": "99acres",
+        "status": conn_status,
+        "is_configured": conn_status in ("CONFIGURED", "VERIFIED"),
+        "note": "Requires portal_key in LeadSource configuration" if conn_status == "CONFIGURATION_REQUIRED" else None,
     })
 
 

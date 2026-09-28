@@ -9,7 +9,7 @@ from app.models.subscription import Subscription
 from app.models.crm_models import (
     PipelineStage, LeadNote, LeadTag, LeadTagAssignment,
     Task, Meeting, Contact, Activity,
-    Notification, ApiKey, CustomField
+    Notification, ApiKey, CustomField, Commitment
 )
 from app.models.developer_models import DeveloperApiKey, WebhookSubscription
 from app.models.organization import (
@@ -27,8 +27,15 @@ from app.models.communication_models import (
     ChannelMessage, MessageAttachment, DeliveryStatusRecord,
     MessageTemplate, TemplateVariable, ProviderCredential,
     OutboundQueue, InboundQueue, TypingEvent, PresenceRecord,
+    # Master Build 03 — Canonical Communication OS
+    RawCommunicationEvent, ConversationMemoryFact, MemoryProvenanceEnum,
+    CanonicalSenderType, CanonicalMessageType, CanonicalMessageStatus,
+    validate_message_status_transition,
 )
-from app.models.property_models import PropertyListing, PropertyMedia, PropertyPriceHistory, LeadPropertyInterest
+from app.models.property_models import (
+    PropertyListing, PropertyMedia, PropertyPriceHistory, LeadPropertyInterest,
+    PropertyDataConflict
+)
 from app.models.command_center_models import CommandCenterDismissal
 from app.models.onboarding_models import OnboardingState, TenantActivation, DemoSession
 from app.models.transaction_models import DealTransaction, DealMilestone, DealPaymentSchedule
@@ -166,6 +173,22 @@ from app.models.qualification_models import (
     QualificationAuditActorType, QualificationAuditEventType,
 )
 
+# ─── Build 08 — Sales Pipeline OS ───────────────────────────────────────────
+from app.models.sales_pipeline_models import (
+    SalesPipeline, PipelineStageConfig,
+    OpportunityStageHistory, OpportunityStage,
+    SiteVisit, SiteVisitOutcome, SiteVisitStatus,
+    NegotiationRound, NegotiationRoundActor,
+    PropertyShortlist, PropertyShortlistStatus,
+    BookingIntent, BookingIntentStatus,
+    UnitHold, UnitHoldStatus,
+    PropertyPaymentTransaction,
+    RevenueEvent, RevenueEventType,
+    BookingReconciliationTask,
+    LostReasonType,
+    MoneyType, PctType,
+)
+
 __all__ = [
     # Core
     "Base",
@@ -277,6 +300,7 @@ __all__ = [
     "PropertyListing",
     "PropertyMedia",
     "PropertyPriceHistory",
+    "PropertyDataConflict",
     "DealTransaction",
     "DealMilestone",
     "DealPaymentSchedule",
@@ -611,6 +635,10 @@ from app.models.portal_models import (
     CustomerPaymentProof,
     CustomerTransactionAcknowledgement,
 )
+from app.models.ai_foundation_models import (
+    AIRequestRecord,
+    AIActionAuthorization,
+)
 
 __all__ = __all__ + [
     "CampaignObjective",
@@ -636,4 +664,183 @@ __all__ = __all__ + [
     "CustomerSupportRequest",
     "CustomerPaymentProof",
     "CustomerTransactionAcknowledgement",
+    "AIRequestRecord",
+    "AIActionAuthorization",
 ]
+
+# ─── Build 09 — Revenue Intelligence OS ──────────────────────────────────────
+from app.models.revenue_intelligence_b09_models import (
+    AttributionTouchpoint,
+    AttributionResult,
+    ForecastSnapshotV2,
+    RevenueLeakageEventV2,
+    RevenueAnomaly,
+    MetricDefinition,
+    UnitEconomicsRecord,
+    RevenueReconciliationRecord,
+    AIContributionRecord,
+    AttributionModel,
+    TouchChannel,
+    ForecastMethod,
+    ForecastPeriod,
+    ForecastQuality,
+    LeakageCondition,
+    LeakageSeverity,
+    AnomalyMetric,
+    AIContributionCategory,
+    DataQualityDimension,
+    ReconciliationDifference,
+)
+
+__all__ = __all__ + [
+    "AttributionTouchpoint",
+    "AttributionResult",
+    "ForecastSnapshotV2",
+    "RevenueLeakageEventV2",
+    "RevenueAnomaly",
+    "MetricDefinition",
+    "UnitEconomicsRecord",
+    "RevenueReconciliationRecord",
+    "AIContributionRecord",
+]
+
+# ─── Master Build 13 — Canonical Billing, Usage & Entitlement Models ──────────
+from app.models.billing_models import (
+    BillingAccount,
+    BillingCustomer,
+    Plan,
+    PlanVersion,
+    PlanEntitlement,
+    CanonicalSubscription,
+    SubscriptionItem,
+    BillingPeriod,
+    UsageMeter,
+    UsageEvent,
+    UsageAggregate,
+    Invoice as CanonicalInvoice,
+    InvoiceLine,
+    CreditBalance,
+    CreditLedgerEntry,
+    CreditNote,
+    BillingAdjustment,
+    EntitlementGrant,
+    EntitlementConsumption,
+    CostEvent,
+    UnitEconomicsSnapshot,
+    BillingAccountStatus,
+    PlanInterval,
+    EntitlementType,
+    SubscriptionLifecycleStatus,
+    MeterAggregationType,
+    BillingPeriodStatus,
+    CanonicalInvoiceStatus,
+    CreditEntryType,
+    AdjustmentType,
+    LimitEnforcementPolicy,
+)
+
+__all__ = __all__ + [
+    "BillingAccount",
+    "BillingCustomer",
+    "Plan",
+    "PlanVersion",
+    "PlanEntitlement",
+    "CanonicalSubscription",
+    "SubscriptionItem",
+    "BillingPeriod",
+    "UsageMeter",
+    "UsageEvent",
+    "UsageAggregate",
+    "CanonicalInvoice",
+    "InvoiceLine",
+    "CreditBalance",
+    "CreditLedgerEntry",
+    "CreditNote",
+    "BillingAdjustment",
+    "EntitlementGrant",
+    "EntitlementConsumption",
+    "CostEvent",
+    "UnitEconomicsSnapshot",
+    "BillingAccountStatus",
+    "PlanInterval",
+    "EntitlementType",
+    "SubscriptionLifecycleStatus",
+    "MeterAggregationType",
+    "BillingPeriodStatus",
+    "CanonicalInvoiceStatus",
+    "CreditEntryType",
+    "AdjustmentType",
+    "LimitEnforcementPolicy",
+]
+
+# ─── Master Build 14 — Competitive Moat, Benchmarking & Intelligence Graph ───
+from app.models.intelligence_models import (
+    OutcomeEventType,
+    OutcomeEntityType,
+    OutcomeSource,
+    LearningSignalType,
+    ObjectionType,
+    ExperimentStatus,
+    BenchmarkType,
+    DataQualityIssueType,
+    RegistryEntityType,
+    RegistryEntryStatus,
+    DriftType,
+    InsightType,
+    OutcomeEvent,
+    LearningEvent,
+    SalesOutcomeEdge,
+    AIActionOutcome,
+    RecommendationQualitySnapshot,
+    ObjectionRecord,
+    FunnelTransitionRecord,
+    Experiment,
+    ExperimentVariant,
+    ExperimentAssignment,
+    ExperimentConversion,
+    BenchmarkDefinition,
+    BenchmarkSnapshot,
+    DataQualityIssue,
+    PolicyRegistryEntry,
+    DriftAlertRecord,
+    IntelligenceSnapshot,
+    InsightRecord,
+    OrganizationLearningProfile,
+)
+
+__all__ = __all__ + [
+    "OutcomeEventType",
+    "OutcomeEntityType",
+    "OutcomeSource",
+    "LearningSignalType",
+    "ObjectionType",
+    "ExperimentStatus",
+    "BenchmarkType",
+    "DataQualityIssueType",
+    "RegistryEntityType",
+    "RegistryEntryStatus",
+    "DriftType",
+    "InsightType",
+    "OutcomeEvent",
+    "LearningEvent",
+    "SalesOutcomeEdge",
+    "AIActionOutcome",
+    "RecommendationQualitySnapshot",
+    "ObjectionRecord",
+    "FunnelTransitionRecord",
+    "Experiment",
+    "ExperimentVariant",
+    "ExperimentAssignment",
+    "ExperimentConversion",
+    "BenchmarkDefinition",
+    "BenchmarkSnapshot",
+    "DataQualityIssue",
+    "PolicyRegistryEntry",
+    "DriftAlertRecord",
+    "IntelligenceSnapshot",
+    "InsightRecord",
+    "OrganizationLearningProfile",
+]
+
+
+

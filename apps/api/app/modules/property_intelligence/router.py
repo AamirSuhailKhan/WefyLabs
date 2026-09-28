@@ -121,6 +121,14 @@ async def classify_question_endpoint(
     return svc.classify_property_question(req.query)
 
 
+from pydantic import BaseModel
+
+
+class PropertyComparisonRequest(BaseModel):
+    property_ids: List[str]
+    actor_role: Optional[str] = "customer"
+
+
 @router.post("/{property_id}/detect-conflicts", response_model=List[ConflictDetectionResult])
 async def detect_conflicts_endpoint(
     property_id: str,
@@ -140,3 +148,49 @@ async def detect_conflicts_endpoint(
         incoming_data=payload,
         incoming_source=source
     )
+
+
+@router.post("/compare")
+async def compare_properties_endpoint(
+    req: PropertyComparisonRequest,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """
+    Deterministic side-by-side comparison of multiple properties.
+    """
+    svc = PropertyIntelligenceService(db)
+    return await svc.compare_properties(
+        tenant_id=current_broker.id,
+        property_ids=req.property_ids,
+        actor_role=req.actor_role or "customer"
+    )
+
+
+@router.get("/projects/{project_id}/summary")
+async def get_project_summary_endpoint(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Authoritative project summary with towers and unit counts."""
+    svc = PropertyIntelligenceService(db)
+    return await svc.get_project_summary(
+        tenant_id=current_broker.id,
+        project_id=project_id
+    )
+
+
+@router.get("/units/{unit_id}/summary")
+async def get_unit_summary_endpoint(
+    unit_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker)
+):
+    """Authoritative unit summary with inventory status, pricing, and specs."""
+    svc = PropertyIntelligenceService(db)
+    return await svc.get_unit_summary(
+        tenant_id=current_broker.id,
+        unit_id=unit_id
+    )
+

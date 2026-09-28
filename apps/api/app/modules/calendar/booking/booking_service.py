@@ -175,11 +175,12 @@ class BookingService:
         # 6. Persist Meeting Record with atomic rollback on failure
         b_uuid = uuid.UUID(str(broker_id)) if broker_id else None
         l_uuid = uuid.UUID(str(lead.id)) if lead.id else None
+        org_str = str(organization_id)  # organization_id column is String(36) — must be str
 
         try:
             meeting = Meeting(
                 id=str(uuid.uuid4()),
-                organization_id=organization_id,
+                organization_id=org_str,
                 broker_id=b_uuid,
                 lead_id=l_uuid,
                 meeting_type=dto.meeting_type,
@@ -241,7 +242,7 @@ class BookingService:
                 b_uuid_act = uuid.UUID(str(broker_id)) if broker_id else None
                 l_uuid_act = uuid.UUID(str(lead.id)) if lead.id else None
                 activity = Activity(
-                    organization_id=organization_id,
+                    organization_id=org_str,
                     actor_id=b_uuid_act,
                     lead_id=l_uuid_act,
                     activity_type="meeting_booked",

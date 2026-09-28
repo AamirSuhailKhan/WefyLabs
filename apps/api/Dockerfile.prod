@@ -21,7 +21,7 @@ WORKDIR /app
 # Add non-root application user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-RUN apk add --no-cache libpq libstdc++ curl
+RUN apk add --no-cache libpq libstdc++ curl tesseract-ocr tesseract-ocr-data-eng
 
 COPY --from=builder /install /usr/local
 COPY . /app
@@ -43,6 +43,6 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8000/v1/health-diag/liveness || exit 1
+  CMD curl -f http://localhost:8000/health/liveness || exit 1
 
 CMD ["/app/entrypoint.sh"]

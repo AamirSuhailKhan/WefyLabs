@@ -208,11 +208,12 @@ async def get_current_tenant(
     than one organization must select an organization explicitly.
     """
     result = await db.execute(
-        select(OrganizationMember.organization_id).where(
+        select(OrganizationMember.organization_id, OrganizationMember.role).where(
             OrganizationMember.broker_id == current_broker.id
         )
     )
-    organization_ids = [str(value) for value in result.scalars().all()]
+    memberships = {str(row[0]): (row[1] or "AGENT").upper() for row in result.all()}
+    organization_ids = list(memberships.keys())
 
     if not organization_ids:
         raise HTTPException(
@@ -242,10 +243,12 @@ async def get_current_tenant(
                     "message": "You do not belong to the selected organization.",
                 },
             )
+        selected_role = memberships.get(selected_organization_id, "AGENT")
         ctx = TenantContext(
             organization_id=selected_organization_id,
             broker_id=current_broker.id,
-            user_id=str(current_broker.id)
+            user_id=str(current_broker.id),
+            role=selected_role,
         )
         current_tenant_ctx.set(ctx)
         return ctx
@@ -259,10 +262,13 @@ async def get_current_tenant(
             },
         )
 
+    selected_org_id = organization_ids[0]
+    selected_role = memberships.get(selected_org_id, "AGENT")
     ctx = TenantContext(
-        organization_id=organization_ids[0],
+        organization_id=selected_org_id,
         broker_id=current_broker.id,
-        user_id=str(current_broker.id)
+        user_id=str(current_broker.id),
+        role=selected_role,
     )
     current_tenant_ctx.set(ctx)
     return ctx

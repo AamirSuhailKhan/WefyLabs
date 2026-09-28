@@ -44,15 +44,15 @@ def set_trace_context(
 ) -> None:
     """Sets current thread/async task trace context."""
     current = trace_context_var.get().copy()
-    if request_id: current["request_id"] = request_id
-    if correlation_id: current["correlation_id"] = correlation_id
-    if trace_id: current["trace_id"] = trace_id
-    if span_id: current["span_id"] = span_id
-    if organization_id: current["organization_id"] = organization_id
-    if workspace_id: current["workspace_id"] = workspace_id
-    if user_id: current["user_id"] = user_id
-    if service: current["service"] = service
-    if module: current["module"] = module
+    if request_id is not None: current["request_id"] = request_id
+    if correlation_id is not None: current["correlation_id"] = correlation_id
+    if trace_id is not None: current["trace_id"] = trace_id
+    current["span_id"] = span_id
+    if organization_id is not None: current["organization_id"] = organization_id
+    if workspace_id is not None: current["workspace_id"] = workspace_id
+    if user_id is not None: current["user_id"] = user_id
+    if service is not None: current["service"] = service
+    if module is not None: current["module"] = module
     trace_context_var.set(current)
 
 
@@ -61,15 +61,40 @@ def get_trace_context() -> Dict[str, Any]:
     return trace_context_var.get()
 
 
+def _scrub_payload(payload: Any) -> Any:
+    """Recursively scrub secrets and PII from log payloads."""
+    try:
+        from app.modules.security.data_governance import scrub_pii_and_secrets, SENSITIVE_FIELD_NAMES
+    except Exception:
+        return payload
+
+    if isinstance(payload, str):
+        return scrub_pii_and_secrets(payload)
+    elif isinstance(payload, dict):
+        scrubbed = {}
+        for k, v in payload.items():
+            if str(k).lower() in SENSITIVE_FIELD_NAMES:
+                scrubbed[k] = "[REDACTED_SECRET]"
+            else:
+                scrubbed[k] = _scrub_payload(v)
+        return scrubbed
+    elif isinstance(payload, (list, tuple)):
+        return [_scrub_payload(item) for item in payload]
+    return payload
+
+
 class JSONFormatter(logging.Formatter):
-    """Formats log records as structured single-line JSON strings."""
+    """Formats log records as structured single-line JSON strings with automated redaction."""
 
     def format(self, record: logging.LogRecord) -> str:
         ctx = get_trace_context()
+        raw_msg = record.getMessage()
+        msg = _scrub_payload(raw_msg) if isinstance(raw_msg, str) else str(raw_msg)
+
         log_object = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
-            "message": record.getMessage(),
+            "message": msg,
             "logger": record.name,
             "service": ctx.get("service", "wefylabs-api"),
             "module": ctx.get("module", record.module),
@@ -82,13 +107,14 @@ class JSONFormatter(logging.Formatter):
             "user_id": ctx.get("user_id"),
         }
 
-        # Include exception details if present
+        # Include exception details if present (with redaction)
         if record.exc_info:
-            log_object["exception"] = self.formatException(record.exc_info)
+            exc_str = self.formatException(record.exc_info)
+            log_object["exception"] = _scrub_payload(exc_str)
 
-        # Include extra payload if present
+        # Include extra payload if present (with redaction)
         if hasattr(record, "extra_payload") and isinstance(record.extra_payload, dict):
-            log_object["extra"] = record.extra_payload
+            log_object["extra"] = _scrub_payload(record.extra_payload)
 
         try:
             return json.dumps(log_object, default=str)

@@ -60,9 +60,13 @@ from app.modules.billing.services.razorpay_service import (
 )
 from app.common.redis.rate_limiter import check_rate_limit
 
-logger = logging.getLogger("beetlelabs.billing.router")
-
 router = APIRouter(prefix="/billing", tags=["Production Billing & Payments"])
+
+from app.modules.billing.routers.portal_router import portal_router
+from app.modules.billing.routers.admin_router import admin_router
+
+router.include_router(portal_router)
+router.include_router(admin_router)
 
 
 # ─── Rate Limit Dependency Helper ─────────────────────────────────────────────

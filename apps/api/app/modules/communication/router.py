@@ -83,7 +83,7 @@ _provider_config_service = ProviderConfigurationService(_channel_manager)
 # ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 class SendMessageDTO(BaseModel):
-    channel: str = Field(description="web | email | sms | telegram (whatsapp: DISABLED / not live)")
+    channel: str = Field(description="whatsapp | web | email | sms | telegram")
     recipient_identifier: str = Field(description="Phone number, email, or session ID")
     content: str
     message_type: str = Field(default="text")
@@ -802,7 +802,19 @@ async def inbound_webhook(
                 error_message=delivery_st.error_message,
             )
 
-    # 4. Compute idempotency key from payload
+    # 4. Canonical Communication Engine integration for WhatsApp
+    if channel == "whatsapp":
+        from app.modules.communication.canonical_service import canonical_communication_service
+        return await canonical_communication_service.ingest_inbound_webhook(
+            db=db,
+            provider_name="whatsapp_cloud",
+            raw_body=raw_body,
+            headers=headers,
+            parsed_payload=payload,
+            enforce_signature=False,
+        )
+
+    # 5. Compute idempotency key from payload for other channels
     idem_key = hashlib.sha256(raw_body[:512]).hexdigest()[:64]
 
     # Check for duplicate webhook

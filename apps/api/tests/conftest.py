@@ -31,6 +31,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 @pytest_asyncio.fixture(scope="function")
+async def db(db_session: AsyncSession) -> AsyncSession:
+    """Convenience alias for db_session fixture."""
+    return db_session
+
+@pytest_asyncio.fixture(scope="function")
 async def test_broker(db_session: AsyncSession) -> Broker:
     broker = Broker(
         email="testbroker@example.com",

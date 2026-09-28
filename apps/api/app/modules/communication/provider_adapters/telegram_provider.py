@@ -52,6 +52,9 @@ class TelegramProvider(CommunicationProvider):
     def supports_read_receipts(self) -> bool:
         return False  # Telegram bots can't get read receipts
 
+    def is_configured(self) -> bool:
+        return bool(self._bot_token and self._bot_token not in ("mock_bot_token", "placeholder", ""))
+
     async def verify_configuration(self) -> ProviderStatusEnum:
         if not self._bot_token or self._bot_token in ("mock_bot_token", "placeholder", ""):
             return ProviderStatusEnum.CONFIGURATION_REQUIRED

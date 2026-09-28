@@ -20,7 +20,8 @@ from app.modules.ai_agent.llm_router.base_adapter import BaseLLMAdapter, LLMResp
 logger = logging.getLogger("wefylabs.llm.google")
 
 _COST_PER_1K = {
-    # Gemini 2.x pricing (USD per 1K tokens)
+    # Gemini 3.x / 2.x pricing (USD per 1K tokens)
+    "gemini-3.8-flash": {"input": 0.000075, "output": 0.0003},
     "gemini-2.5-flash": {"input": 0.000075, "output": 0.0003},
     "gemini-2.5-pro": {"input": 0.00125, "output": 0.005},
     "gemini-2.0-flash": {"input": 0.000075, "output": 0.0003},
@@ -33,8 +34,9 @@ _COST_PER_1K = {
 
 # Canonical model to use if environment specifies a non-existent name
 _MODEL_ALIAS = {
-    "gemini-3.5-flash": "gemini-2.5-flash",
-    "gemini-3.7-flash": "gemini-2.5-flash",
+    "gemini-2.5-flash": "gemini-3.8-flash",
+    "gemini-3.5-flash": "gemini-3.8-flash",
+    "gemini-3.7-flash": "gemini-3.8-flash",
     "gemini-3.1-pro": "gemini-2.5-pro",
 }
 
@@ -138,7 +140,7 @@ class GoogleAdapter(BaseLLMAdapter):
     - Circuit breaker friendly: never raises, always returns LLMResponse
     """
 
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-3.8-flash"):
         self._api_key = api_key
         # Resolve legacy model name aliases
         self._model = _MODEL_ALIAS.get(model, model)

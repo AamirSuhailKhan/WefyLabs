@@ -87,13 +87,13 @@ class InboundMessageDTO:
 @dataclass
 class OutboundMessageDTO:
     """Channel-agnostic outbound message passed to provider.send()."""
-    message_id: str
-    conversation_id: str
-    organization_id: str
-    channel: str
-    provider_name: str
-    recipient_identifier: str
-    content: str
+    message_id: str = ""
+    conversation_id: str = "direct"
+    organization_id: str = "default"
+    channel: str = "whatsapp"
+    provider_name: str = "whatsapp_cloud"
+    recipient_identifier: str = ""
+    content: str = ""
     message_type: str = "text"
     content_structured: Optional[Dict[str, Any]] = None   # buttons, lists, templates
     template_id: Optional[str] = None

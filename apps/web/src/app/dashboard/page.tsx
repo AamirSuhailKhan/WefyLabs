@@ -17,7 +17,9 @@ export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'autopilot' | 'command_center' | 'kanban' | 'table'>('autopilot');
+  const [viewMode, setViewMode] = useState<'command_center' | 'autopilot' | 'kanban' | 'table'>('command_center');
+  const [ccSummary, setCcSummary] = useState<any>(null);
+  const [revenueOverview, setRevenueOverview] = useState<any>(null);
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
@@ -25,10 +27,24 @@ export default function DashboardPage() {
   const fetchLeads = async () => {
     setLoading(true);
     try {
-      const data = await api.getLeads();
-      setLeads(data.items || []);
+      const [leadsRes, ccRes, revRes] = await Promise.allSettled([
+        api.getLeads(),
+        api.commandCenter.getData().catch(() => null),
+        api.revenueIntelligence.getOverview().catch(() => null)
+      ]);
+
+      if (leadsRes.status === 'fulfilled' && leadsRes.value) {
+        setLeads(leadsRes.value.items || (leadsRes.value as any).data || []);
+      }
+      if (ccRes.status === 'fulfilled' && ccRes.value) {
+        const payload = (ccRes.value as any)?.data ?? ccRes.value;
+        setCcSummary(payload?.summary || null);
+      }
+      if (revRes.status === 'fulfilled' && revRes.value) {
+        setRevenueOverview(revRes.value);
+      }
     } catch (e) {
-      console.error('Error fetching leads:', e);
+      console.error('Error fetching dashboard data:', e);
     } finally {
       setLoading(false);
     }
@@ -78,26 +94,87 @@ export default function DashboardPage() {
     document.body.removeChild(link);
   };
 
+  const firstContactBreaches = ccSummary?.first_contact_breaches ?? 0;
+  const overdueFollowups = ccSummary?.followup_overdue ?? 0;
+  const todayScheduled = ccSummary?.today_scheduled_events ?? 0;
+  const hotLeadsCount = ccSummary?.active_hot_leads ?? leads.filter(l => l.score === 'hot').length;
+  const revenueAtRisk = revenueOverview?.revenue_at_risk_estimate;
+
   return (
     <div className="min-h-screen bg-[#F0EDE8]">
-      {/* Dashboard-specific nav — no announcement banner, no landing CTAs */}
+      {/* Dashboard-specific nav */}
       <DashboardNav onAddLead={() => setIsModalOpen(true)} />
 
       {/* Content — pushed below fixed 64px nav */}
       <div className="pt-16">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
 
-          {/* ── Page Header ── */}
+          {/* ── Today's Urgent Layer Banner ── */}
+          <div className="mt-6 p-4 bg-[#FAF7F2] border border-[#D4D0C8] rounded-2xl shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#0F766E]">
+                    Today&apos;s Operational Truth
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono">
+                    {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-[#1A1A1A] mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  REVENUE COMMAND COCKPIT
+                </h2>
+              </div>
+
+              {/* Today Quick Metric Pills */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {firstContactBreaches > 0 ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                    <span>{firstContactBreaches} SLA Breaches</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>SLA Clean</span>
+                  </div>
+                )}
+
+                {overdueFollowups > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+                    <span>⚠️ {overdueFollowups} Follow-ups Overdue</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold">
+                  <span>📅 {todayScheduled} Events Today</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold">
+                  <span>🔥 {hotLeadsCount} Hot Inquiries</span>
+                </div>
+
+                {revenueAtRisk !== undefined && revenueAtRisk !== null && revenueAtRisk > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold font-mono">
+                    <span>Risk: AED {Number(revenueAtRisk).toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Page Header & Controls ── */}
           <div className="py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8]">
             <div>
               <h1
-                className="text-[26px] sm:text-[28px] font-bold text-[#1A1A1A] tracking-tight leading-tight"
-                style={{ fontFamily: 'JetBrains Mono, Geist Mono, Courier New, monospace' }}
+                className="text-[24px] sm:text-[26px] font-bold text-[#1A1A1A] tracking-tight leading-tight"
+                style={{ fontFamily: 'JetBrains Mono, monospace' }}
               >
-                BROKER DASHBOARD
+                OPERATIONAL COMMAND CENTER
               </h1>
               <p className="text-[13px] text-[#6B6B6B] mt-0.5" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Visual pipeline stages, task reminders, free-text notes, color tags &amp; instant qualification.
+                Prioritized queue, real-time SLA monitors, automated qualification, and deal execution.
               </p>
             </div>
 
@@ -105,17 +182,6 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {/* View Toggle */}
               <div className="flex items-center bg-[#FAF7F2] border border-[#D4D0C8] p-1 rounded-xl flex-wrap">
-                <button
-                  onClick={() => setViewMode('autopilot')}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                    viewMode === 'autopilot'
-                      ? 'bg-[#1A1A1A] text-white shadow-sm'
-                      : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-teal-400 fill-teal-400" />
-                  Revenue Autopilot
-                </button>
                 <button
                   onClick={() => setViewMode('command_center')}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
@@ -128,6 +194,17 @@ export default function DashboardPage() {
                   Command Center
                 </button>
                 <button
+                  onClick={() => setViewMode('autopilot')}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'autopilot'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
+                      : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-400 fill-teal-400" />
+                  Revenue Autopilot
+                </button>
+                <button
                   onClick={() => setViewMode('kanban')}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                     viewMode === 'kanban'
@@ -136,7 +213,7 @@ export default function DashboardPage() {
                   }`}
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
-                  Pipeline
+                  Pipeline Board
                 </button>
                 <button
                   onClick={() => setViewMode('table')}
@@ -147,9 +224,10 @@ export default function DashboardPage() {
                   }`}
                 >
                   <TableIcon className="w-3.5 h-3.5" />
-                  Table
+                  Leads Table
                 </button>
               </div>
+
 
               {/* Refresh */}
               <button

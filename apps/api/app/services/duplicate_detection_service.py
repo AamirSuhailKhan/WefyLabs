@@ -12,16 +12,9 @@ class DuplicateDetectionService:
         """Normalizes raw phone strings to E.164 format (+919876543210, +14155552671)."""
         if not phone:
             return ""
-
-        digits = re.sub(r"[^\d+]", "", phone)
-        if digits.startswith("+"):
-            return digits
-
-        # Strip leading zeros
-        digits = digits.lstrip("0")
-        if default_country_code.startswith("+"):
-            return f"{default_country_code}{digits}"
-        return f"+{default_country_code}{digits}"
+        from app.modules.lead_acquisition.services.normalization_service import normalize_phone
+        res, _ = normalize_phone(phone, default_country_code=default_country_code)
+        return res or ""
 
     @classmethod
     def find_duplicate_match(

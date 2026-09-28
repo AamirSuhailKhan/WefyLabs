@@ -10,10 +10,9 @@ _TRUNCATION_MARKER = " [TRUNCATED]"
 # Patterns are case-insensitive (matched against lowercased input).
 PROMPT_INJECTION_PATTERNS = [
     # Classic instruction overrides
-    r"ignore (all )?previous instructions",
-    r"disregard (all )?prior (prompts|instructions)",
-    r"forget (all )?previous instructions",
+    r"(ignore|disregard|forget)\s+(all\s+)?(previous|prior|safety)?\s*(instructions|prompts|guidelines|rules)",
     r"disregard (everything|anything) (above|before)",
+    r"system override",
     # System role/block abuse
     r"system prompt",
     r"<system>",

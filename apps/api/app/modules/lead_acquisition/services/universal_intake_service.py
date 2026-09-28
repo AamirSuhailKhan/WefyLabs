@@ -39,6 +39,8 @@ from app.models.acquisition_models import (
 from app.models.crm_models import Task, Notification, Activity
 from app.models.communication_models import OmnichannelConversation
 from app.models.identity_models import Identity, IdentityLink
+from app.models.ingestion_models import OriginalPayload, IngestionLog
+from app.models.outbox_models import OutboxEvent, OutboxStatus
 from app.modules.lead_acquisition.dto.acquisition_dto import (
     CanonicalLeadIntakeDTO, CanonicalLeadIntakeResultDTO, UniversalSourceType
 )
@@ -249,6 +251,22 @@ class UniversalIntakeService:
             user_agent=user_agent,
         )
 
+        # Raw Event Preservation (Prompt §6)
+        if raw_payload is not None:
+            try:
+                orig_payload_record = OriginalPayload(
+                    id=str(uuid.uuid4()),
+                    ingestion_id=event.id,
+                    organization_id=str(org_uuid),
+                    source=dto.source_type,
+                    raw_payload_json=raw_payload if isinstance(raw_payload, dict) else {"payload": str(raw_payload)},
+                    headers_json={},
+                    ip_address=ip_address,
+                )
+                self.db.add(orig_payload_record)
+            except Exception as pe_err:
+                logger.warning(f"[INTAKE] Original payload preservation non-fatal: {pe_err}")
+
         # ── 5. Deterministic Identity Resolution & Deduplication ───────────────
         identity_res = await self.customer_intel_service.resolve_identity(
             organization_id=str(org_uuid),
@@ -413,12 +431,13 @@ class UniversalIntakeService:
                 initial_locations.append(city_norm)
 
             lead = Lead(
+                organization_id=org_uuid,
                 broker_id=assigned_broker_uuid,
                 phone=lead_phone,
                 email=email_norm,
                 name=name_norm or "New Lead",
                 source=source_val if source_val in (
-                    'website', 'public_ai', 'manual', 'csv', 'api', 'webhook', 'email', 'meta', 'google', 'referral', 'other'
+                    'website', 'public_ai', 'manual', 'csv', 'api', 'webhook', 'email', 'meta', 'google', 'indiamart', '99acres', 'portal', 'referral', 'other'
                 ) else 'manual',
                 score="pending",
                 score_confidence=0.0,
@@ -613,6 +632,51 @@ class UniversalIntakeService:
         # Mark event processed
         await event_svc.mark_processed(event)
 
+        # Transactional Outbox (Prompt §2, §7, Build 01 convergence)
+        try:
+            outbox_entry = OutboxEvent(
+                id=uuid.uuid4(),
+                event_id=str(uuid.uuid4()),
+                tenant_id=str(org_uuid),
+                event_type="lead.ingested" if is_new_lead else "lead.reengaged",
+                aggregate_type="Lead",
+                aggregate_id=str(lead.id),
+                payload={
+                    "lead_id": str(lead.id),
+                    "organization_id": str(org_uuid),
+                    "source": dto.source_type,
+                    "external_source": dto.external_source,
+                    "external_lead_id": dto.external_lead_id,
+                    "is_duplicate": not is_new_lead,
+                    "phone_e164": phone_e164,
+                    "email": email_norm,
+                    "name": name_norm,
+                    "event_id": event.id,
+                },
+                status=OutboxStatus.PENDING,
+                idempotency_key=f"outbox:{event.id}",
+            )
+            self.db.add(outbox_entry)
+        except Exception as ob_err:
+            logger.warning(f"[INTAKE] Outbox entry recording non-fatal: {ob_err}")
+
+        # Ingestion Audit Log (Volume 2 Part 1)
+        try:
+            ingestion_log = IngestionLog(
+                id=str(uuid.uuid4()),
+                ingestion_id=event.id,
+                organization_id=str(org_uuid),
+                source=dto.source_type,
+                idempotency_key=dto.idempotency_key,
+                status="success" if is_new_lead else "duplicate",
+                lead_id=str(lead.id),
+                latency_ms=(time.perf_counter() - start_time) * 1000,
+                error_details=None,
+            )
+            self.db.add(ingestion_log)
+        except Exception as il_err:
+            logger.debug(f"[INTAKE] Ingestion log recording non-fatal: {il_err}")
+
         # Commit final state
         await self.db.commit()
         await self.db.refresh(lead)
@@ -690,30 +754,46 @@ class UniversalIntakeService:
         return (await self.db.execute(stmt)).scalars().first()
 
     async def _find_lead_by_phone(self, organization_id: str, phone_e164: str) -> Optional[Lead]:
-        """Find existing CRM Lead by phone scoped to tenant brokers."""
-        eligible_brokers = await self.assignment_service.get_eligible_brokers(organization_id)
-        if not eligible_brokers:
+        """Find existing CRM Lead by phone scoped to tenant organization."""
+        try:
+            org_uuid = uuid.UUID(str(organization_id))
+        except (ValueError, AttributeError):
             return None
-        broker_ids = [b.id for b in eligible_brokers]
+
+        eligible_brokers = await self.assignment_service.get_eligible_brokers(organization_id)
+        broker_ids = [b.id for b in eligible_brokers] if eligible_brokers else []
+
+        tenant_filter = Lead.organization_id == org_uuid
+        if broker_ids:
+            tenant_filter = or_(Lead.organization_id == org_uuid, Lead.broker_id.in_(broker_ids))
+
         stmt = select(Lead).where(
             and_(
                 Lead.phone == phone_e164,
-                Lead.broker_id.in_(broker_ids),
+                tenant_filter,
                 Lead.deleted_at.is_(None),
             )
         ).order_by(desc(Lead.created_at)).limit(1)
         return (await self.db.execute(stmt)).scalars().first()
 
     async def _find_lead_by_email(self, organization_id: str, email: str) -> Optional[Lead]:
-        """Find existing CRM Lead by email scoped to tenant brokers."""
-        eligible_brokers = await self.assignment_service.get_eligible_brokers(organization_id)
-        if not eligible_brokers:
+        """Find existing CRM Lead by email scoped to tenant organization."""
+        try:
+            org_uuid = uuid.UUID(str(organization_id))
+        except (ValueError, AttributeError):
             return None
-        broker_ids = [b.id for b in eligible_brokers]
+
+        eligible_brokers = await self.assignment_service.get_eligible_brokers(organization_id)
+        broker_ids = [b.id for b in eligible_brokers] if eligible_brokers else []
+
+        tenant_filter = Lead.organization_id == org_uuid
+        if broker_ids:
+            tenant_filter = or_(Lead.organization_id == org_uuid, Lead.broker_id.in_(broker_ids))
+
         stmt = select(Lead).where(
             and_(
                 Lead.email == email.strip().lower(),
-                Lead.broker_id.in_(broker_ids),
+                tenant_filter,
                 Lead.deleted_at.is_(None),
             )
         ).order_by(desc(Lead.created_at)).limit(1)

@@ -112,11 +112,15 @@ class PropertyRecommendationService:
             stmt_lead = select(Lead).where(
                 and_(
                     Lead.id == lead_uuid,
-                    Lead.broker_id == broker_uuid,
+                    or_(
+                        Lead.organization_id == broker_uuid,
+                        Lead.broker_id == broker_uuid,
+                    ),
+                    Lead.deleted_at.is_(None)
                 )
             )
         else:
-            stmt_lead = select(Lead).where(Lead.id == lead_uuid)
+            stmt_lead = select(Lead).where(Lead.id == lead_uuid, Lead.deleted_at.is_(None))
         res_lead = await self.db.execute(stmt_lead)
         lead = res_lead.scalars().first()
         if not lead:

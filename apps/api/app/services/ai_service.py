@@ -111,11 +111,12 @@ async def generate_ai_qualification_response(
     city: str,
     current_extracted_data: Dict[str, Any],
     history: List[Dict[str, str]],
-    latest_message: str
+    latest_message: str,
+    organization_id: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
-    Generates conversational qualification response using Google Gemini API.
-    If Gemini is unconfigured or encounters an error, falls back to a clean deterministic rule engine
+    Generates conversational qualification response using canonical AIGateway.
+    If AIGateway is unconfigured or encounters an error, falls back to a clean deterministic rule engine
     without fabricating any user information.
     """
     safe_latest_message = sanitize_user_input(latest_message)
@@ -128,42 +129,27 @@ async def generate_ai_qualification_response(
         latest_message=safe_latest_message
     )
 
-    # 1. Primary: Google Gemini API (Configurable model, e.g. gemini-3.5-flash)
-    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy_placeholder") and not settings.GEMINI_API_KEY.startswith("placeholder"):
-        model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash")
-        try:
-            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": formatted_prompt}
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "response_mime_type": "application/json"
-                }
-            }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(gemini_url, json=payload)
-                if res.status_code == 200:
-                    res_json = res.json()
-                    candidates = res_json.get("candidates", [])
-                    if candidates:
-                        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if "```json" in raw_text:
-                            raw_text = raw_text.split("```json")[1].split("```")[0]
-                        parsed = json.loads(raw_text.strip())
-                        if "response_message" in parsed:
-                            logger.info(f"[Gemini AI Success: {model_name}] Extracted & Qualified")
-                            return parsed
-                elif res.status_code == 429:
-                    logger.warning("[Gemini AI Rate Limit / Quota Exceeded (429)] Using clean deterministic fallback.")
-                else:
-                    logger.warning(f"[Gemini AI API Error: {res.status_code}] {res.text}")
-        except Exception as e:
-            logger.warning(f"[Gemini AI Service Error] {e}. Falling back to clean deterministic rule engine.")
+    # 1. Primary: Canonical AIGateway
+    try:
+        from app.infrastructure.ai_gateway.gateway import AIGateway
+        import uuid
+        target_org = organization_id if organization_id else uuid.UUID("00000000-0000-0000-0000-000000000000")
+        gateway = AIGateway()
+        res = await gateway.complete(
+            organization_id=target_org,
+            feature="lead_qualification",
+            task_type="qualification",
+            messages=[{"role": "user", "content": formatted_prompt}],
+            expect_json=True,
+            max_tokens=500,
+        )
+        if res.success and res.structured:
+            parsed = res.structured
+            if "response_message" in parsed:
+                logger.info(f"[AIGateway Success: {res.model}] Extracted & Qualified")
+                return parsed
+    except Exception as e:
+        logger.warning(f"[AIGateway Lead Qualification Error] {e}. Falling back to clean deterministic rule engine.")
 
     # 2. Clean Deterministic Fallback (Never fabricates data)
     return fallback_qualification_response(broker_name, latest_message, current_extracted_data)
@@ -230,52 +216,40 @@ def fallback_qualification_response(
     }
 
 
-async def analyze_lead_conversation(messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def analyze_lead_conversation(
+    messages: List[Dict[str, str]],
+    organization_id: Optional[Any] = None
+) -> Dict[str, Any]:
     """
-    Analyzes full conversation transcript for final scoring using Google Gemini.
-    If Gemini is unavailable, returns an honest error without fabricating lead data.
+    Analyzes full conversation transcript for final scoring using canonical AIGateway.
+    If AIGateway is unavailable, returns an honest error without fabricating lead data.
     """
     transcript_text = "\n".join([f"{msg.get('sender', 'USER').upper()}: {msg.get('text', '')}" for msg in messages])
 
-    # Primary: Google Gemini API
-    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy_placeholder") and not settings.GEMINI_API_KEY.startswith("placeholder"):
-        model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash")
-        try:
-            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": f"{LEAD_QUALIFICATION_PROMPT}\n\nTranscript:\n{transcript_text}"}
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "response_mime_type": "application/json"
-                }
-            }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(gemini_url, json=payload)
-                if res.status_code == 200:
-                    res_json = res.json()
-                    candidates = res_json.get("candidates", [])
-                    if candidates:
-                        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if "```json" in raw_text:
-                            raw_text = raw_text.split("```json")[1].split("```")[0]
-                        parsed = json.loads(raw_text.strip())
-                        if "score" in parsed:
-                            logger.info(f"[Gemini AI Lead Analysis Success: {model_name}]")
-                            return parsed
-                elif res.status_code == 429:
-                    logger.warning("[Gemini AI Rate Limit / Quota Exceeded (429)] during conversation analysis.")
-                else:
-                    logger.warning(f"[Gemini AI Analysis Error: {res.status_code}] {res.text}")
-        except Exception as e:
-            logger.warning(f"[Gemini AI Analysis Error] {e}.")
+    try:
+        from app.infrastructure.ai_gateway.gateway import AIGateway
+        import uuid
+        target_org = organization_id if organization_id else uuid.UUID("00000000-0000-0000-0000-000000000000")
+        gateway = AIGateway()
+        prompt = f"{LEAD_QUALIFICATION_PROMPT}\n\nTranscript:\n{transcript_text}"
+        res = await gateway.complete(
+            organization_id=target_org,
+            feature="lead_analysis",
+            task_type="qualification",
+            messages=[{"role": "user", "content": prompt}],
+            expect_json=True,
+            max_tokens=600,
+        )
+        if res.success and res.structured:
+            parsed = res.structured
+            if "score" in parsed:
+                logger.info(f"[AIGateway Lead Analysis Success: {res.model}]")
+                return parsed
+    except Exception as e:
+        logger.warning(f"[AIGateway Analysis Error] {e}.")
 
     # Honest error return when AI is unavailable — NEVER fabricate CRM information
-    logger.warning("[AI Service] Gemini unavailable for transcript analysis. Returning honest unanalyzed status.")
+    logger.warning("[AI Service] AIGateway unavailable for transcript analysis. Returning honest unanalyzed status.")
     return {
         "score": "cold",
         "confidence": 0.0,

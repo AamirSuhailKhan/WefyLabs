@@ -73,8 +73,9 @@ from app.modules.telemetry.controller.telemetry_controller import router as tele
 from app.infrastructure.middleware.observability_middleware import EnterpriseObservabilityMiddleware
 from app.modules.logging.json_logger import configure_structured_logging
 
-# ─── Enterprise Security & DevSecOps Routers (Part 9) ─────────────────────────
+# ─── Enterprise Security & DevSecOps Routers (Part 9 & Build 11) ────────────────
 from app.modules.security.controller.security_controller import router as security_ops_router
+from app.modules.security.router import router as master_security_governance_router
 
 # ─── Volume 2 Part 1 — Universal Lead Ingestion Engine ─────────────────────────
 from app.modules.ingestion.controller.ingestion_controller import router as lead_ingestion_router
@@ -255,8 +256,9 @@ app.include_router(alerts_router, prefix=settings.API_V1_STR)
 app.include_router(diagnostics_router, prefix=settings.API_V1_STR)
 app.include_router(telemetry_router, prefix=settings.API_V1_STR)
 
-# ─── Part 9 — Enterprise Security & DevSecOps Routers ──────────────────────────
+# ─── Part 9 & Build 11 — Enterprise Security & DevSecOps Routers ─────────────────
 app.include_router(security_ops_router, prefix=settings.API_V1_STR)
+app.include_router(master_security_governance_router, prefix=settings.API_V1_STR)
 
 # ─── Volume 2 Part 1 — Universal Lead Ingestion Engine ─────────────────────────
 app.include_router(lead_ingestion_router, prefix=settings.API_V1_STR)
@@ -408,6 +410,18 @@ app.include_router(marketing_router, prefix=settings.API_V1_STR)
 # ─── Part 21 — Customer Portal, Digital Deal Room & Transaction Collaboration OS ─
 from app.modules.portal import portal_router
 app.include_router(portal_router, prefix=settings.API_V1_STR)
+
+# ─── Master Build 08 — Sales Pipeline, Opportunity, Site Visit & Booking OS ──
+from app.modules.sales_pipeline.router import router as sales_pipeline_router
+app.include_router(sales_pipeline_router, prefix=settings.API_V1_STR)
+
+# ─── Master Build 09 — Revenue Intelligence OS ────────────────────────────────
+from app.modules.revenue_intelligence.router_b09 import router_b09 as revenue_intelligence_b09_router
+app.include_router(revenue_intelligence_b09_router, prefix=settings.API_V1_STR)
+
+# ─── Master Build 14 — Competitive Moat, Benchmarking & Intelligence Graph ───
+from app.modules.intelligence import intelligence_router
+app.include_router(intelligence_router, prefix=settings.API_V1_STR)
 
 
 

@@ -236,7 +236,7 @@ class ProspectAIExtractor:
 
     @classmethod
     async def _call_llm_provider(cls, text: str, country_code: Optional[str]) -> Optional[str]:
-        """Call Gemini primary, then OpenAI fallback if configured."""
+        """Call Gemini (sole AI provider). Falls through to deterministic extraction if unavailable."""
         gemini_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "GEMINI_API_KEY", "")
         if gemini_key and not gemini_key.startswith("placeholder") and not gemini_key.startswith("AIzaSy_placeholder"):
             try:
@@ -250,22 +250,7 @@ class ProspectAIExtractor:
                 if resp.success and resp.content:
                     return resp.content
             except Exception as ex:
-                logger.warning(f"[PROSPECT_AI] Gemini call failed: {ex}. Checking OpenAI fallback.")
-
-        openai_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
-        if openai_key and not openai_key.startswith("placeholder"):
-            try:
-                from app.modules.ai_agent.llm_router.adapters.openai_adapter import OpenAIAdapter
-                adapter = OpenAIAdapter(api_key=openai_key, model="gpt-4o-mini")
-                messages = [
-                    {"role": "system", "content": PROSPECT_SYSTEM_INSTRUCTION},
-                    {"role": "user", "content": f"Country context: {country_code or 'UNKNOWN'}\nLead Conversation / Message Evidence:\n{text}"}
-                ]
-                resp = await adapter.complete(messages, max_tokens=1024, temperature=0.1)
-                if resp.success and resp.content:
-                    return resp.content
-            except Exception as ex:
-                logger.warning(f"[PROSPECT_AI] OpenAI call failed: {ex}.")
+                logger.warning(f"[PROSPECT_AI] Gemini call failed: {ex}. Falling back to deterministic extraction.")
 
         return None
 

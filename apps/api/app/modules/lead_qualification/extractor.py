@@ -377,10 +377,11 @@ class QualificationFactExtractor:
         """
         Executes end-to-end fact extraction:
         1. Prompt Injection Sanitization.
-        2. LLM Extraction (Gemini primary -> OpenAI fallback -> Deterministic rules).
-        3. Normalization & Validation.
-        4. Confidence Calibration.
-        5. Returns strongly-typed QualificationExtractionResultDTO.
+        2. LLM Extraction via canonical AIGateway (never direct SDK calls).
+        3. Deterministic fallback when AIGateway is unconfigured or fails.
+        4. Normalization & Validation.
+        5. Confidence Calibration.
+        6. Returns strongly-typed QualificationExtractionResultDTO.
         """
         start_time = datetime.now(timezone.utc)
 
@@ -408,8 +409,13 @@ class QualificationFactExtractor:
                 is_safe=True,
             )
 
-        # 2. Extract raw structured dictionary via LLM or deterministic fallback
-        raw_dict, model_provider, model_name = await cls._execute_llm_or_fallback(sanitized_text, country_code)
+        # 2. Extract raw structured dictionary via AIGateway or deterministic fallback
+        raw_dict, model_provider, model_name = await cls._execute_via_gateway(
+            organization_id=organization_id,
+            lead_id=lead_id,
+            text=sanitized_text,
+            country_code=country_code,
+        )
 
         # 3. Transform and validate raw dictionary into ProposedQualificationFactDTOs
         proposed_facts = cls._build_proposed_facts(
@@ -438,41 +444,67 @@ class QualificationFactExtractor:
         )
 
     @classmethod
-    async def _execute_llm_or_fallback(cls, text: str, country_code: Optional[str]) -> Tuple[Dict[str, Any], str, str]:
-        """Calls Gemini -> OpenAI -> Deterministic Heuristics."""
-        gemini_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "GEMINI_API_KEY", "")
-        if gemini_key and not gemini_key.startswith("placeholder") and not gemini_key.startswith("AIzaSy_placeholder"):
-            try:
-                from app.modules.ai_agent.llm_router.adapters.google_adapter import GoogleAdapter
-                adapter = GoogleAdapter(api_key=gemini_key, model="gemini-3.5-flash")
-                messages = [
-                    {"role": "system", "content": QUALIFICATION_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Country context: {country_code or 'UNKNOWN'}\nCustomer Conversation Text:\n{text}"}
-                ]
-                resp = await adapter.complete(messages, max_tokens=1024, temperature=0.1)
-                if resp.success and resp.content:
-                    parsed = cls._parse_json_block(resp.content)
-                    if parsed:
-                        return parsed, "google_gemini", "gemini-3.5-flash"
-            except Exception as ex:
-                logger.warning(f"[QUALIFICATION_EXTRACTOR] Gemini call failed: {ex}. Falling back.")
+    async def _execute_via_gateway(
+        cls,
+        organization_id: str,
+        lead_id: str,
+        text: str,
+        country_code: Optional[str],
+    ) -> Tuple[Dict[str, Any], str, str]:
+        """
+        Routes the LLM extraction call through the canonical AIGateway.
 
-        openai_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
-        if openai_key and not openai_key.startswith("placeholder"):
-            try:
-                from app.modules.ai_agent.llm_router.adapters.openai_adapter import OpenAIAdapter
-                adapter = OpenAIAdapter(api_key=openai_key, model="gpt-4o-mini")
-                messages = [
-                    {"role": "system", "content": QUALIFICATION_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Country context: {country_code or 'UNKNOWN'}\nCustomer Conversation Text:\n{text}"}
-                ]
-                resp = await adapter.complete(messages, max_tokens=1024, temperature=0.1)
-                if resp.success and resp.content:
-                    parsed = cls._parse_json_block(resp.content)
-                    if parsed:
-                        return parsed, "openai", "gpt-4o-mini"
-            except Exception as ex:
-                logger.warning(f"[QUALIFICATION_EXTRACTOR] OpenAI call failed: {ex}. Falling back to deterministic heuristics.")
+        Invariants enforced by AIGateway:
+        - Tenant isolation (organization_id required on every call)
+        - AIRequestRecord persistence (full observability)
+        - Circuit breaker (provider failure isolation)
+        - Cost control (token cap)
+        - Fail-closed configuration (CONFIGURATION_REQUIRED vs synthetic success)
+
+        Falls back to deterministic rule extractor when:
+        - AIGateway is unconfigured (no API key)
+        - Model output is not valid JSON
+        - Provider is unavailable
+        """
+        try:
+            from app.infrastructure.ai_gateway.gateway import AIGateway, OperationStatus
+            gateway = AIGateway()  # No DB session needed for extraction
+            messages = [
+                {"role": "system", "content": QUALIFICATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Country context: {country_code or 'UNKNOWN'}\n"
+                        f"Customer Conversation Text:\n{text}"
+                    ),
+                },
+            ]
+            result = await gateway.complete(
+                organization_id=organization_id,
+                feature="lead_qualification_extraction",
+                messages=messages,
+                task_type="qualification",
+                expect_json=True,
+                max_tokens=1024,
+                temperature=0.1,
+                prompt_version="v1",
+            )
+
+            if result.success and result.structured:
+                return result.structured, result.provider, result.model
+
+            # AIGateway returned non-success (CONFIGURATION_REQUIRED, PROVIDER_UNAVAILABLE, etc.)
+            logger.info(
+                "[QUALIFICATION_EXTRACTOR] AIGateway status=%s for lead %s — using deterministic fallback",
+                result.status.value,
+                lead_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[QUALIFICATION_EXTRACTOR] AIGateway call raised exception for lead %s: %s — using deterministic fallback",
+                lead_id,
+                exc,
+            )
 
         # Deterministic Fallback (Zero Hallucination Guaranteed)
         return cls._deterministic_rule_extractor(text, country_code), "deterministic_rules", "rule-extractor-v1"
@@ -618,7 +650,7 @@ class QualificationFactExtractor:
             res["timeline"] = "WITHIN_30_DAYS"
             res["evidence_quotes"]["timeline"] = "within 30 days"
             res["confidences"]["timeline"] = 0.90
-        elif re.search(r"\b(3\s*months|quarter)\b", text_lower):
+        elif re.search(r"\b([23]\s*months?|quarter)\b", text_lower):
             res["timeline"] = "WITHIN_3_MONTHS"
             res["evidence_quotes"]["timeline"] = "within 3 months"
             res["confidences"]["timeline"] = 0.90

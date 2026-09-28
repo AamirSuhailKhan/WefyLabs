@@ -99,9 +99,21 @@ class GroundingValidator:
         Returns:
             GroundingResult — passed=False if critical claims are ungrounded.
         """
-        if not require_grounding or not retrieved_chunks:
-            # No evidence context → cannot ground → return insufficient evidence
-            if require_grounding and not retrieved_chunks:
+        if not require_grounding:
+            return GroundingResult(
+                passed=True,
+                answer_text=answer_text,
+                grounding_score=1.0,
+            )
+
+        if not retrieved_chunks:
+            # Check if answer contains any factual claims that require grounding
+            has_factual_claims = bool(
+                _PRICE_CLAIM_RE.search(answer_text)
+                or _AVAILABILITY_CLAIM_RE.search(answer_text)
+                or _AREA_CLAIM_RE.search(answer_text)
+            )
+            if has_factual_claims:
                 return GroundingResult(
                     passed=False,
                     answer_text=INSUFFICIENT_EVIDENCE_RESPONSE,
@@ -109,6 +121,7 @@ class GroundingValidator:
                     block_reason="No knowledge context available to ground the answer",
                     grounding_score=0.0,
                 )
+            # Purely conversational answer with no factual claims
             return GroundingResult(
                 passed=True,
                 answer_text=answer_text,

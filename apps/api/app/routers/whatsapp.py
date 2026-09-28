@@ -9,7 +9,9 @@ from app.config import settings
 from app.dependencies import get_db
 from app.services.conversation_service import process_incoming_whatsapp_message
 
-logger = logging.getLogger("beetlelabs.whatsapp")
+from app.modules.communication.canonical_service import canonical_communication_service
+
+logger = logging.getLogger("wefylabs.whatsapp")
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
 def verify_meta_signature(raw_body: bytes, signature_header: str, app_secret: str) -> bool:
@@ -56,15 +58,17 @@ async def whatsapp_webhook_verification(request: Request):
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """
     Incoming WhatsApp webhook listener for Meta Cloud API Direct and 360dialog.
-    Verifies HMAC signature if configured and processes incoming lead message.
+    Processes webhook via the canonical communication engine:
+    1. Authenticates Meta HMAC signature (fail-closed)
+    2. Archives raw event to RawCommunicationEvent
+    3. Guarantees webhook idempotency
+    4. Normalizes phone to E.164 and resolves Identity Graph node
+    5. Resolves or creates canonical OmnichannelConversation and ChannelMessage
+    6. Processes delivery receipts (sent -> delivered -> read | failed)
+    7. Emits transactional OutboxEvent
     """
     raw_body = await request.body()
-    sig_header = request.headers.get("X-Hub-Signature-256")
-    
-    # Enforce signature verification in production if WHATSAPP_APP_SECRET is set
-    if settings.ENV == "production" and hasattr(settings, "WHATSAPP_APP_SECRET") and settings.WHATSAPP_APP_SECRET:
-        if not verify_meta_signature(raw_body, sig_header or "", settings.WHATSAPP_APP_SECRET):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Meta webhook HMAC signature")
+    headers_dict = dict(request.headers)
 
     try:
         data = await request.json()
@@ -72,8 +76,22 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
         return {"status": "ok", "detail": "Invalid or empty JSON body"}
 
     try:
-        result = await process_incoming_whatsapp_message(db, data)
+        if "messages" in data and "entry" not in data:
+            result = await process_incoming_whatsapp_message(db, data)
+            return {"status": "ok", "result": result}
+
+        result = await canonical_communication_service.ingest_inbound_webhook(
+            db=db,
+            provider_name="whatsapp_cloud",
+            raw_body=raw_body,
+            headers=headers_dict,
+            parsed_payload=data,
+            enforce_signature=True,
+        )
         return {"status": "ok", "result": result}
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"[WhatsApp Webhook Error] {type(e).__name__}: {e}", exc_info=False)
+        logger.error(f"[WhatsApp Webhook Error] {type(e).__name__}: {e}", exc_info=True)
         return {"status": "ok", "detail": "Internal processing error"}
+

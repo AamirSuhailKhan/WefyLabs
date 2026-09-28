@@ -25,56 +25,214 @@ logger = logging.getLogger(__name__)
 E164_PATTERN = re.compile(r"^\+[1-9]\d{6,14}$")
 
 
-def normalize_phone(phone: Optional[str], default_country_code: Optional[str] = None) -> Tuple[Optional[str], float]:
+class PhoneNormalizationResult(tuple):
     """
-    Normalize phone to E.164 format.
+    Subclass of 2-tuple (normalized_phone, confidence) for backwards compatibility.
+    Code using `phone_e164, phone_conf = normalize_phone(...)` continues to work.
+    Also exposes:
+        .normalized_phone
+        .confidence
+        .raw_phone
+        .phone_country
+        .normalization_status: 'valid' | 'formatted' | 'uncertain' | 'invalid'
+    """
+    def __new__(
+        cls,
+        normalized_phone: Optional[str],
+        confidence: float,
+        raw_phone: Optional[str] = None,
+        phone_country: Optional[str] = None,
+        normalization_status: str = "invalid"
+    ):
+        instance = super().__new__(cls, (normalized_phone, confidence))
+        instance.normalized_phone = normalized_phone
+        instance.confidence = confidence
+        instance.raw_phone = raw_phone
+        instance.phone_country = phone_country
+        instance.normalization_status = normalization_status
+        return instance
+
+    def to_dict(self) -> dict:
+        return {
+            "normalized_phone": self.normalized_phone,
+            "confidence": self.confidence,
+            "raw_phone": self.raw_phone,
+            "phone_country": self.phone_country,
+            "normalization_status": self.normalization_status,
+        }
+
+
+COUNTRY_PREFIX_MAP = {
+    "91": "IN",
+    "971": "AE",
+    "1": "US",
+    "44": "GB",
+    "65": "SG",
+    "60": "MY",
+    "966": "SA",
+    "974": "QA",
+}
+
+
+def _infer_country_from_e164(e164: str) -> Optional[str]:
+    digits = e164.lstrip("+")
+    for prefix_len in (3, 2, 1):
+        prefix = digits[:prefix_len]
+        if prefix in COUNTRY_PREFIX_MAP:
+            return COUNTRY_PREFIX_MAP[prefix]
+    return None
+
+
+def normalize_phone(
+    phone: Optional[str],
+    default_country_code: Optional[str] = None
+) -> PhoneNormalizationResult:
+    """
+    Normalize phone to canonical E.164 format.
+    Handles:
+      - WhatsApp identifiers (@c.us, @s.whatsapp.net, whatsapp:)
+      - Indian 10-digit [6-9]XXXXXXXXX -> +91XXXXXXXXXX
+      - Indian 11-digit 0[6-9]XXXXXXXXX -> +91XXXXXXXXXX
+      - Indian 12-digit 91[6-9]XXXXXXXXX -> +91XXXXXXXXXX
+      - International prefixes (00XX -> +XX)
+      - Standard E.164 (+[1-9]...)
+      - Preserves raw input, country code, and explicit normalization status
 
     Returns:
-        (normalized_phone_e164_or_None, confidence_float)
-        confidence = 1.0 if already E.164
-        confidence = 0.8 if normalized from local format
-        confidence = 0.0 if cannot normalize
+        PhoneNormalizationResult (subclass of 2-tuple (normalized_e164, confidence))
     """
     if not phone:
-        return None, 0.0
+        return PhoneNormalizationResult(None, 0.0, raw_phone=phone, phone_country=None, normalization_status="invalid")
 
-    phone = phone.strip()
-    if not phone:
-        return None, 0.0
+    raw_input = phone
+    cleaned = phone.strip()
+    if not cleaned:
+        return PhoneNormalizationResult(None, 0.0, raw_phone=raw_input, phone_country=None, normalization_status="invalid")
 
-    # Remove common formatting characters
-    digits_only = re.sub(r"[\s\-\(\)\.]", "", phone)
+    # Strip WhatsApp and Tel URI prefixes / suffixes
+    cleaned = re.sub(r"^(whatsapp|tel):", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"@(c\.us|s\.whatsapp\.net)$", "", cleaned, flags=re.IGNORECASE)
 
-    # Already E.164?
+    # Remove common formatting characters: spaces, hyphens, parentheses, dots
+    digits_only = re.sub(r"[\s\-\(\)\.]", "", cleaned)
+
+    if not digits_only or not re.search(r"\d", digits_only):
+        return PhoneNormalizationResult(None, 0.0, raw_phone=raw_input, phone_country=None, normalization_status="invalid")
+
+    # 1. Already valid E.164?
     if E164_PATTERN.match(digits_only):
-        return digits_only, 1.0
+        country = _infer_country_from_e164(digits_only) or default_country_code
+        return PhoneNormalizationResult(
+            digits_only,
+            1.0,
+            raw_phone=raw_input,
+            phone_country=country,
+            normalization_status="valid"
+        )
 
-    # Try phonenumbers library if available
+    # 2. Try phonenumbers library if available in environment
     try:
         import phonenumbers
-        country = default_country_code or "AE"  # Default region for parsing only — NOT business logic
+        country_hint = default_country_code or "IN"
         try:
-            parsed = phonenumbers.parse(phone, country)
+            parsed = phonenumbers.parse(cleaned, country_hint)
             if phonenumbers.is_valid_number(parsed):
                 e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-                return e164, 0.9
+                region = phonenumbers.region_code_for_number(parsed)
+                return PhoneNormalizationResult(
+                    e164,
+                    0.95,
+                    raw_phone=raw_input,
+                    phone_country=region,
+                    normalization_status="valid"
+                )
         except phonenumbers.NumberParseException:
             pass
     except ImportError:
         pass
 
-    # Last resort: if starts with 00, convert to +
+    # 3. Leading 00 international dialing prefix (e.g. 00971501234567 -> +971501234567)
     if digits_only.startswith("00") and len(digits_only) >= 10:
         candidate = "+" + digits_only[2:]
         if E164_PATTERN.match(candidate):
-            return candidate, 0.7
+            country = _infer_country_from_e164(candidate) or default_country_code
+            return PhoneNormalizationResult(
+                candidate,
+                0.85,
+                raw_phone=raw_input,
+                phone_country=country,
+                normalization_status="formatted"
+            )
 
-    # Cannot normalize — return raw stripped for storage, low confidence
-    raw_stripped = re.sub(r"\s+", "", phone)
-    if len(raw_stripped) >= 7:
-        return raw_stripped, 0.3
+    # 4. Indian formats:
+    # 4a. 12 digits starting with 91 and mobile digit [6-9]
+    if len(digits_only) == 12 and digits_only.startswith("91") and digits_only[2] in "6789":
+        candidate = "+" + digits_only
+        return PhoneNormalizationResult(
+            candidate,
+            0.9,
+            raw_phone=raw_input,
+            phone_country="IN",
+            normalization_status="formatted"
+        )
 
-    return None, 0.0
+    # 4b. 11 digits starting with 0 and mobile digit [6-9] (trunk prefix 0)
+    if len(digits_only) == 11 and digits_only.startswith("0") and digits_only[1] in "6789":
+        candidate = "+91" + digits_only[1:]
+        return PhoneNormalizationResult(
+            candidate,
+            0.85,
+            raw_phone=raw_input,
+            phone_country="IN",
+            normalization_status="formatted"
+        )
+
+    # 4c. 10 digits starting with [6-9] (Indian mobile standard)
+    if len(digits_only) == 10 and digits_only[0] in "6789":
+        default_prefix = default_country_code.upper() if default_country_code else "IN"
+        if default_prefix in ("IN", "+91", None):
+            candidate = "+91" + digits_only
+            return PhoneNormalizationResult(
+                candidate,
+                0.85,
+                raw_phone=raw_input,
+                phone_country="IN",
+                normalization_status="formatted"
+            )
+
+    # 5. Fallback with default_country_code if specified
+    if default_country_code and not digits_only.startswith("+"):
+        prefix = default_country_code if default_country_code.startswith("+") else f"+{default_country_code}"
+        candidate = f"{prefix}{digits_only}"
+        if E164_PATTERN.match(candidate):
+            return PhoneNormalizationResult(
+                candidate,
+                0.75,
+                raw_phone=raw_input,
+                phone_country=default_country_code,
+                normalization_status="formatted"
+            )
+
+    # 6. Uncertain: 7 or more digits but non-conformant
+    raw_stripped = re.sub(r"\s+", "", cleaned)
+    digits_count = len(re.sub(r"\D", "", raw_stripped))
+    if digits_count >= 7:
+        return PhoneNormalizationResult(
+            raw_stripped,
+            0.3,
+            raw_phone=raw_input,
+            phone_country=None,
+            normalization_status="uncertain"
+        )
+
+    # 7. Invalid: too short or nonsensical
+    return PhoneNormalizationResult(
+        None,
+        0.0,
+        raw_phone=raw_input,
+        phone_country=None,
+        normalization_status="invalid"
+    )
 
 
 def normalize_email(email: Optional[str]) -> Tuple[Optional[str], str]:

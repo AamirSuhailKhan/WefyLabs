@@ -148,6 +148,25 @@ class DeliveryEngine:
         )
         db.add(status_record)
 
+        # Emit Transactional Outbox Event (Master Build 03)
+        from app.models.outbox_models import OutboxEvent, OutboxStatus
+        db.add(OutboxEvent(
+            event_id=str(uuid.uuid4()),
+            tenant_id=conversation.organization_id,
+            event_type="message.queued",
+            aggregate_type="conversation",
+            aggregate_id=conversation.id,
+            payload={
+                "message_id": msg.id,
+                "conversation_id": conversation.id,
+                "channel": channel,
+                "recipient": recipient_identifier,
+                "content": content,
+            },
+            status=OutboxStatus.PENDING,
+            idempotency_key=f"outbox_queued_{msg.id}",
+        ))
+
         # Update conversation stats
         conversation.total_messages = (conversation.total_messages or 0) + 1
         conversation.last_message_at = datetime.now(timezone.utc)
@@ -230,6 +249,14 @@ class DeliveryEngine:
             logger.warning(f"[DeliveryEngine] Cannot find message for provider_id={provider_message_id}")
             return
 
+        from app.models.communication_models import validate_message_status_transition
+        if not validate_message_status_transition(msg.delivery_status, status):
+            logger.warning(
+                f"[DeliveryEngine] Blocked invalid status transition: "
+                f"{msg.delivery_status} -> {status} for msg_id={msg.id}"
+            )
+            return
+
         now = datetime.now(timezone.utc)
         msg.delivery_status = status
         if status == "delivered":
@@ -251,6 +278,24 @@ class DeliveryEngine:
             error_message=error_message,
         )
         db.add(status_rec)
+
+        # Emit OutboxEvent for delivery state transition
+        from app.models.outbox_models import OutboxEvent, OutboxStatus
+        db.add(OutboxEvent(
+            event_id=str(uuid.uuid4()),
+            tenant_id=msg.organization_id,
+            event_type=f"message.{status.lower()}",
+            aggregate_type="message",
+            aggregate_id=msg.id,
+            payload={
+                "message_id": msg.id,
+                "provider_message_id": provider_message_id,
+                "status": status,
+                "error": error_message,
+            },
+            status=OutboxStatus.PENDING,
+            idempotency_key=f"outbox_status_{provider_message_id}_{status}",
+        ))
         await db.flush()
 
     # ─── Internal Helpers ─────────────────────────────────────────────────────

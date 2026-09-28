@@ -530,3 +530,226 @@ async def get_viewing_slots(
         property_id=property_id,
         days_ahead=days_ahead,
     )
+
+
+# ─── Master Build 06 — Canonical Sales Agent Endpoints ───────────────────────
+
+class AgentTurnRequestDTO(BaseModel):
+    organization_id: str
+    lead_id: str
+    conversation_id: str
+    customer_message: str
+    actor_id: Optional[str] = "ai_agent"
+    current_facts: Optional[Dict[str, Any]] = None
+    is_human_active: bool = False
+    is_paused: bool = False
+
+
+class ProposeActionRequestDTO(BaseModel):
+    organization_id: str
+    lead_id: str
+    customer_message: str
+    qualification_facts: Optional[Dict[str, Any]] = None
+    missing_fields: Optional[List[str]] = None
+    is_human_active: bool = False
+    is_paused: bool = False
+
+
+class ExecuteActionRequestDTO(BaseModel):
+    organization_id: str
+    actor_id: str
+    action_type: str
+    parameters: Dict[str, Any]
+    authorization_token: Optional[str] = None
+    risk_tier: str = "MEDIUM"
+
+
+class HandoffRequestDTO(BaseModel):
+    organization_id: str
+    conversation_id: str
+    lead_id: str
+    reason: str
+    actor_id: Optional[str] = None
+
+
+class PauseResumeRequestDTO(BaseModel):
+    organization_id: str
+    conversation_id: str
+    reason: Optional[str] = "Human takeover requested"
+    actor_id: Optional[str] = None
+
+
+@router.post("/agent/turn")
+async def execute_agent_turn(
+    dto: AgentTurnRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Executes a single governed sales turn using canonical SalesAgent."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    agent = SalesAgent(db)
+    return await agent.process_turn(
+        organization_id=dto.organization_id,
+        lead_id=dto.lead_id,
+        conversation_id=dto.conversation_id,
+        customer_message=dto.customer_message,
+        actor_id=dto.actor_id or "ai_agent",
+        current_facts=dto.current_facts,
+        is_human_active=dto.is_human_active,
+        is_paused=dto.is_paused,
+    )
+
+
+@router.post("/agent/propose-action")
+async def propose_next_action(
+    dto: ProposeActionRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Evaluates Next Best Action and returns structured proposal without execution."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    agent = SalesAgent(db)
+    proposal = agent.propose_action(
+        organization_id=dto.organization_id,
+        lead_id=dto.lead_id,
+        customer_message=dto.customer_message,
+        qualification_facts=dto.qualification_facts or {},
+        missing_fields=dto.missing_fields,
+        is_human_active=dto.is_human_active,
+        is_paused=dto.is_paused,
+    )
+    return proposal.to_dict()
+
+
+@router.post("/agent/execute-action")
+async def execute_governed_action(
+    dto: ExecuteActionRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Executes an authorized action with single-use token verification and replay protection."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    from app.modules.ai_agent.action_policy import ProposedActionDTO, NextBestActionType, ActionRiskTier
+    agent = SalesAgent(db)
+    try:
+        action_type_enum = NextBestActionType(dto.action_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid action_type: {dto.action_type}")
+
+    try:
+        risk_enum = ActionRiskTier(dto.risk_tier.upper())
+    except ValueError:
+        risk_enum = ActionRiskTier.MEDIUM
+
+    proposal = ProposedActionDTO(
+        action_type=action_type_enum,
+        reason=dto.parameters.get("reason", "API requested action"),
+        risk_tier=risk_enum,
+        requires_authorization=True if dto.authorization_token else False,
+        parameters=dto.parameters,
+    )
+
+    result = await agent.execute_authorized_action(
+        organization_id=dto.organization_id,
+        actor_id=dto.actor_id,
+        proposal=proposal,
+        parameters=dto.parameters,
+        authorization_token=dto.authorization_token,
+    )
+    return result.to_dict()
+
+
+@router.post("/agent/handoff")
+async def request_agent_handoff(
+    dto: HandoffRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Triggers human escalation and pauses AI autonomous outreach."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    agent = SalesAgent(db)
+    return await agent.handoff(
+        organization_id=dto.organization_id,
+        conversation_id=dto.conversation_id,
+        lead_id=dto.lead_id,
+        reason=dto.reason,
+        actor_id=dto.actor_id,
+    )
+
+
+@router.post("/agent/pause")
+async def pause_agent(
+    dto: PauseResumeRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pauses autonomous AI activity on a conversation (human takeover)."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    agent = SalesAgent(db)
+    return await agent.pause(
+        organization_id=dto.organization_id,
+        conversation_id=dto.conversation_id,
+        reason=dto.reason or "Human takeover",
+        actor_id=dto.actor_id,
+    )
+
+
+@router.post("/agent/resume")
+async def resume_agent(
+    dto: PauseResumeRequestDTO,
+    db: AsyncSession = Depends(get_db),
+):
+    """Resumes autonomous AI activity after human control is released."""
+    from app.modules.ai_agent.sales_agent import SalesAgent
+    agent = SalesAgent(db)
+    return await agent.resume(
+        organization_id=dto.organization_id,
+        conversation_id=dto.conversation_id,
+        actor_id=dto.actor_id,
+    )
+
+
+@router.get("/agent/state")
+async def get_agent_state(
+    organization_id: str = Query(...),
+    conversation_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Returns conversation state, control mode, and active agent status."""
+    from app.models.communication_models import OmnichannelConversation, ConversationControl
+    res = await db.execute(
+        select(OmnichannelConversation).where(
+            OmnichannelConversation.id == conversation_id,
+            OmnichannelConversation.organization_id == organization_id,
+        )
+    )
+    conv = res.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    ctrl_res = await db.execute(
+        select(ConversationControl).where(
+            ConversationControl.conversation_id == conversation_id,
+        )
+    )
+    ctrl = ctrl_res.scalar_one_or_none()
+    control_mode = ctrl.control_mode if ctrl else "ai"
+    return {
+        "organization_id": organization_id,
+        "conversation_id": conversation_id,
+        "control_mode": control_mode,
+        "status": conv.status,
+        "is_ai_active": control_mode == "ai" and conv.status in ("active", "open"),
+    }
+
+
+@router.get("/agent/trace")
+async def get_agent_traces(
+    organization_id: str = Query(...),
+    trace_id: Optional[str] = Query(None),
+):
+    """Retrieves immutable agent traces for debugging and governance."""
+    from app.modules.ai_agent.agent_trace import AgentTraceRecorder
+    if trace_id:
+        trace = AgentTraceRecorder.get_trace_by_id(trace_id)
+        if not trace or trace.organization_id != str(organization_id):
+            raise HTTPException(status_code=404, detail="Trace not found")
+        return trace.to_dict()
+    traces = AgentTraceRecorder.get_traces_for_org(organization_id)
+    return [t.to_dict() for t in traces]
+

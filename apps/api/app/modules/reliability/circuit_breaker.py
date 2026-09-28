@@ -7,6 +7,7 @@ and AI APIs using the Circuit Breaker state pattern:
 """
 import time
 import logging
+import inspect
 from typing import Callable, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class CircuitBreaker:
             else:
                 logger.warning(f"[CIRCUIT BREAKER] {self.name} is OPEN. Rejecting call.")
                 if fallback:
-                    return await fallback(*args, **kwargs) if callable(fallback) else fallback
+                    return await self._invoke_fallback(fallback, *args, **kwargs)
                 raise CircuitBreakerOpenException(f"Circuit Breaker '{self.name}' is OPEN.")
 
         try:
@@ -72,5 +73,19 @@ class CircuitBreaker:
                 self.last_state_change = now
 
             if fallback:
-                return await fallback(*args, **kwargs) if callable(fallback) else fallback
+                return await self._invoke_fallback(fallback, *args, **kwargs)
             raise
+
+    @staticmethod
+    async def _invoke_fallback(fallback: Callable, *args, **kwargs) -> Any:
+        """
+        Safely invoke a fallback that may be either:
+          - An async coroutine function  → awaited
+          - A plain sync callable       → called normally
+          - A non-callable value        → returned as-is
+        """
+        if not callable(fallback):
+            return fallback
+        if inspect.iscoroutinefunction(fallback):
+            return await fallback(*args, **kwargs)
+        return fallback(*args, **kwargs)

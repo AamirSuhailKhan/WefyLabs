@@ -43,7 +43,7 @@ services:
       - ENV=development
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
       - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
       - DIALOG360_API_BASE=${DIALOG360_API_BASE:-https://waba.360dialog.io/v1}
       - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_placeholder}
@@ -70,7 +70,7 @@ services:
       - ENV=development
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
       - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
     depends_on:
       postgres:
@@ -88,7 +88,7 @@ services:
       - ENV=development
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/leadscore
       - REDIS_URL=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-placeholder}
       - DIALOG360_API_KEY=${DIALOG360_API_KEY:-d360_key_placeholder}
     depends_on:
       postgres:

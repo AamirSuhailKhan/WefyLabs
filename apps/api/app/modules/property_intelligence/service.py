@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -29,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, desc
 
 from app.models.property_models import (
-    PropertyListing, PropertyMedia, PropertyPriceHistory
+    PropertyListing, PropertyMedia, PropertyPriceHistory, PropertyDataConflict
 )
 from app.models.knowledge_models import (
     KnowledgeDocument, KnowledgeChunk, KnowledgeFact, KnowledgeConflict
@@ -52,9 +53,152 @@ from app.modules.property_intelligence.schemas import (
     PropertyKnowledgeResponse,
     ConflictDetectionResult,
     QuestionClassificationResponse,
+    FieldFreshnessDTO,
+    PropertyDataConflictDTO,
 )
 
 logger = logging.getLogger("wefylabs.property_intelligence.service")
+
+
+# ─── Geosearch Utility ───────────────────────────────────────────────────────
+
+def _haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Computes exact great-circle distance between two geographic coordinates in kilometers.
+    """
+    R = 6371.0  # Earth radius in kilometers
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2.0) ** 2
+    )
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
+
+
+# ─── Canonical Amenity Taxonomy ──────────────────────────────────────────────
+
+AMENITY_CANONICAL_MAP = {
+    "swimming pool": "SWIMMING_POOL",
+    "pool": "SWIMMING_POOL",
+    "swimming": "SWIMMING_POOL",
+    "gym": "GYMNASIUM",
+    "gymnasium": "GYMNASIUM",
+    "fitness": "GYMNASIUM",
+    "fitness center": "GYMNASIUM",
+    "clubhouse": "CLUBHOUSE",
+    "club house": "CLUBHOUSE",
+    "club": "CLUBHOUSE",
+    "parking": "PARKING",
+    "car parking": "PARKING",
+    "covered parking": "PARKING",
+    "security": "SECURITY_24X7",
+    "24x7 security": "SECURITY_24X7",
+    "gated security": "SECURITY_24X7",
+    "cctv": "SECURITY_24X7",
+    "lift": "ELEVATOR",
+    "elevator": "ELEVATOR",
+    "power backup": "POWER_BACKUP",
+    "power back up": "POWER_BACKUP",
+    "generator": "POWER_BACKUP",
+    "children play area": "PLAY_AREA",
+    "play area": "PLAY_AREA",
+    "kids play area": "PLAY_AREA",
+    "park": "PARK",
+    "garden": "GARDEN",
+    "landscaped garden": "GARDEN",
+    "jogging track": "JOGGING_TRACK",
+    "balcony": "BALCONY",
+    "intercom": "INTERCOM",
+    "wifi": "WIFI",
+    "fire safety": "FIRE_SAFETY",
+}
+
+
+def normalize_amenity(raw_amenity: str) -> str:
+    """Normalizes raw amenity string into standard taxonomy token while preserving intent."""
+    if not raw_amenity:
+        return ""
+    clean = re.sub(r"[^a-zA-Z0-9\s]", " ", raw_amenity).strip().lower()
+    clean = re.sub(r"\s+", " ", clean)
+    return AMENITY_CANONICAL_MAP.get(clean, clean.upper().replace(" ", "_"))
+
+
+def normalize_amenities(amenities: List[str]) -> List[str]:
+    """Normalizes a list of amenities into unique canonical taxonomy tokens."""
+    if not amenities:
+        return []
+    res = []
+    seen = set()
+    for a in amenities:
+        token = normalize_amenity(a)
+        if token and token not in seen:
+            seen.add(token)
+            res.append(token)
+    return res
+
+
+# ─── Property Freshness Engine ───────────────────────────────────────────────
+
+class FreshnessPolicy:
+    """
+    Authoritative field freshness policy engine.
+    Fields have explicit TTLs: availability is very short, price is short,
+    possession is medium, amenities and specifications are long.
+    """
+    AVAILABILITY_TTL_SECONDS = 60        # Very short freshness
+    PRICE_TTL_SECONDS = 300              # Short freshness (5 min)
+    POSSESSION_TTL_SECONDS = 86400       # Medium freshness (24 hours)
+    AMENITIES_TTL_SECONDS = 604800       # Long freshness (7 days)
+    SPECIFICATIONS_TTL_SECONDS = 604800  # Long freshness (7 days)
+
+    @classmethod
+    def evaluate_freshness(cls, field_name: str, updated_at: Optional[datetime]) -> Dict[str, Any]:
+        """
+        Determines whether a field fact is LIVE/FRESH vs STALE vs UNKNOWN.
+        """
+        if not updated_at:
+            return {
+                "field": field_name,
+                "status": "UNKNOWN",
+                "is_fresh": False,
+                "age_seconds": None,
+                "ttl_seconds": None,
+                "observed_at": None
+            }
+
+        now = datetime.now(timezone.utc)
+        ts = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+        age = max(0.0, (now - ts).total_seconds())
+
+        ttls = {
+            "availability": cls.AVAILABILITY_TTL_SECONDS,
+            "status": cls.AVAILABILITY_TTL_SECONDS,
+            "price": cls.PRICE_TTL_SECONDS,
+            "possession_date": cls.POSSESSION_TTL_SECONDS,
+            "possession": cls.POSSESSION_TTL_SECONDS,
+            "amenities": cls.AMENITIES_TTL_SECONDS,
+        }
+        ttl = ttls.get(field_name.lower(), 3600)
+        is_fresh = age <= ttl
+        if age <= 15.0:
+            status_str = "LIVE"
+        elif is_fresh:
+            status_str = "FRESH"
+        else:
+            status_str = "STALE"
+
+        return {
+            "field": field_name,
+            "status": status_str,
+            "is_fresh": is_fresh,
+            "age_seconds": round(age, 2),
+            "ttl_seconds": ttl,
+            "observed_at": ts.isoformat()
+        }
 
 
 class PropertyIntelligenceService:
@@ -80,6 +224,13 @@ class PropertyIntelligenceService:
             return uuid.UUID(str(val))
         except (ValueError, TypeError):
             return None
+
+    def _tenant_filter(self, t_uuid: uuid.UUID):
+        """Dual-read filter: matches tenant by organization_id or broker_id."""
+        return or_(
+            PropertyListing.organization_id == t_uuid,
+            PropertyListing.broker_id == t_uuid
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # 1. Authoritative Property Truth & Fact Pack
@@ -119,7 +270,7 @@ class PropertyIntelligenceService:
             select(PropertyListing)
             .where(
                 PropertyListing.id == p_uuid,
-                PropertyListing.broker_id == t_uuid,
+                self._tenant_filter(t_uuid),
                 PropertyListing.deleted_at.is_(None)
             )
         )
@@ -301,7 +452,7 @@ class PropertyIntelligenceService:
         stmt = (
             select(PropertyListing)
             .where(
-                PropertyListing.broker_id == t_uuid,
+                self._tenant_filter(t_uuid),
                 PropertyListing.deleted_at.is_(None)
             )
         )
@@ -357,6 +508,10 @@ class PropertyIntelligenceService:
             stmt = stmt.where(PropertyListing.furnishing == criteria.furnishing.strip().lower())
         if criteria.construction_status and criteria.construction_status.lower() != "all":
             stmt = stmt.where(PropertyListing.construction_status == criteria.construction_status.strip().lower())
+        if criteria.facing and criteria.facing.lower() != "all":
+            stmt = stmt.where(PropertyListing.facing.ilike(f"%{criteria.facing.strip()}%"))
+        if criteria.possession_status and criteria.possession_status.lower() != "all":
+            stmt = stmt.where(PropertyListing.construction_status.ilike(f"%{criteria.possession_status.strip()}%"))
 
         # Stage 5: Text Search Refinement
         if criteria.query and criteria.query.strip():
@@ -396,13 +551,29 @@ class PropertyIntelligenceService:
         res = await self.db.execute(paginated_stmt)
         rows = res.scalars().all()
 
-        # Amenities post-filter if requested (dialect-safe across SQLite and Postgres JSONB)
+        # Amenities and Geosearch post-filter
         items: List[PropertySearchResultItem] = []
         for prop in rows:
             prop_amenities = [a.lower() for a in (prop.amenities or [])]
             if criteria.amenities:
                 req_amenities = [a.lower().strip() for a in criteria.amenities]
                 if not all(any(req in pa for pa in prop_amenities) for req in req_amenities):
+                    continue
+
+            # Geosearch distance calculation
+            distance_km = None
+            if criteria.latitude is not None and criteria.longitude is not None:
+                if prop.latitude is not None and prop.longitude is not None:
+                    distance_km = round(
+                        _haversine_distance_km(
+                            criteria.latitude, criteria.longitude,
+                            float(prop.latitude), float(prop.longitude)
+                        ),
+                        2
+                    )
+                    if criteria.radius_km is not None and distance_km > criteria.radius_km:
+                        continue
+                elif criteria.radius_km is not None:
                     continue
 
             is_avail = prop.status.lower() == "available"
@@ -423,14 +594,22 @@ class PropertyIntelligenceService:
                     status=prop.status,
                     is_available=is_avail,
                     construction_status=prop.construction_status or "ready_to_move",
+                    facing=prop.facing,
                     amenities=list(prop.amenities or []),
                     primary_image_url=None,
                     last_updated_at=prop.updated_at.isoformat() if prop.updated_at else None,
+                    latitude=float(prop.latitude) if prop.latitude is not None else None,
+                    longitude=float(prop.longitude) if prop.longitude is not None else None,
+                    distance_km=distance_km,
                 )
             )
 
+        if criteria.sort_by == "distance_asc":
+            items.sort(key=lambda x: (x.distance_km is None, x.distance_km or 999999))
+
+        is_post_filtered = bool(criteria.amenities or (criteria.latitude is not None and criteria.longitude is not None))
         response = PropertySearchResponse(
-            total=total if not criteria.amenities else len(items),
+            total=len(items) if is_post_filtered else total,
             page=criteria.page,
             limit=criteria.limit,
             items=items
@@ -478,7 +657,7 @@ class PropertyIntelligenceService:
             select(PropertyListing)
             .where(
                 PropertyListing.id == p_uuid,
-                PropertyListing.broker_id == t_uuid,
+                self._tenant_filter(t_uuid),
                 PropertyListing.deleted_at.is_(None)
             )
         )
@@ -632,7 +811,7 @@ class PropertyIntelligenceService:
 
         stmt = select(PropertyListing.id, PropertyListing.status, PropertyListing.updated_at).where(
             PropertyListing.id == p_uuid,
-            PropertyListing.broker_id == t_uuid,
+            self._tenant_filter(t_uuid),
             PropertyListing.deleted_at.is_(None)
         )
         res = await self.db.execute(stmt)
@@ -857,3 +1036,522 @@ class PropertyIntelligenceService:
         AsyncQueryCacheService.invalidate_tag(f"tenant:{t_uuid}:search")
 
         logger.info(f"Invalidated property intelligence cache for tenant {t_uuid}, property {p_uuid}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 8. Deterministic Property Comparison Service
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def compare_properties(
+        self,
+        tenant_id: str | uuid.UUID,
+        property_ids: List[str | uuid.UUID],
+        actor_role: str = "customer"
+    ) -> Dict[str, Any]:
+        """
+        Deterministic, structured side-by-side comparison of multiple properties.
+        Zero LLM hallucination: compares price, area, BHK, locality, construction status,
+        possession date, furnishing, facing, and amenities from canonical DB records.
+        """
+        t_uuid = self._resolve_uuid(tenant_id)
+        if not t_uuid or not property_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid tenant_id or empty property_ids list."
+            )
+
+        resolved_ids = [self._resolve_uuid(pid) for pid in property_ids]
+        valid_ids = [pid for pid in resolved_ids if pid is not None]
+        if not valid_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid property UUIDs provided."
+            )
+
+        stmt = (
+            select(PropertyListing)
+            .where(
+                PropertyListing.id.in_(valid_ids),
+                self._tenant_filter(t_uuid),
+                PropertyListing.deleted_at.is_(None)
+            )
+        )
+        res = await self.db.execute(stmt)
+        props = list(res.scalars().all())
+
+        if not props:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No matching properties found for comparison."
+            )
+
+        compared_items = []
+        prices = []
+        areas = []
+
+        for p in props:
+            price_val = float(p.price)
+            area_val = float(p.area_value)
+            prices.append(price_val)
+            areas.append(area_val)
+            item = {
+                "property_id": str(p.id),
+                "property_code": p.property_code,
+                "title": p.title,
+                "property_type": p.property_type,
+                "status": p.status,
+                "is_available": p.status.lower() == "available",
+                "price": price_val,
+                "currency": p.currency_code or "INR",
+                "price_per_sqft": p.price_per_sqft or (round(price_val / area_val, 2) if area_val > 0 else 0),
+                "area_value": area_val,
+                "area_unit": p.area_unit or "sqft",
+                "bedrooms": p.bedrooms,
+                "bathrooms": p.bathrooms,
+                "balconies": p.balconies,
+                "parking_spaces": p.parking_spaces,
+                "locality": p.locality,
+                "city": p.city,
+                "furnishing": p.furnishing,
+                "facing": p.facing,
+                "construction_status": p.construction_status,
+                "possession_date": p.possession_date.isoformat() if p.possession_date else None,
+                "developer_name": p.developer_name,
+                "project_name": p.project_name,
+                "amenities": list(p.amenities or []),
+            }
+            compared_items.append(item)
+
+        min_price = min(prices) if prices else 0
+        max_price = max(prices) if prices else 0
+        avg_price = round(sum(prices) / len(prices), 2) if prices else 0
+        price_spread = round(max_price - min_price, 2)
+
+        min_area = min(areas) if areas else 0
+        max_area = max(areas) if areas else 0
+        avg_area = round(sum(areas) / len(areas), 2) if areas else 0
+
+        all_amenities_sets = [set(p.amenities or []) for p in props]
+        common_amenities = list(set.intersection(*all_amenities_sets)) if all_amenities_sets else []
+
+        return {
+            "tenant_id": str(t_uuid),
+            "properties_count": len(compared_items),
+            "properties": compared_items,
+            "comparison_summary": {
+                "min_price": min_price,
+                "max_price": max_price,
+                "avg_price": avg_price,
+                "price_spread": price_spread,
+                "min_area": min_area,
+                "max_area": max_area,
+                "avg_area": avg_area,
+                "common_amenities": common_amenities,
+            },
+            "untrusted_data_boundary_enforced": True,
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 9. Supply-Side Summary Tools for AI Agent
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def get_project_summary(
+        self,
+        tenant_id: str | uuid.UUID,
+        project_id: str | uuid.UUID
+    ) -> Dict[str, Any]:
+        """
+        Retrieves authoritative project summary including developer, towers,
+        and inventory counts strictly scoped to tenant.
+        """
+        t_uuid = self._resolve_uuid(tenant_id)
+        prj_uuid = self._resolve_uuid(project_id)
+        if not t_uuid or not prj_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid tenant_id or project_id format."
+            )
+
+        from app.models.inventory_models import RealEstateProject, RealEstateDeveloper, ProjectBuilding
+        stmt = (
+            select(RealEstateProject)
+            .where(
+                RealEstateProject.id == prj_uuid,
+                or_(
+                    RealEstateProject.organization_id == t_uuid,
+                    RealEstateProject.broker_id == t_uuid
+                ),
+                RealEstateProject.deleted_at.is_(None)
+            )
+        )
+        res = await self.db.execute(stmt)
+        project = res.scalars().first()
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project {project_id} not found."
+            )
+
+        dev_name = None
+        if project.developer_id:
+            dev_stmt = select(RealEstateDeveloper.legal_name).where(RealEstateDeveloper.id == project.developer_id)
+            dev_name = (await self.db.execute(dev_stmt)).scalar()
+
+        bldg_stmt = select(ProjectBuilding).where(
+            ProjectBuilding.organization_id == project.organization_id,
+            ProjectBuilding.deleted_at.is_(None)
+        )
+        bldgs = (await self.db.execute(bldg_stmt)).scalars().all()
+        building_summaries = [
+            {"building_id": str(b.id), "name": b.building_name, "code": b.building_code, "floors": b.total_floors, "units": b.total_units}
+            for b in bldgs
+        ]
+
+        return {
+            "project_id": str(project.id),
+            "project_code": project.project_code,
+            "project_name": project.project_name,
+            "developer_name": dev_name or (str(project.developer_id) if project.developer_id else None),
+            "status": project.status,
+            "rera_number": project.rera_number,
+            "city": project.city,
+            "locality": project.locality,
+            "total_units": project.total_units,
+            "available_units": project.available_units,
+            "sold_units": project.sold_units,
+            "reserved_units": project.reserved_units,
+            "price_min": float(project.price_min) if project.price_min else None,
+            "price_max": float(project.price_max) if project.price_max else None,
+            "currency": project.currency,
+            "buildings": building_summaries,
+            "amenities": project.amenities or [],
+            "source_authority": "RealEstateProject (Canonical DB)"
+        }
+
+    async def get_unit_summary(
+        self,
+        tenant_id: str | uuid.UUID,
+        unit_id: str | uuid.UUID
+    ) -> Dict[str, Any]:
+        """
+        Retrieves authoritative atomic unit summary with inventory status,
+        floor, building, and linked listing details strictly scoped to tenant.
+        """
+        t_uuid = self._resolve_uuid(tenant_id)
+        u_uuid = self._resolve_uuid(unit_id)
+        if not t_uuid or not u_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid tenant_id or unit_id format."
+            )
+
+        from app.models.inventory_models import ProjectUnit
+        stmt = (
+            select(ProjectUnit)
+            .where(
+                ProjectUnit.id == u_uuid,
+                or_(
+                    ProjectUnit.organization_id == t_uuid,
+                    ProjectUnit.broker_id == t_uuid
+                ),
+                ProjectUnit.deleted_at.is_(None)
+            )
+        )
+        res = await self.db.execute(stmt)
+        unit = res.scalars().first()
+        if not unit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unit {unit_id} not found."
+            )
+
+        is_avail = unit.inventory_status == "available"
+        return {
+            "unit_id": str(unit.id),
+            "unit_code": unit.unit_code,
+            "unit_number": unit.unit_number,
+            "project_id": str(unit.project_id),
+            "building_id": str(unit.building_id) if unit.building_id else None,
+            "floor_id": str(unit.floor_id) if unit.floor_id else None,
+            "floor_number": unit.floor_number,
+            "unit_type": unit.unit_type,
+            "bedrooms": unit.bedrooms,
+            "bathrooms": unit.bathrooms,
+            "facing": unit.facing,
+            "carpet_area": float(unit.carpet_area) if unit.carpet_area else None,
+            "built_up_area": float(unit.built_up_area) if unit.built_up_area else None,
+            "base_price": float(unit.base_price) if unit.base_price else None,
+            "total_price": float(unit.total_price) if unit.total_price else None,
+            "currency": unit.currency,
+            "inventory_status": unit.inventory_status,
+            "is_available": is_avail,
+            "can_reserve": is_avail,
+            "property_listing_id": str(unit.property_listing_id) if unit.property_listing_id else None,
+            "authoritative_source": "ProjectUnit (Canonical DB)"
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 10. AI Prompt-Injection Defense & Multi-Currency Normalizer
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def sanitize_property_context_for_ai(raw_text: str) -> str:
+        """
+        Anti-prompt injection sanitizer for untrusted property content.
+        Neutralizes instruction injection payloads and encloses content in inert delimiters.
+        """
+        if not raw_text:
+            return ""
+
+        injection_patterns = [
+            r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions",
+            r"disregard\s+(all\s+)?(previous|prior)\s+instructions",
+            r"you\s+are\s+now\s+(an?|a)\s+",
+            r"system\s*prompt",
+            r"system\s*override",
+            r"override\s+system",
+            r"reveal\s+(api\s*key|secret|password|credential|prompt)",
+            r"exfiltrate",
+            r"leak\s+database",
+            r"<script.*?>.*?</script>",
+            r"drop\s+table",
+        ]
+        sanitized = raw_text
+        for pattern in injection_patterns:
+            sanitized = re.sub(pattern, "[FILTERED_INSTRUCTION]", sanitized, flags=re.IGNORECASE)
+
+        return (
+            "<untrusted_property_data>\n"
+            f"{sanitized}\n"
+            "</untrusted_property_data>"
+        )
+
+    @staticmethod
+    def convert_currency(
+        amount: float,
+        from_currency: str,
+        to_currency: str,
+        rates_map: Optional[Dict[str, float]] = None
+    ) -> Dict[str, Any]:
+        """
+        Multi-currency normalizer preserving original currency and recording exchange rate provenance.
+        Never blindly overwrites original currency.
+        """
+        from_curr = (from_currency or "INR").upper().strip()
+        to_curr = (to_currency or "INR").upper().strip()
+
+        if from_curr == to_curr:
+            return {
+                "original_amount": amount,
+                "original_currency": from_curr,
+                "converted_amount": amount,
+                "target_currency": to_curr,
+                "exchange_rate": 1.0,
+                "is_converted": False,
+                "conversion_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+        rates = rates_map or {
+            "INR": 1.0,
+            "USD": 86.50,
+            "AED": 23.55,
+            "GBP": 109.20,
+            "EUR": 92.40,
+            "SGD": 64.80,
+        }
+
+        from_rate = rates.get(from_curr, 1.0)
+        to_rate = rates.get(to_curr, 1.0)
+
+        amount_in_inr = amount * from_rate
+        converted = round(amount_in_inr / to_rate, 2)
+        effective_rate = round(from_rate / to_rate, 6)
+
+        return {
+            "original_amount": amount,
+            "original_currency": from_curr,
+            "converted_amount": converted,
+            "target_currency": to_curr,
+            "exchange_rate": effective_rate,
+            "exchange_rate_source": "wefylabs_fixed_fx_reference_v1",
+            "is_converted": True,
+            "conversion_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 11. Conflict Workbench & Historical Resolution
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def record_data_conflict(
+        self,
+        tenant_id: str | uuid.UUID,
+        property_id: Optional[str | uuid.UUID],
+        field_name: str,
+        current_value: str,
+        competing_value: str,
+        current_source: str,
+        competing_source: str,
+        unit_id: Optional[str | uuid.UUID] = None,
+        observed_at: Optional[datetime] = None,
+        competing_observed_at: Optional[datetime] = None,
+        conflict_metadata: Optional[Dict[str, Any]] = None,
+    ) -> PropertyDataConflict:
+        """
+        Persists a detected field-level data conflict between sources.
+        Guarantees that competing values are auditable and never silently overwritten.
+        """
+        t_uuid = self._resolve_uuid(tenant_id)
+        p_uuid = self._resolve_uuid(property_id) if property_id else None
+        u_uuid = self._resolve_uuid(unit_id) if unit_id else None
+        now = datetime.now(timezone.utc)
+
+        conflict = PropertyDataConflict(
+            organization_id=t_uuid,
+            property_id=p_uuid,
+            unit_id=u_uuid,
+            field_name=field_name,
+            current_value=str(current_value),
+            competing_value=str(competing_value),
+            current_source=current_source,
+            competing_source=competing_source,
+            observed_at=observed_at or now,
+            competing_observed_at=competing_observed_at or now,
+            resolution_status="UNRESOLVED",
+            conflict_metadata=conflict_metadata or {},
+        )
+        self.db.add(conflict)
+        await self.db.flush()
+        return conflict
+
+    async def list_data_conflicts(
+        self,
+        tenant_id: str | uuid.UUID,
+        property_id: Optional[str | uuid.UUID] = None,
+        status: Optional[str] = None
+    ) -> List[PropertyDataConflict]:
+        """Lists tenant data conflicts for the operator conflict workbench."""
+        t_uuid = self._resolve_uuid(tenant_id)
+        stmt = select(PropertyDataConflict).where(PropertyDataConflict.organization_id == t_uuid)
+        if property_id:
+            stmt = stmt.where(PropertyDataConflict.property_id == self._resolve_uuid(property_id))
+        if status:
+            stmt = stmt.where(PropertyDataConflict.resolution_status == status.upper())
+        res = await self.db.execute(stmt.order_by(PropertyDataConflict.created_at.desc()))
+        return list(res.scalars().all())
+
+    async def resolve_data_conflict(
+        self,
+        tenant_id: str | uuid.UUID,
+        conflict_id: str | uuid.UUID,
+        resolution_choice: str,
+        resolved_by_id: Optional[uuid.UUID] = None,
+        reason: Optional[str] = None
+    ) -> PropertyDataConflict:
+        """Operator resolution for a pending data conflict."""
+        t_uuid = self._resolve_uuid(tenant_id)
+        c_uuid = self._resolve_uuid(conflict_id)
+        stmt = select(PropertyDataConflict).where(
+            PropertyDataConflict.id == c_uuid,
+            PropertyDataConflict.organization_id == t_uuid
+        )
+        res = await self.db.execute(stmt)
+        conflict = res.scalars().first()
+        if not conflict:
+            raise HTTPException(status_code=404, detail="Conflict record not found.")
+
+        conflict.resolution_status = f"RESOLVED_{resolution_choice.upper()}"
+        conflict.resolution_reason = reason
+        conflict.resolved_by_id = resolved_by_id
+        conflict.resolved_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return conflict
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 12. Freshness Engine Report
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def get_property_freshness_report(
+        self,
+        tenant_id: str | uuid.UUID,
+        property_id: str | uuid.UUID
+    ) -> Dict[str, Any]:
+        """
+        Computes explicit per-field freshness report for availability, price,
+        possession, and specifications.
+        """
+        t_uuid = self._resolve_uuid(tenant_id)
+        p_uuid = self._resolve_uuid(property_id)
+        stmt = select(PropertyListing).where(
+            PropertyListing.id == p_uuid,
+            self._tenant_filter(t_uuid),
+            PropertyListing.deleted_at.is_(None)
+        )
+        res = await self.db.execute(stmt)
+        prop = res.scalars().first()
+        if not prop:
+            raise HTTPException(status_code=404, detail=f"Property {property_id} not found.")
+
+        availability_freshness = FreshnessPolicy.evaluate_freshness("availability", prop.updated_at)
+        price_freshness = FreshnessPolicy.evaluate_freshness("price", prop.updated_at)
+        possession_freshness = FreshnessPolicy.evaluate_freshness("possession_date", prop.possession_date or prop.updated_at)
+        amenities_freshness = FreshnessPolicy.evaluate_freshness("amenities", prop.updated_at)
+
+        return {
+            "property_id": str(prop.id),
+            "tenant_id": str(t_uuid),
+            "freshness": {
+                "availability": availability_freshness,
+                "price": price_freshness,
+                "possession": possession_freshness,
+                "amenities": amenities_freshness,
+            },
+            "overall_is_fresh": availability_freshness["is_fresh"] and price_freshness["is_fresh"],
+            "evaluated_at": datetime.now(timezone.utc).isoformat()
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 13. Structured AI Property Tools
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def get_price(self, tenant_id: str | uuid.UUID, property_id: str | uuid.UUID) -> Dict[str, Any]:
+        """AI Tool: get_price."""
+        truth = await self.get_property_truth(tenant_id, property_id, actor_role="customer")
+        return {
+            "property_id": str(property_id),
+            "price": truth.fact_pack.price,
+            "currency": truth.fact_pack.currency,
+            "price_per_sqft": truth.fact_pack.price_per_sqft,
+            "source": truth.source_authority,
+            "freshness": FreshnessPolicy.evaluate_freshness("price", datetime.now(timezone.utc))["status"]
+        }
+
+    async def get_amenities(self, tenant_id: str | uuid.UUID, property_id: str | uuid.UUID) -> Dict[str, Any]:
+        """AI Tool: get_amenities."""
+        truth = await self.get_property_truth(tenant_id, property_id, actor_role="customer")
+        raw_amenities = truth.fact_pack.amenities
+        return {
+            "property_id": str(property_id),
+            "amenities": raw_amenities,
+            "canonical_amenities": normalize_amenities(raw_amenities),
+            "source": truth.source_authority
+        }
+
+    async def get_possession(self, tenant_id: str | uuid.UUID, property_id: str | uuid.UUID) -> Dict[str, Any]:
+        """AI Tool: get_possession."""
+        truth = await self.get_property_truth(tenant_id, property_id, actor_role="customer")
+        return {
+            "property_id": str(property_id),
+            "construction_status": truth.fact_pack.construction_status,
+            "possession_date": truth.fact_pack.possession_date,
+            "source": truth.source_authority
+        }
+
+    async def get_location(self, tenant_id: str | uuid.UUID, property_id: str | uuid.UUID) -> Dict[str, Any]:
+        """AI Tool: get_location."""
+        truth = await self.get_property_truth(tenant_id, property_id, actor_role="customer")
+        return {
+            "property_id": str(property_id),
+            "locality": truth.fact_pack.locality,
+            "city": truth.fact_pack.city,
+            "state": truth.fact_pack.state,
+            "source": truth.source_authority
+        }

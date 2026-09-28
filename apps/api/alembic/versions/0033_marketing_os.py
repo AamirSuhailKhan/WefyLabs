@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("objective", sa.String(50), nullable=False, server_default="lead_generation"),
         sa.Column("status", sa.String(30), nullable=False, server_default="draft"),
         # Inventory scope
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("real_estate_projects.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("project_id", sa.String(36), nullable=True),  # no FK: real_estate_projects.id is UUID vs VARCHAR
         sa.Column("phase_scope", sa.String(36), nullable=True),
         sa.Column("bhk_scope", sa.String(255), nullable=True),
         sa.Column("unit_status_scope", sa.String(30), nullable=True, server_default="available"),
@@ -136,7 +136,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("asset_type", sa.String(50), nullable=False),
         sa.Column("description", sa.Text, nullable=True),
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("real_estate_projects.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("project_id", sa.String(36), nullable=True),  # no FK: real_estate_projects.id is UUID
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         sa.Column("storage_url", sa.Text, nullable=True),
         sa.Column("thumbnail_url", sa.Text, nullable=True),
@@ -167,8 +167,8 @@ def upgrade() -> None:
         "property_listing_publications",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("organization_id", sa.String(36), nullable=False),
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("real_estate_projects.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("unit_id", sa.String(36), sa.ForeignKey("project_units.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("project_id", sa.String(36), nullable=False),  # no FK: real_estate_projects.id is UUID
+        sa.Column("unit_id", sa.String(36), nullable=True),  # no FK: project_units.id is UUID
         sa.Column("property_listing_id", sa.String(36), nullable=True),
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         # Marketing copy (AI flags)
@@ -233,7 +233,7 @@ def upgrade() -> None:
         "marketing_landing_pages",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("organization_id", sa.String(36), nullable=False),
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("real_estate_projects.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("project_id", sa.String(36), nullable=True),  # no FK: real_estate_projects.id is UUID
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("slug", sa.String(255), nullable=False),
@@ -272,7 +272,7 @@ def upgrade() -> None:
         sa.Column("organization_id", sa.String(36), nullable=False),
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         sa.Column("landing_page_id", sa.String(36), sa.ForeignKey("marketing_landing_pages.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("channel_partner_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("channel_partners.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("channel_partner_id", sa.String(36), nullable=True),  # no FK: channel_partners.id is UUID
         sa.Column("destination_url", sa.Text, nullable=False),
         sa.Column("utm_source", sa.String(255), nullable=True),
         sa.Column("utm_medium", sa.String(255), nullable=True),
@@ -317,7 +317,7 @@ def upgrade() -> None:
         "project_launches",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("organization_id", sa.String(36), nullable=False),
-        sa.Column("project_id", sa.String(36), sa.ForeignKey("real_estate_projects.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("project_id", sa.String(36), nullable=False),  # no FK: real_estate_projects.id is UUID
         sa.Column("campaign_id", sa.String(36), sa.ForeignKey("marketing_campaigns.id", ondelete="SET NULL"), nullable=True),
         sa.Column("landing_page_id", sa.String(36), sa.ForeignKey("marketing_landing_pages.id", ondelete="SET NULL"), nullable=True),
         sa.Column("status", sa.String(30), nullable=False, server_default="draft"),
