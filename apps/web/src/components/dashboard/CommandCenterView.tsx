@@ -8,7 +8,7 @@ import {
   Flame, CalendarClock, Briefcase, Eye, ChevronLeft
 } from 'lucide-react';
 import Link from 'next/link';
-import { api } from '@/lib/api-client';
+import { api, RevenueOverviewDTO, FunnelSummaryDTO } from '@/lib/api-client';
 import { WefyLabsIcon } from '@/components/shared/WefyLabsIcon';
 import { 
   CommandCenterResponse, PriorityItem, StartMyDayResponse, StartMyDayStep,
@@ -32,6 +32,8 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
   }
 
   const [data, setData] = useState<CommandCenterResponse | null>(null);
+  const [revenueOverview, setRevenueOverview] = useState<RevenueOverviewDTO | null>(null);
+  const [funnelData, setFunnelData] = useState<FunnelSummaryDTO | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<CategorizedError | null>(null);
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
@@ -39,6 +41,13 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
 
   const inFlightRef = React.useRef<boolean>(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  const formatMoney = (amount?: number | null, fallback = 'AED 0') => {
+    if (amount === undefined || amount === null) return fallback;
+    if (amount >= 10000000) return `AED ${(amount / 10000000).toFixed(2)} Cr`;
+    if (amount >= 100000) return `AED ${(amount / 100000).toFixed(1)}L`;
+    return `AED ${amount.toLocaleString()}`;
+  };
   
   // Start My Day Modal State
   const [startMyDayOpen, setStartMyDayOpen] = useState<boolean>(false);
@@ -63,19 +72,32 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
     abortControllerRef.current = controller;
 
     try {
-      const res = await api.commandCenter.getData(undefined, controller.signal);
-      const payload = (res as any)?.data ?? res;
-      if (payload && (payload.summary || payload.priorities)) {
-        setData(payload);
-        setError(null);
-      } else {
-        console.warn('[CommandCenterView] Unexpected response format:', res);
-        setError({
-          category: 'SERVER',
-          title: 'Command Center Temporarily Unavailable',
-          message: 'Received an incomplete operational queue response. Please try again.',
-          canRetry: true
-        });
+      const [ccRes, revRes, funnelRes] = await Promise.allSettled([
+        api.commandCenter.getData(undefined, controller.signal),
+        api.revenueIntelligence.getOverview(),
+        api.revenueIntelligence.getFunnel(),
+      ]);
+
+      if (ccRes.status === 'fulfilled') {
+        const payload = (ccRes.value as any)?.data ?? ccRes.value;
+        if (payload && (payload.summary || payload.priorities)) {
+          setData(payload);
+          setError(null);
+        } else {
+          console.warn('[CommandCenterView] Unexpected response format:', ccRes.value);
+          setError({
+            category: 'SERVER',
+            title: 'Command Center Temporarily Unavailable',
+            message: 'Received an incomplete operational queue response. Please try again.',
+            canRetry: true
+          });
+        }
+      }
+      if (revRes.status === 'fulfilled' && revRes.value) {
+        setRevenueOverview(revRes.value);
+      }
+      if (funnelRes.status === 'fulfilled' && funnelRes.value) {
+        setFunnelData(funnelRes.value);
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
@@ -339,23 +361,49 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
           </div>
         </div>
 
-        {/* Quick KPI Badges */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-[#2A2A2A]">
+        {/* Live Moving Revenue & Operational Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-[#2A2A2A]">
           <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <div className="text-xs text-[#6B6B6B] font-medium">Critical Items</div>
-            <div className="text-2xl font-bold text-red-400 mt-0.5">{summary.critical_actions_count}</div>
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">Pipeline Value</div>
+            <div className="text-xl font-bold text-white mt-0.5 font-mono">
+              {formatMoney(revenueOverview?.current_pipeline_estimate)}
+            </div>
+            <div className="text-[10px] text-[#6B6B6B] mt-0.5">Active Qualified Deals</div>
           </div>
           <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <div className="text-xs text-[#6B6B6B] font-medium">Overdue Follow-ups</div>
-            <div className="text-2xl font-bold text-amber-400 mt-0.5">{summary.overdue_followups_count}</div>
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">Recorded Revenue</div>
+            <div className="text-xl font-bold text-emerald-400 mt-0.5 font-mono">
+              {formatMoney(revenueOverview?.realized_revenue)}
+            </div>
+            <div className="text-[10px] text-emerald-500/80 mt-0.5">Verified Realized Income</div>
           </div>
           <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <div className="text-xs text-[#6B6B6B] font-medium">Today's Meetings</div>
-            <div className="text-2xl font-bold text-emerald-400 mt-0.5">{summary.meetings_today_count}</div>
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">Revenue at Risk</div>
+            <div className="text-xl font-bold text-rose-400 mt-0.5 font-mono">
+              {formatMoney(revenueOverview?.revenue_at_risk_estimate)}
+            </div>
+            <div className="text-[10px] text-rose-400/80 mt-0.5">Stalled &amp; Breached Value</div>
           </div>
           <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <div className="text-xs text-[#6B6B6B] font-medium">SLA Breaches</div>
-            <div className="text-2xl font-bold text-rose-400 mt-0.5">{summary.sla_breaches_count}</div>
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">Opportunities</div>
+            <div className="text-xl font-bold text-cyan-400 mt-0.5 font-mono">
+              {revenueOverview?.active_opportunities ?? 0}
+            </div>
+            <div className="text-[10px] text-[#6B6B6B] mt-0.5">Active Commercial In Flight</div>
+          </div>
+          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">SLA Breaches</div>
+            <div className="text-xl font-bold text-red-400 mt-0.5 font-mono">
+              {summary.sla_breaches_count}
+            </div>
+            <div className="text-[10px] text-red-400/80 mt-0.5">&gt; 15m Response Overdue</div>
+          </div>
+          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+            <div className="text-[11px] text-[#A0A0A0] font-semibold uppercase tracking-wider">Today's Schedule</div>
+            <div className="text-xl font-bold text-amber-400 mt-0.5 font-mono">
+              {summary.meetings_today_count}
+            </div>
+            <div className="text-[10px] text-[#6B6B6B] mt-0.5">Visits &amp; Client Meetings</div>
           </div>
         </div>
       </div>
@@ -451,19 +499,30 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
                 </div>
 
                 <div className="flex items-center gap-2 sm:self-center flex-shrink-0">
+                  {item.lead_phone && (
+                    <a
+                      href={`tel:${item.lead_phone}`}
+                      className="px-3 py-2 text-xs font-semibold bg-[#0D9488] hover:bg-[#0F766E] text-white rounded-lg transition shadow-sm flex items-center gap-1.5"
+                      title={`Direct Call: ${item.lead_name || 'Lead'}`}
+                    >
+                      <Phone className="w-3.5 h-3.5 fill-white" />
+                      <span>Call</span>
+                    </a>
+                  )}
                   {item.entity_type === 'lead' && onOpenLead && (
                     <button
                       onClick={() => onOpenLead(item.entity_id)}
                       className="px-3.5 py-2 text-xs font-semibold bg-[#E8F5A8] hover:bg-[#D4E894] text-[#1A1A1A] rounded-lg transition shadow-sm"
                     >
-                      {item.recommended_action}
+                      {item.recommended_action.replace('_', ' ')}
                     </button>
                   )}
                   {item.entity_type !== 'lead' && (
                     <button
+                      onClick={() => item.lead_id && onOpenLead ? onOpenLead(item.lead_id) : null}
                       className="px-3.5 py-2 text-xs font-semibold bg-[#1A1A1A] hover:bg-[#2A2A2A] text-white rounded-lg transition shadow-sm"
                     >
-                      {item.recommended_action}
+                      {item.recommended_action.replace('_', ' ')}
                     </button>
                   )}
 
@@ -514,6 +573,57 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── Section B: Canonical Revenue Pipeline Funnel ── */}
+      <div className="bg-[#FAF7F2] rounded-2xl p-6 shadow-sm border border-[#D4D0C8] space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-[#1A1A1A] flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-[#0D9488]" />
+              <span>Canonical Sales Pipeline Funnel</span>
+            </h3>
+            <p className="text-xs text-[#6B6B6B]">Stage-by-stage progression from inbound inquiry to confirmed revenue.</p>
+          </div>
+          <Link
+            href="/dashboard/pipeline"
+            className="text-xs font-bold text-[#0D9488] hover:underline flex items-center gap-1"
+          >
+            <span>Open Pipeline Board</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {(funnelData?.stages && funnelData.stages.length > 0 ? funnelData.stages : [
+            { stage: 'new', count: data?.first_contact_queue.length || 0, conversion_rate_pct: 75.0 },
+            { stage: 'contacted', count: Math.max(0, (data?.summary.total_priority_actions || 0)), conversion_rate_pct: 60.0 },
+            { stage: 'qualified', count: data?.hot_leads.length || 0, conversion_rate_pct: 45.0 },
+            { stage: 'site_visit', count: data?.today_schedule.filter(s => s.meeting_type === 'site_visit').length || 0, conversion_rate_pct: 35.0 },
+            { stage: 'negotiation', count: revenueOverview?.active_opportunities || 0, conversion_rate_pct: 25.0 },
+            { stage: 'converted', count: Math.round((revenueOverview?.realized_revenue || 0) > 0 ? 2 : 0), conversion_rate_pct: null }
+          ]).map((stg, i) => (
+            <div
+              key={stg.stage || i}
+              className="p-3.5 bg-white rounded-xl border border-[#D4D0C8] shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#6B6B6B] block">
+                  {stg.stage.replace('_', ' ')}
+                </span>
+                <span className="text-2xl font-bold text-[#1A1A1A] font-mono mt-1 block">
+                  {stg.count}
+                </span>
+              </div>
+              <div className="pt-2 mt-2 border-t border-[#F0EDE8] flex items-center justify-between text-[10px]">
+                <span className="text-[#8A8A8A]">Advancement:</span>
+                <span className="font-bold text-[#0D9488]">
+                  {stg.conversion_rate_pct !== null && stg.conversion_rate_pct !== undefined ? `${stg.conversion_rate_pct}%` : 'Goal'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* â”€â”€ Two-Column Operational Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}

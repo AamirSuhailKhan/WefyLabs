@@ -71,6 +71,28 @@ function SourceBadge({ source }: { source?: string }) {
   );
 }
 
+function ResponseSLA({ createdAt }: { createdAt?: string }) {
+  if (!createdAt) return null;
+  const minutesAgo = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+  if (minutesAgo < 5) return (
+    <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-[#FEE2E2] text-[#B91C1C] border border-[#FECACA] animate-pulse">
+      🔴 {minutesAgo}m ago — URGENT
+    </span>
+  );
+  if (minutesAgo < 60) return (
+    <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-[#FEF3C7] text-[#B45309] border border-[#FDE68A]">
+      ⚡ {minutesAgo}m ago
+    </span>
+  );
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  if (hoursAgo < 24) return (
+    <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded bg-[#F5F0EB] text-[#6B6B6B]">
+      {hoursAgo}h ago
+    </span>
+  );
+  return null;
+}
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState('');
@@ -295,12 +317,14 @@ export default function LeadsPage() {
                     <span className="text-[13px] text-[#4A4A4A] truncate" style={{ fontFamily: 'Inter, sans-serif' }}>
                       {(lead.preferred_locations || []).join(', ') || 'Bengaluru'}
                     </span>
-                    <span
-                      className="text-[11px] font-bold uppercase tracking-wide"
-                      style={{ color: STAGE_COLORS[(lead.pipeline_stage || lead.stage_name || 'new').toLowerCase()] || '#6B6B6B', fontFamily: 'JetBrains Mono, monospace' }}
-                    >
-                      {lead.pipeline_stage || lead.stage_name || 'new'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] font-bold uppercase tracking-wide"
+                        style={{ color: STAGE_COLORS[(lead.pipeline_stage || lead.stage_name || 'new').toLowerCase()] || '#6B6B6B', fontFamily: 'JetBrains Mono, monospace' }}
+                      >
+                        {lead.pipeline_stage || lead.stage_name || 'new'}
+                      </span>
+                      <ResponseSLA createdAt={lead.created_at} />
+                    </div>
                     <div>
                       <SourceBadge source={lead.source} />
                     </div>

@@ -526,6 +526,28 @@ class CanonicalCommunicationService:
                     detail="Human takeover is active for this conversation. Autonomous AI sends are blocked.",
                 )
 
+            # Phase 2 Governance Enforcement (Canonical Communication Gate — Sections 4, 5, 6, 41)
+            from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType
+            channel_str = canonical_channel.value.upper()
+            if "WHATSAPP" in channel_str:
+                p2_act = Phase2ActionType.SEND_WHATSAPP_MESSAGE
+            elif "EMAIL" in channel_str:
+                p2_act = Phase2ActionType.SEND_EMAIL
+            elif "SMS" in channel_str:
+                p2_act = Phase2ActionType.SEND_SMS
+            else:
+                p2_act = Phase2ActionType.SEND_WHATSAPP_MESSAGE
+
+            policy_decision = get_policy_engine().evaluate(str(organization_id), p2_act)
+            if not policy_decision.is_permitted:
+                logger.warning(
+                    f"[CanonicalCommunicationService] Outbound AI message BLOCKED by Phase 2 Governance: {policy_decision.block_reason}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Phase 2 Governance Blocked: {policy_decision.block_reason}",
+                )
+
         # ── Stage 4: Outbound Idempotency Check (Section 38) ─────────────────
         if idempotency_key:
             existing_stmt = select(ChannelMessage).where(

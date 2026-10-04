@@ -8,10 +8,12 @@ import DashboardNav from '@/components/shared/DashboardNav';
 import { api } from '@/lib/api-client';
 import { Lead } from '@/types';
 
+// Stage IDs must exactly match `pipeline_stage` values stored in DB.
+// The backend validates via RegionalPipelineService — these are the canonical values.
 const STAGE_COLUMNS = [
   { id: 'new', label: 'NEW', color: '#0D9488' },
   { id: 'contacted', label: 'CONTACTED', color: '#3B82F6' },
-  { id: 'viewing', label: 'VIEWING SCHEDULED', color: '#F59E0B' },
+  { id: 'viewing_scheduled', label: 'VIEWING SCHEDULED', color: '#F59E0B' },
   { id: 'negotiating', label: 'NEGOTIATING', color: '#EF4444' },
   { id: 'closed_won', label: 'CLOSED WON', color: '#10B981' },
   { id: 'closed_lost', label: 'CLOSED LOST', color: '#6B7280' },

@@ -627,6 +627,45 @@ class CommandCenterService:
         self.db.add(audit)
         await self.db.commit()
 
+        # ── Sprint 1E: Revenue Learning OS wiring for NBA feedback ────────────
+        try:
+            from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+            from app.models.intelligence_models import OutcomeEventType, OutcomeEntityType, OutcomeSource, LearningSignalType
+
+            evt_type = (
+                OutcomeEventType.AI_ACTION_ACCEPTED if dto.action_type in ("executed", "accepted")
+                else OutcomeEventType.AI_ACTION_REJECTED if dto.action_type in ("dismissed", "rejected")
+                else OutcomeEventType.AI_ACTION_IGNORED
+            )
+            sig_type = (
+                LearningSignalType.HUMAN_ACCEPT if dto.action_type in ("executed", "accepted")
+                else LearningSignalType.HUMAN_DISMISS if dto.action_type in ("dismissed", "rejected")
+                else LearningSignalType.HUMAN_SNOOZE
+            )
+            lead_id_val = str(dto.entity_id) if dto.entity_type == "lead" else None
+            await OutcomeRecorder.safe_record(
+                db=self.db,
+                org_id=org_id_str,
+                event_type=evt_type,
+                entity_type=OutcomeEntityType.AI_ACTION,
+                entity_id=dto.item_key,
+                source_table="command_center_dismissals",
+                source_event_id=dto.item_key,
+                occurred_at=now,
+                lead_id=lead_id_val,
+                agent_id=str(broker_uuid),
+                actor_type="HUMAN",
+                outcome_source=OutcomeSource.HUMAN,
+                metadata={
+                    "item_key": dto.item_key,
+                    "action_type": dto.action_type,
+                    "signal_type": sig_type.value,
+                    "snooze_hours": dto.snooze_hours,
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"[CommandCenter] Non-fatal learning layer record error: {exc}")
+
         return {
             "status": "success",
             "message": f"Item '{dto.item_key}' {dto.action_type} successfully.",

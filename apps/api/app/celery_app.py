@@ -30,6 +30,8 @@ celery_app = Celery(
         "app.modules.revenue_autopilot.tasks",
         # Part 12 — Follow-Up dispatch through the Communication Hub
         "app.modules.follow_up.tasks",
+        # Phase 1 Sprint 1E — Revenue Learning OS & Outcome Intelligence
+        "app.modules.intelligence.tasks",
     ]
 )
 
@@ -96,6 +98,8 @@ task_queues = [
     # ── Part 21.8 — Autonomous Sales Loop Queues ───────────────────────────
     Queue("sales-loop-orchestration", default_exchange, routing_key="sales-loop-orchestration"),
     Queue("sales-loop-retry", default_exchange, routing_key="sales-loop-retry"),
+    # ── Phase 2C — Pilot evidence snapshot queue ───────────────────────────
+    Queue("pilot-snapshot", default_exchange, routing_key="pilot-snapshot"),
 ]
 
 celery_app.conf.update(
@@ -157,6 +161,13 @@ celery_app.conf.update(
         "app.tasks.followup_tasks.send_daily_briefing": {"queue": "daily-brief"},
         # ── Part 12 — Follow-Up dispatch through the Communication Hub ──────
         "follow_up.dispatch_due_executions": {"queue": "lead_queue"},
+        # ── Phase 1 Sprint 1E — Revenue Learning & Intelligence Routes ───────
+        "intelligence.run_nightly_learning_cycle": {"queue": "analytics_queue"},
+        "intelligence.run_data_quality_scan": {"queue": "analytics_queue"},
+        # ── Phase 1 Sprint 1F — Governed Adaptive Policy Rollout Controller ──
+        "intelligence.advance_policy_rollouts": {"queue": "analytics_queue"},
+        # ── Phase 2C — Daily pilot evidence snapshot ──────────────────────────
+        "autonomous_loop.generate_daily_pilot_snapshots": {"queue": "pilot-snapshot"},
     },
     beat_schedule={
         # ── Existing schedules (unchanged) ────────────────────────────────
@@ -281,6 +292,32 @@ celery_app.conf.update(
         "dispatch-due-followup-executions": {
             "task": "follow_up.dispatch_due_executions",
             "schedule": crontab(minute="*/5"),
+        },
+        # ── Phase 1 Sprint 1E — Nightly Revenue Learning Cycle at 02:00 UTC ───
+        "nightly-revenue-learning-cycle": {
+            "task": "intelligence.run_nightly_learning_cycle",
+            "schedule": crontab(minute=0, hour=2),
+        },
+        # ── Phase 1 Sprint 1E — Data Quality Scan at 03:00 UTC ────────────────
+        "daily-data-quality-scan": {
+            "task": "intelligence.run_data_quality_scan",
+            "schedule": crontab(minute=0, hour=3),
+        },
+        # ── Phase 1 Sprint 1F — Policy Rollout Controller (every 1h at :30) ──
+        # Advances progressive rollout for each active policy by 10%/day when
+        # guardrails pass. Emergency pause flag halts controller non-destructively.
+        "advance-policy-rollouts": {
+            "task": "intelligence.advance_policy_rollouts",
+            "schedule": crontab(minute=30, hour="*"),
+        },
+        # ── Phase 2C — Daily Pilot Metric Snapshot (00:30 UTC each day) ───────
+        # Seals the previous calendar day's real shadow observations into a
+        # hash-locked PilotMetricSnapshot. Idempotent — a duplicate run for the
+        # same pilot+day will be detected and skipped by the repository.
+        # NEVER generates synthetic evidence; all metrics sourced from PostgreSQL.
+        "generate-daily-pilot-snapshots": {
+            "task": "autonomous_loop.generate_daily_pilot_snapshots",
+            "schedule": crontab(minute=30, hour=0),
         },
     }
 )

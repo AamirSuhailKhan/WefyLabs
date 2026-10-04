@@ -429,9 +429,10 @@ class WhatsAppInboundPipeline:
         from app.modules.autonomous_loop.taxonomies import SalesLoopEventType, ActorType
         from app.modules.autonomous_loop.orchestrator import AutonomousSalesLoopService
 
+        canonical_tenant_id = str(lead.organization_id) if getattr(lead, "organization_id", None) else broker_id
         event = SalesLoopEventDTO(
             event_type=SalesLoopEventType.CUSTOMER_MESSAGE_RECEIVED,
-            tenant_id=broker_id,
+            tenant_id=canonical_tenant_id,
             lead_id=str(lead.id),
             broker_id=broker_id,
             actor_type=ActorType.WEBHOOK,

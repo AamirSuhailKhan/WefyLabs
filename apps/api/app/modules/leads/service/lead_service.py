@@ -45,10 +45,11 @@ class LeadService(ILeadService):
         # Emit Domain Event
         event = DomainEvent(
             event_type=StandardDomainEvents.LEAD_CREATED,
-            organization_id=str(broker_id),
+            organization_id=str(lead.organization_id or broker_id),
             actor=actor,
             payload={
                 "lead_id": str(lead.id),
+                "organization_id": str(lead.organization_id or broker_id),
                 "name": lead.name,
                 "phone": lead.phone,
                 "source": lead.source

@@ -1,0 +1,145 @@
+<USER_REQUEST>
+# PHASE 2C.4 — CONTROLLED COMMERCIAL PILOT & REVENUE VALIDATION
+## Ultimate Production Engineering + SRE + AI Governance + Customer Validation Master Prompt
+
+You are acting as the **principal engineer, staff backend engineer, frontend engineer, SRE, security engineer, data/AI architect, QA lead, product architect, and technical program owner** for WefyLabs.
+
+Your mission is NOT to build another large feature set.
+
+Your mission is to take the existing production system from:
+
+> **TECHNICALLY HARDENED + STAGE-1 SHADOW + FIRST REAL TRACE**
+
+to:
+
+> **CONTROLLED REAL-CUSTOMER PILOT + MEASURABLE BUSINESS USAGE + COMMERCIAL VALIDATION**
+
+while preserving every safety, governance, tenancy, audit, evidence, and reliability guarantee already established.
+
+---
+
+# 0. EXECUTION ORDER — NON-NEGOTIABLE
+
+You must execute this phase **strictly in the following order**.
+
+Do NOT jump ahead.
+
+Do NOT implement commercial features before validating infrastructure.
+
+Do NOT onboard customers before validating tenant isolation and capacity.
+
+Do NOT use customer feedback before real customer usage exists.
+
+Do NOT interpret Stage-2 evidence as commercial validation.
+
+Do NOT declare a phase complete merely because tests pass.
+
+The required execution sequence is:
+
+```text
+PHASE 0
+READ + RECONSTRUCT SYSTEM
+        ↓
+PHASE 1
+FRESH PRODUCTION BASELINE
+        ↓
+GATE A
+FOUNDATION SAFETY
+        ↓
+PHASE 2
+DATABASE / CONNECTION / WORKER CAPACITY
+        ↓
+GATE B
+CAPACITY SAFETY
+        ↓
+PHASE 3
+SECURITY + TENANT ISOLATION + AUTHORIZATION
+        ↓
+GATE C
+SECURITY / TENANCY SAFETY
+        ↓
+PHASE 4
+CUSTOMER ONBOARDING HARDENING
+        ↓
+GATE D
+FIRST-CUSTOMER ONBOARDING READINESS
+        ↓
+PHASE 5
+CORE REVENUE WORKFLOW VALIDATION
+        ↓
+GATE E
+CORE WORKFLOW HEALTH
+        ↓
+PHASE 6
+REAL USAGE + TELEMETRY + AI FEEDBACK
+        ↓
+PHASE 7
+CUSTOMER SUCCESS + SUPPORT OPERATIONS
+        ↓
+PHASE 8
+COMMERCIAL PROCESS + BILLING + DA
+<truncated 26343 bytes>
+order.
+
+Do not build autonomy before proving workflow reliability.
+
+Do not add features before proving customer usage.
+
+Do not call tests “customer traction.”
+
+Do not call AI activity “business value.”
+
+Do not call a pilot “commercially validated” without commercial evidence.
+
+Do not call Stage 2 eligible without its evidence threshold.
+
+Do not manufacture evidence for any reason.
+
+The ultimate success criterion is:
+
+```text
+REAL CUSTOMER
+↓
+REAL LEAD
+↓
+REAL WefyLabs INTELLIGENCE
+↓
+REAL HUMAN DECISION
+↓
+REAL SALES ACTION
+↓
+REAL CUSTOMER RESPONSE
+↓
+REAL SITE VISIT
+↓
+REAL OPPORTUNITY
+↓
+REAL BOOKING / REVENUE
+↓
+REAL LEARNING
+↓
+REPEAT USAGE
+↓
+CUSTOMER VALUE
+↓
+WILLINGNESS TO PAY
+↓
+REPEATABLE COMMERCIAL MODEL
+```
+
+**Start at Execution Phase 0. Do not modify production code until the repository has been reconstructed and the fresh production baseline has been established. After every phase, enforce its gate before moving to the next phase.**
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-03T22:01:08+05:30.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\aamir\OneDrive\Desktop\crm real state\.github\workflows\ci-cd.yml (LANGUAGE_YAML)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\terraform\main.tf (LANGUAGE_HCL)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\Dockerfile.prod (LANGUAGE_UNSPECIFIED)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\modules\security\services\file_security.py (LANGUAGE_PYTHON)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\modules\security\services\password_security.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (High) to Claude Sonnet 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

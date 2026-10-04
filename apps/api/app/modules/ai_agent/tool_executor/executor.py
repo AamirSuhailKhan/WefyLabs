@@ -81,6 +81,31 @@ def _validate_tool_call(tool_name: str, arguments: Any, context: Dict[str, Any])
     # trusted application confirmation, never merely because a model asks.
     if tool_name == "book_viewing" and not context.get("confirmed_action"):
         return "Viewing booking requires explicit customer confirmation"
+
+    # Phase 2 Governance Enforcement Gate (Sections 6, 11, 12, 15)
+    org_id = context.get("organization_id") or context.get("broker_id")
+    if org_id:
+        from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType
+        _TOOL_TO_PHASE2 = {
+            "search_properties": Phase2ActionType.PREPARE_PROPERTY_SHORTLIST,
+            "check_availability": Phase2ActionType.PREPARE_PROPERTY_SHORTLIST,
+            "get_payment_plan": Phase2ActionType.PREPARE_PROPERTY_SHORTLIST,
+            "book_viewing": Phase2ActionType.SCHEDULE_SITE_VISIT,
+            "update_qualification": Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
+            "update_lead_crm": Phase2ActionType.UPDATE_LEAD_INTENT_STATE,
+            "search_knowledge": Phase2ActionType.SUMMARIZE_LEAD,
+            "get_lead_context": Phase2ActionType.SUMMARIZE_LEAD,
+            "trigger_workflow": Phase2ActionType.CREATE_INTERNAL_TASK,
+            "send_notification": Phase2ActionType.CREATE_INTERNAL_TASK,
+            "escalate_to_human": Phase2ActionType.TRIGGER_HUMAN_HANDOFF,
+            "get_available_slots": Phase2ActionType.PREPARE_VISIT_PROPOSAL,
+        }
+        p2_act = _TOOL_TO_PHASE2.get(tool_name)
+        if p2_act:
+            decision = get_policy_engine().evaluate(str(org_id), p2_act)
+            if not decision.is_permitted:
+                return f"Phase 2 Governance blocked tool {tool_name}: {decision.block_reason}"
+
     return None
 
 

@@ -149,6 +149,7 @@ class RealDeliveryEngine:
             or f"Sales action {action_type.value} executed for lead {lead.name}."
         )
 
+
         # ── 1. Non-outbound Actions (NO_ACTION, PAUSE_OUTREACH, MARK_DORMANT) ──
         if action_type in (SalesActionType.NO_ACTION, SalesActionType.PAUSE_OUTREACH, SalesActionType.MARK_DORMANT):
             return SalesActionExecutionResultDTO(
@@ -302,6 +303,52 @@ class RealDeliveryEngine:
                     message_text=message_text,
                     scheduled_utc=scheduled_utc,
                     scheduled_reason=f"QUIET_HOURS_RESCHEDULED: {timing_reason}",
+                )
+
+            # ── 5.6. Phase 2 Governance Lowest Layer Reality Check (Section 7, 41, 68) ─
+            from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType, Phase2ExecutionMode
+            from app.modules.autonomous_loop.guard_chain import SALES_TO_PHASE2_ACTION
+
+            has_approval = (decision.status == SalesActionStatus.APPROVED)
+            phase2_act = SALES_TO_PHASE2_ACTION.get(action_type, Phase2ActionType.NO_ACTION)
+            policy_decision = get_policy_engine().evaluate(str(org_id), phase2_act, has_human_approval=has_approval)
+
+            if not policy_decision.is_permitted:
+                logger.warning(
+                    f"[RealDeliveryEngine] Delivery of action {action_type.value} BLOCKED by Phase 2 Governance: "
+                    f"{policy_decision.block_reason}"
+                )
+                await self._record_execution_audit(
+                    decision=decision,
+                    lead=lead,
+                    broker=broker,
+                    channel=channel_enum,
+                    status=SalesActionStatus.BLOCKED,
+                    provider_name="PHASE2_GOVERNANCE_BLOCKED",
+                    idempotency_key=idempotency_key,
+                    message_text=message_text,
+                    details={
+                        "governance_blocked": True,
+                        "reason": policy_decision.block_reason,
+                        "execution_mode": policy_decision.execution_mode.value,
+                        "provider_called": False,
+                    },
+                )
+                return SalesActionExecutionResultDTO(
+                    action_id=decision.action_id,
+                    lead_id=str(lead.id),
+                    organization_id=org_id,
+                    action_type=action_type,
+                    status=SalesActionStatus.BLOCKED,
+                    channel=channel_str,
+                    provider="PHASE2_GOVERNANCE_BLOCKED",
+                    executed_at=datetime.now(timezone.utc),
+                    details={
+                        "governance_blocked": True,
+                        "reason": policy_decision.block_reason,
+                        "execution_mode": policy_decision.execution_mode.value,
+                        "provider_called": False,
+                    },
                 )
 
             # ── 6. Provider Resolution & Execution ─────────────────────────────

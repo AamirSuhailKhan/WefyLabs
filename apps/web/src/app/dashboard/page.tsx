@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Download, LayoutGrid, Table as TableIcon, Zap, Sparkles } from 'lucide-react';
+import { RefreshCw, Download, LayoutGrid, Table as TableIcon, Zap, Sparkles, Bell } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { Lead } from '@/types';
 import StatsCards from '@/components/dashboard/StatsCards';
@@ -12,12 +12,13 @@ import LeadDrawer from '@/components/leads/LeadDrawer';
 import DashboardNav from '@/components/shared/DashboardNav';
 import CommandCenterView from '@/components/dashboard/CommandCenterView';
 import RevenueAutopilotView from '@/components/dashboard/RevenueAutopilotView';
+import FollowUpWorkQueueView from '@/components/dashboard/FollowUpWorkQueueView';
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'command_center' | 'autopilot' | 'kanban' | 'table'>('command_center');
+  const [viewMode, setViewMode] = useState<'command_center' | 'autopilot' | 'followup_queue' | 'kanban' | 'table'>('command_center');
   const [ccSummary, setCcSummary] = useState<any>(null);
   const [revenueOverview, setRevenueOverview] = useState<any>(null);
 
@@ -205,6 +206,22 @@ export default function DashboardPage() {
                   Revenue Autopilot
                 </button>
                 <button
+                  onClick={() => setViewMode('followup_queue')}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'followup_queue'
+                      ? 'bg-[#1A1A1A] text-white shadow-sm'
+                      : 'text-[#6B6B6B] hover:text-[#1A1A1A]'
+                  }`}
+                >
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  Follow-Up Queue
+                  {(ccSummary?.followup_overdue ?? 0) > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-red-500 text-white">
+                      {ccSummary.followup_overdue}
+                    </span>
+                  )}
+                </button>
+                <button
                   onClick={() => setViewMode('kanban')}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
                     viewMode === 'kanban'
@@ -269,6 +286,10 @@ export default function DashboardPage() {
               <CommandCenterView
                 onOpenLead={handleOpenDrawer}
                 onRefresh={fetchLeads}
+              />
+            ) : viewMode === 'followup_queue' ? (
+              <FollowUpWorkQueueView
+                onOpenLead={handleOpenDrawer}
               />
             ) : (
               <>

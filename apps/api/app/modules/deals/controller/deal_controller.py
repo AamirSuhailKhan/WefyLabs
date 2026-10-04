@@ -101,12 +101,13 @@ async def get_deals_summary(
 async def list_deals(
     stage: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
+    lead_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     broker: Broker = Depends(get_current_broker)
 ):
-    """List deals across all stages with tenant isolation and optional stage/status filter."""
+    """List deals across all stages with tenant isolation and optional stage/status/lead filter."""
     org_id = str(broker.organization_id or broker.id)
     service = DealService(db)
     deals, _ = await service.list_deals(
@@ -114,6 +115,7 @@ async def list_deals(
         organization_id=org_id,
         stage=stage,
         status=status,
+        lead_id=lead_id,
         limit=limit,
         offset=offset
     )

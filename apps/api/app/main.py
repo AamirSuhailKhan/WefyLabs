@@ -315,6 +315,7 @@ app.include_router(recommendation_router, prefix=settings.API_V1_STR)
 
 # ─── Volume 2 Part 8 — AI Follow-Up & Autonomous Lead Nurturing Engine ─────────
 app.include_router(enterprise_follow_up_router, prefix=settings.API_V1_STR)
+app.include_router(enterprise_follow_up_router, prefix="/api")
 
 # ─── Volume 2 Part 10 — CRM Intelligence & Autonomous Sales Operations Engine ──
 app.include_router(crm_intelligence_router)

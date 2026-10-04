@@ -30,6 +30,9 @@ from sqlalchemy import select, and_, update, func
 
 from app.models.crm_models import Task, WORK_ITEM_TYPES, WORK_ITEM_SOURCES, WORK_ITEM_STATUSES
 
+# Sprint 1E — Learning layer wiring (non-blocking, failure-safe)
+from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+
 logger = logging.getLogger(__name__)
 
 # Allowed status transitions (deterministic state machine)
@@ -186,6 +189,20 @@ class WorkItemService:
             item.reason = (item.reason or "") + f"\n[{now.isoformat()}] → {new_status}: {reason}"
 
         await self.db.flush()
+
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        if new_status == "completed" and item.lead_id:
+            await OutcomeRecorder.record_followup_completed(
+                db=self.db,
+                org_id=organization_id,
+                work_item_id=str(item_id),
+                lead_id=str(item.lead_id),
+                channel=getattr(item, 'channel', None),
+                agent_id=str(item.broker_id) if item.broker_id else None,
+                completed_at=now,
+                response_received=False,
+            )
+
         return item
 
     # ─── Queries ───────────────────────────────────────────────────────────────

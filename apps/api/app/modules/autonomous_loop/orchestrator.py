@@ -372,8 +372,7 @@ class AutonomousSalesLoopService:
                 guard_name="HUMAN_APPROVAL",
                 org=org_hash,
             ).inc()
-            await automation_state.__class__.__dict__  # noop to trigger flush ref
-
+            # Flush pending action state
             automation_state.pending_action_id = decision.action_id
             automation_state.pending_action_type = decision.action_type.value
             automation_state.pending_since = datetime.now(timezone.utc)
@@ -408,6 +407,7 @@ class AutonomousSalesLoopService:
         try:
             broker = await self._load_broker(org_id)
             from app.modules.sales_action.action_executor import SalesActionExecutor
+            from app.modules.sales_action.taxonomies import SalesActionStatus
             executor = SalesActionExecutor(self.db)
             exec_result = await executor.execute_action(
                 decision=decision,
@@ -419,6 +419,14 @@ class AutonomousSalesLoopService:
             result.provider_name = exec_result.provider
             result.provider_status = exec_result.status.value if hasattr(exec_result.status, 'value') else str(exec_result.status)
             result.provider_message_id = exec_result.provider_message_id
+
+            if exec_result.status == SalesActionStatus.BLOCKED:
+                result.processing_state = EventProcessingState.COMPLETED
+                result.failure_class = FailureClass.POLICY_BLOCKED
+                result.decision_reason = exec_result.details.get("reason", "Action blocked by Phase 2 Governance.")
+                await self.loop_protection.record_failure(automation_state)
+                return result
+
             result.processing_state = EventProcessingState.COMPLETED
             result.decision_reason = (
                 f"Action {decision.action_type.value} dispatched via {exec_result.provider}. "

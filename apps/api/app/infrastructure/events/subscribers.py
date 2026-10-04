@@ -45,10 +45,22 @@ async def search_index_subscriber(event: DomainEvent) -> None:
 async def ai_subscriber(event: DomainEvent) -> None:
     """Triggers RAG vector indexing, sentiment scoring, and AI lead qualification."""
     if event.event_type in (StandardDomainEvents.LEAD_CREATED, StandardDomainEvents.CONVERSATION_STARTED):
+        lead_id = event.payload.get("lead_id") or event.payload.get("conversation_id")
+        org_id = event.payload.get("organization_id") or event.organization_id
         logger.info(
-            f"[SUBSCRIBER: AI Engine] Triggering AI pipeline for "
-            f"{event.payload.get('lead_id') or event.payload.get('conversation_id')}"
+            f"[SUBSCRIBER: AI Engine] Triggering AI pipeline for {lead_id} (org={org_id})"
         )
+        # Wire: auto-qualify new leads via Celery — closes the revenue loop gap
+        if event.event_type == StandardDomainEvents.LEAD_CREATED and lead_id and org_id:
+            try:
+                from app.modules.lead_qualification.tasks import auto_qualify_new_lead_task
+                auto_qualify_new_lead_task.apply_async(
+                    kwargs={"organization_id": org_id, "lead_id": lead_id},
+                    queue="qualification",
+                    countdown=5,  # 5s delay to allow DB commit to settle
+                )
+            except Exception as exc:
+                logger.warning(f"[AI SUBSCRIBER] Failed to queue auto-qualification: {exc}")
 
 async def workflow_subscriber(event: DomainEvent) -> None:
     """Executes automated workflow engines and multi-channel drip campaigns."""

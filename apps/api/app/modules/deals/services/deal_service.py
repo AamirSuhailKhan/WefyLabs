@@ -96,9 +96,14 @@ class DealService:
         await self.db.refresh(deal)
         return deal
 
-    async def list_deals(self, broker_id, organization_id, stage=None, status=None, limit=50, offset=0):
+    async def list_deals(self, broker_id, organization_id, stage=None, status=None, lead_id=None, limit=50, offset=0):
         org_uuid = uuid.UUID(organization_id)
         stmt = select(Deal).where(Deal.organization_id == org_uuid, Deal.deleted_at.is_(None))
+        if lead_id:
+            try:
+                stmt = stmt.where(Deal.lead_id == uuid.UUID(lead_id))
+            except Exception:
+                pass
         if stage:
             stmt = stmt.where(Deal.current_stage == stage.lower())
         if status:

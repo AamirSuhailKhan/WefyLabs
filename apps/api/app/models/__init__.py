@@ -801,11 +801,19 @@ from app.models.intelligence_models import (
     BenchmarkDefinition,
     BenchmarkSnapshot,
     DataQualityIssue,
+    DataQualityIssueStatus,
     PolicyRegistryEntry,
     DriftAlertRecord,
     IntelligenceSnapshot,
     InsightRecord,
     OrganizationLearningProfile,
+    PolicyAuditLog,
+    AdaptivePolicyRollout,
+    PilotCohortGuard,
+    HumanOverrideCategory,
+    RevenueLeakageType,
+    RevenueLeakageStatus,
+    RevenueLeakageRecord,
 )
 
 __all__ = __all__ + [
@@ -817,6 +825,7 @@ __all__ = __all__ + [
     "ExperimentStatus",
     "BenchmarkType",
     "DataQualityIssueType",
+    "DataQualityIssueStatus",
     "RegistryEntityType",
     "RegistryEntryStatus",
     "DriftType",
@@ -840,6 +849,13 @@ __all__ = __all__ + [
     "IntelligenceSnapshot",
     "InsightRecord",
     "OrganizationLearningProfile",
+    "PolicyAuditLog",
+    "AdaptivePolicyRollout",
+    "PilotCohortGuard",
+    "HumanOverrideCategory",
+    "RevenueLeakageType",
+    "RevenueLeakageStatus",
+    "RevenueLeakageRecord",
 ]
 
 

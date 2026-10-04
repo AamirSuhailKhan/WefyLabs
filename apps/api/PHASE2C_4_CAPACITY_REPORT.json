@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-10-03T16:46:27.688969+00:00",
+  "pgbouncer_ceiling": 15,
+  "active_measured_connections": 13,
+  "current_headroom": 2,
+  "query_latency_ms": {
+    "ping_avg_ms": 44.27,
+    "org_query_ms": 72.04,
+    "lead_query_ms": 73.99,
+    "pilot_query_ms": 70.53
+  },
+  "operating_envelope": {
+    "api_process_pool": 10,
+    "celery_worker_pool": 2,
+    "celery_beat_pool": 1,
+    "system_reserve": 2,
+    "total_allocated": 15,
+    "envelope_status": "SAFE"
+  },
+  "multi_tenant_impact_assessment": {
+    "architecture": "Shared DB, shared connection pool across all tenants",
+    "connection_scaling_per_tenant": 0,
+    "throughput_scaling_per_tenant": "Queries per second increase; managed via pool checkout queue",
+    "safe_tenant_capacity_at_current_envelope": 5,
+    "expansion_requirement_for_gt_5_tenants": "Upgrade Supabase PgBouncer pooler limit from 15 to 30+"
+  },
+  "gate_b_status": "PASS"
+}

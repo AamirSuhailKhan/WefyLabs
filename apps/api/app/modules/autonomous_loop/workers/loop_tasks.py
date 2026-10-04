@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,19 @@ if celery_app:
             f"idem_key={event_payload.get('idempotency_key', 'unset')}"
         )
 
+        # Worker-level Kill Switch reality check (Section 32, 45, 80)
+        tenant_id = event_payload.get("tenant_id")
+        from app.modules.autonomous_loop.emergency_pause import EmergencyAutomationPauseService
+        is_g_paused, g_reason = EmergencyAutomationPauseService.is_global_paused()
+        if is_g_paused:
+            logger.warning(f"[LOOP_WORKER] Event processing suppressed by global kill switch: {g_reason}")
+            return {"status": "PAUSED_BY_KILL_SWITCH", "reason": g_reason}
+        if tenant_id:
+            is_t_paused, t_reason = EmergencyAutomationPauseService.is_tenant_paused(tenant_id)
+            if is_t_paused:
+                logger.warning(f"[LOOP_WORKER] Event processing suppressed by tenant kill switch: {t_reason}")
+                return {"status": "PAUSED_BY_KILL_SWITCH", "reason": t_reason}
+
         async def _run():
             async with _get_async_session() as session:
                 from app.modules.autonomous_loop.orchestrator import AutonomousSalesLoopService
@@ -65,7 +78,33 @@ if celery_app:
                 result = await service.process_event(event_dto)
                 await session.commit()
 
-                return {
+                # Phase 2C Event Bridge hook — Additive shadow observation pipeline
+                pilot_obs_result = None
+                try:
+                    from app.modules.autonomous_loop.phase2c_event_bridge import Phase2CEventBridge
+                    bridge = Phase2CEventBridge(session)
+                    raw_event_type = (
+                        event_dto.event_type.value
+                        if hasattr(event_dto.event_type, "value")
+                        else str(event_dto.event_type)
+                    )
+                    pilot_obs_result = await bridge.route_event(
+                        event_type=raw_event_type,
+                        organization_id=str(event_dto.tenant_id),
+                        lead_id=str(event_dto.lead_id) if event_dto.lead_id else None,
+                        event_id=result.event_id or getattr(event_dto, "event_id", None),
+                        correlation_id=str(getattr(event_dto, "correlation_id", "") or ""),
+                        payload=event_dto.payload or {},
+                    )
+                    if pilot_obs_result:
+                        await session.commit()
+                except Exception as bridge_exc:
+                    logger.warning(
+                        f"[LOOP_WORKER] Phase 2C event bridge hook non-fatal error: {bridge_exc}",
+                        exc_info=True,
+                    )
+
+                ret_val = {
                     "status": result.processing_state.value,
                     "event_id": result.event_id,
                     "lead_id": result.lead_id,
@@ -73,6 +112,9 @@ if celery_app:
                     "provider_status": result.provider_status,
                     "decision_reason": result.decision_reason,
                 }
+                if pilot_obs_result:
+                    ret_val["pilot_observation"] = pilot_obs_result
+                return ret_val
 
         try:
             loop = asyncio.get_event_loop()
@@ -187,7 +229,9 @@ if celery_app:
                     select(Lead)
                     .where(
                         and_(
-                            Lead.broker_id == tenant_id,
+                            # Phase 2C.3A canonical identity: tenant_id references organization_id
+                            # Lead.organization_id is the correct canonical tenant field (post migration 0015)
+                            Lead.organization_id == tenant_id,
                             Lead.status.in_(["active", "new", "pending"]),
                             Lead.pipeline_stage.notin_([
                                 "CONVERTED", "LOST", "DO_NOT_CONTACT", "CLOSED"
@@ -223,6 +267,87 @@ if celery_app:
 
                 await session.commit()
                 return {"status": "SUCCESS", "leads_scanned": len(leads), "processed": processed}
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(_run(), loop)
+            return future.result()
+        else:
+            return asyncio.run(_run())
+
+    @celery_app.task(
+        name="autonomous_loop.generate_daily_pilot_snapshots",
+        bind=True,
+        max_retries=2,
+    )
+    def generate_daily_pilot_snapshots_task(self, target_date_iso: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Computes and persists daily PilotMetricSnapshot records for all active pilot tenants.
+        Derives metrics strictly from persisted DB observations (never in-memory counters).
+        """
+        logger.info("[LOOP_WORKER] Generating daily pilot metric snapshots...")
+
+        async def _run():
+            async with _get_async_session() as session:
+                from sqlalchemy import select
+                from app.modules.autonomous_loop.phase2c_durable_models import (
+                    PilotTenant, PilotMetricSnapshot
+                )
+                from app.modules.autonomous_loop.phase2c_pilot_repository import (
+                    PilotRepository, MINIMUM_SHADOW_SAMPLE
+                )
+
+                if target_date_iso:
+                    target_date = datetime.fromisoformat(target_date_iso).date()
+                else:
+                    target_date = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+
+                day_start = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=timezone.utc)
+                day_end = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, tzinfo=timezone.utc)
+
+                stmt = select(PilotTenant).where(PilotTenant.pilot_status == "ACTIVE")
+                res = await session.execute(stmt)
+                pilots = list(res.scalars().all())
+
+                snapshots_created = 0
+                repo = PilotRepository(session)
+
+                for pilot in pilots:
+                    try:
+                        metrics = await repo.compute_shadow_accuracy(
+                            pilot_id=pilot.id,
+                            period_start=day_start,
+                            period_end=day_end,
+                        )
+
+                        snapshot = PilotMetricSnapshot(
+                            pilot_id=pilot.id,
+                            organization_id=pilot.organization_id,
+                            stage=pilot.current_stage,
+                            period_start=day_start,
+                            period_end=day_end,
+                            metric_name="shadow_accuracy",
+                            metric_value=metrics.get("observed_value", 0.0),
+                            sample_size=metrics.get("sample_size", 0),
+                            minimum_sample=metrics.get("minimum_sample", MINIMUM_SHADOW_SAMPLE),
+                            numerator=metrics.get("numerator", 0),
+                            denominator=metrics.get("denominator", 0),
+                            source="pilot_observations",
+                            calculation_version="v2c.1.0",
+                            is_synthetic=False,
+                            computed_at=datetime.now(timezone.utc),
+                        )
+                        session.add(snapshot)
+                        snapshots_created += 1
+                    except Exception as snap_err:
+                        logger.warning(f"[LOOP_WORKER] Failed to create snapshot for pilot {pilot.id}: {snap_err}")
+
+                await session.commit()
+                return {
+                    "status": "SUCCESS",
+                    "target_date": target_date.isoformat(),
+                    "snapshots_created": snapshots_created,
+                }
 
         loop = asyncio.get_event_loop()
         if loop.is_running():

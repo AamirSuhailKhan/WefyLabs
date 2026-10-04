@@ -1,0 +1,1880 @@
+<USER_REQUEST>
+# PHASE 2C.4 — CONTROLLED COMMERCIAL PILOT & REVENUE VALIDATION
+## Ultimate Production Engineering + SRE + AI Governance + Customer Validation Master Prompt
+
+You are acting as the **principal engineer, staff backend engineer, frontend engineer, SRE, security engineer, data/AI architect, QA lead, product architect, and technical program owner** for WefyLabs.
+
+Your mission is NOT to build another large feature set.
+
+Your mission is to take the existing production system from:
+
+> **TECHNICALLY HARDENED + STAGE-1 SHADOW + FIRST REAL TRACE**
+
+to:
+
+> **CONTROLLED REAL-CUSTOMER PILOT + MEASURABLE BUSINESS USAGE + COMMERCIAL VALIDATION**
+
+while preserving every safety, governance, tenancy, audit, evidence, and reliability guarantee already established.
+
+---
+
+# 0. EXECUTION ORDER — NON-NEGOTIABLE
+
+You must execute this phase **strictly in the following order**.
+
+Do NOT jump ahead.
+
+Do NOT implement commercial features before validating infrastructure.
+
+Do NOT onboard customers before validating tenant isolation and capacity.
+
+Do NOT use customer feedback before real customer usage exists.
+
+Do NOT interpret Stage-2 evidence as commercial validation.
+
+Do NOT declare a phase complete merely because tests pass.
+
+The required execution sequence is:
+
+```text
+PHASE 0
+READ + RECONSTRUCT SYSTEM
+        ↓
+PHASE 1
+FRESH PRODUCTION BASELINE
+        ↓
+GATE A
+FOUNDATION SAFETY
+        ↓
+PHASE 2
+DATABASE / CONNECTION / WORKER CAPACITY
+        ↓
+GATE B
+CAPACITY SAFETY
+        ↓
+PHASE 3
+SECURITY + TENANT ISOLATION + AUTHORIZATION
+        ↓
+GATE C
+SECURITY / TENANCY SAFETY
+        ↓
+PHASE 4
+CUSTOMER ONBOARDING HARDENING
+        ↓
+GATE D
+FIRST-CUSTOMER ONBOARDING READINESS
+        ↓
+PHASE 5
+CORE REVENUE WORKFLOW VALIDATION
+        ↓
+GATE E
+CORE WORKFLOW HEALTH
+        ↓
+PHASE 6
+REAL USAGE + TELEMETRY + AI FEEDBACK
+        ↓
+PHASE 7
+CUSTOMER SUCCESS + SUPPORT OPERATIONS
+        ↓
+PHASE 8
+COMMERCIAL PROCESS + BILLING + DATA OWNERSHIP
+        ↓
+PHASE 9
+CONTROLLED REAL CUSTOMER PILOT
+        ↓
+GATE F
+PILOT HEALTH
+        ↓
+PHASE 10
+CUSTOMER #2 EXPANSION
+        ↓
+GATE G
+EXPANSION SAFETY
+        ↓
+PHASE 11
+CUSTOMER #3 EXPANSION
+        ↓
+PHASE 12
+COMMERCIAL VALIDATION
+        ↓
+GATE H
+COMMERCIAL VALIDATION
+        ↓
+PHASE 13
+LONGITUDINAL STAGE-1 EVIDENCE
+        ↓
+GATE I
+STAGE-2 HUMAN REVIEW ELIGIBILITY
+        ↓
+FINAL DECISION
+```
+
+### Hard rule
+
+At the end of every phase produce:
+
+```text
+WHAT WAS CHECKED
+WHAT WAS FOUND
+WHAT WAS CHANGED
+WHAT WAS TESTED
+WHAT EVIDENCE EXISTS
+PASS / FAIL
+BLOCKERS
+NEXT PHASE
+```
+
+If a gate fails:
+
+```text
+STOP
+→ IDENTIFY ROOT CAUSE
+→ FIX
+→ TEST
+→ REVERIFY
+→ RE-RUN FAILED GATE
+→ ONLY THEN CONTINUE
+```
+
+Never silently continue after a critical failure.
+
+---
+
+# 1. EXECUTION PHASE 0 — READ AND RECONSTRUCT THE SYSTEM
+
+Before changing anything, deeply inspect the complete repository.
+
+Inspect:
+
+- backend,
+- frontend,
+- database,
+- migrations,
+- Celery,
+- Redis,
+- authentication,
+- organizations,
+- brokers/users,
+- leads,
+- properties,
+- site visits,
+- deals/opportunities,
+- bookings,
+- revenue,
+- autonomous loop,
+- agent contracts,
+- governance,
+- provider boundary,
+- pilot runtime,
+- evidence ledger,
+- audit system,
+- snapshots,
+- dashboards,
+- observability,
+- deployment,
+- tests,
+- CI/CD,
+- environment handling.
+
+Search globally before adding new code.
+
+Determine:
+
+```text
+WHAT ALREADY EXISTS
+WHAT IS ACTUALLY USED
+WHAT IS DEAD
+WHAT IS DUPLICATED
+WHAT IS DANGEROUS
+WHAT IS DOCUMENTED
+WHAT IS VERIFIED
+WHAT IS UNKNOWN
+```
+
+Do not assume prior reports are still correct.
+
+Use executable code and runtime evidence as the authoritative source.
+
+---
+
+# 2. EXECUTION PHASE 1 — FRESH PRODUCTION BASELINE
+
+Collect a fresh baseline before making material changes.
+
+Record:
+
+```text
+Git commit
+Deployment version
+Database migration revision
+Database health
+Organization count
+Pilot tenant count
+Lead count
+Property count
+Real events
+Real observations
+Real human decisions
+Real comparisons
+Real sales outcomes
+Provider calls
+Provider configurations
+Celery workers
+Celery Beat
+Redis health
+Database connections
+API pool configuration
+Worker concurrency
+Queue depth
+Task failures
+Recent incidents
+Kill-switch state
+Audit integrity
+Snapshot reconciliation
+```
+
+Every item must be classified:
+
+```text
+REAL_PRODUCTION
+SYNTHETIC_TEST
+DEVELOPMENT
+UNKNOWN
+```
+
+Never mix these categories.
+
+---
+
+# 3. PHASE 1 GATE — FRESH BASELINE GATE
+
+Create:
+
+```text
+CCP-BASELINE
+```
+
+PASS only if:
+
+- production state can be inspected,
+- current version is identified,
+- migration state is known,
+- active tenant state is known,
+- current pilot state is known,
+- provider state is known,
+- worker/Beat state is known,
+- current connection usage is known,
+- incidents are known,
+- current evidence is known.
+
+If important values are unknown:
+
+```text
+BLOCK
+```
+
+Do not proceed on assumptions.
+
+---
+
+# 4. EXECUTION PHASE 2 — DATABASE / CONNECTION / WORKER CAPACITY
+
+Reconstruct actual production capacity.
+
+Inspect:
+
+- PostgreSQL limits,
+- PgBouncer,
+- SQLAlchemy,
+- pool size,
+- max overflow,
+- API replicas,
+- Celery workers,
+- worker concurrency,
+- Beat,
+- Redis,
+- one-off scripts,
+- migration connections,
+- test-runner behavior.
+
+Build a real model:
+
+```text
+API replicas × connection allocation
++
+Worker processes × connection usage
++
+Beat
++
+Administrative jobs
++
+Migration jobs
++
+Reserve
+```
+
+Use deployment-derived and measured values.
+
+Do not invent arbitrary assumptions.
+
+The previous production report documented a theoretical envelope of:
+
+```text
+API      = 10
+Worker   = 2
+Beat     = 1
+Reserve  = 2
+TOTAL    = 15
+```
+
+Revalidate this against the current deployment rather than blindly treating it as permanently correct.
+
+---
+
+# 5. CAPACITY REMEDIATION
+
+Identify whether additional tenants can be added safely.
+
+Investigate:
+
+- connection exhaustion,
+- idle connection accumulation,
+- pool leakage,
+- worker duplication,
+- Beat duplication,
+- retry amplification,
+- long-running tasks,
+- burst behavior.
+
+Implement the smallest safe remediation.
+
+Potential approaches may include:
+
+- pool configuration changes,
+- worker configuration changes,
+- process consolidation,
+- connection lifecycle fixes,
+- infrastructure capacity increases.
+
+Do not choose before measuring.
+
+---
+
+# 6. GATE B — CAPACITY SAFETY
+
+Pass only when:
+
+```text
+Peak capacity is measured
++
+Safe operating envelope is documented
++
+Meaningful headroom exists
++
+Worker scaling is understood
++
+Beat duplication is controlled
++
+Connection leaks are absent
++
+Redis/Celery behavior is stable
+```
+
+If not:
+
+```text
+STOP
+```
+
+---
+
+# 7. EXECUTION PHASE 3 — SECURITY + TENANT ISOLATION
+
+Audit all:
+
+- API endpoints,
+- services,
+- repositories,
+- background tasks,
+- scheduled jobs,
+- agent tools,
+- audit queries,
+- exports,
+- analytics,
+- admin endpoints.
+
+Canonical tenancy:
+
+```text
+Organization = tenant
+Broker/User = human actor
+OrganizationMember = tenant membership
+```
+
+Verify the entire authorization path:
+
+```text
+Authenticated Session
+        ↓
+Server User
+        ↓
+Organization Membership
+        ↓
+Authorized Organization
+        ↓
+Domain Operation
+```
+
+Reject client-controlled tenant identity.
+
+Test:
+
+- cross-tenant reads,
+- cross-tenant writes,
+- forged organization IDs,
+- forged broker IDs,
+- background-task leakage,
+- export leakage,
+- audit leakage.
+
+---
+
+# 8. AI GOVERNANCE SECURITY
+
+Every AI action must continue passing:
+
+```text
+Tenant validation
++
+Actor authorization
++
+Action policy
++
+Autonomy policy
++
+Resource ownership
++
+Domain state validation
++
+Tool contract
++
+Audit
+```
+
+Unknown or invalid actions fail closed.
+
+---
+
+# 9. GATE C — SECURITY / TENANCY SAFETY
+
+Required:
+
+```text
+Cross-tenant violations = 0
+Authorization bypasses = 0
+Provider bypasses = 0
+Kill switch = operational
+Audit integrity = valid
+Stage = STAGE_1_SHADOW
+Autonomy = 0
+```
+
+Do not proceed if any critical security issue remains unresolved.
+
+---
+
+# 10. EXECUTION PHASE 4 — CUSTOMER ONBOARDING HARDENING
+
+Now harden onboarding.
+
+Onboarding must support:
+
+```text
+Organization
+Owner
+Members
+Roles
+Lead Sources
+Leads
+Properties
+Sales Workflow
+Pilot Configuration
+Privacy/Data Ownership
+Support Contact
+Commercial Agreement
+```
+
+Each onboarding step must expose real state:
+
+```text
+PENDING
+IN_PROGRESS
+SUCCESS
+FAILED
+RETRYABLE
+BLOCKED
+```
+
+No fake-success redirects.
+
+No “onboarding complete” without actual required state.
+
+---
+
+# 11. CUSTOMER DATA OWNERSHIP
+
+Document technically:
+
+```text
+Customer-Owned Data
+Derived AI Artifacts
+Audit Evidence
+System Metadata
+Operational Metadata
+```
+
+Clearly define:
+
+- customer data ownership,
+- processing boundaries,
+- access rules,
+- export,
+- deletion,
+- pilot termination,
+- retention.
+
+Do not claim legal compliance without evidence.
+
+Provide technical support for contractual/DPA requirements but do not fabricate legal conclusions.
+
+---
+
+# 12. GATE D — CUSTOMER ONBOARDING READINESS
+
+Pass only when:
+
+```text
+Organization creation works
++
+Role assignment works
++
+Login works
++
+Tenant isolation works
++
+Lead ingestion works
++
+Property ingestion works
++
+Onboarding failure states work
++
+Retry works
++
+Data ownership is documented
++
+Support path exists
+```
+
+---
+
+# 13. EXECUTION PHASE 5 — CORE REVENUE WORKFLOW
+
+Validate the actual WefyLabs wedge:
+
+```text
+Incoming Lead
+↓
+Lead Intelligence
+↓
+Qualification
+↓
+Property Match
+↓
+Next Best Action
+↓
+Human Sales Action
+↓
+Follow-up
+↓
+Site Visit
+↓
+Opportunity
+↓
+Booking
+↓
+Revenue
+```
+
+Reuse existing functionality.
+
+Do not rebuild working modules.
+
+Trace every state transition to its actual backend/domain implementation.
+
+---
+
+# 14. CORE WORKFLOW TEST
+
+Trace at least one production-safe real workflow.
+
+The flow should prove:
+
+```text
+Real Lead
+→ Real Event
+→ Real Observation
+→ Human Decision
+→ Domain Action
+→ Follow-up / Visit / Opportunity
+→ Outcome where available
+```
+
+Stage 1 still means:
+
+```text
+NO AUTONOMOUS EXTERNAL SIDE EFFECTS
+```
+
+---
+
+# 15. GATE E — CORE WORKFLOW HEALTH
+
+PASS only when:
+
+- leads enter correctly,
+- intelligence executes,
+- qualification works,
+- property matching works,
+- next action is usable,
+- human action is captured,
+- site visit path works,
+- opportunity path works,
+- audit is recorded,
+- events persist,
+- no provider bypass exists.
+
+---
+
+# 16. EXECUTION PHASE 6 — REAL USAGE INSTRUMENTATION
+
+Only after the core workflow is healthy, instrument commercial usage.
+
+Track genuine events:
+
+```text
+lead_received
+lead_viewed
+qualification_reviewed
+qualification_accepted
+qualification_rejected
+qualification_corrected
+property_match_reviewed
+property_match_accepted
+property_match_rejected
+next_action_reviewed
+followup_created
+followup_completed
+site_visit_scheduled
+site_visit_completed
+opportunity_created
+opportunity_advanced
+offer_created
+booking_created
+revenue_attributed
+lead_lost
+lead_reactivated
+```
+
+Only implement events that correspond to real domain activity.
+
+---
+
+# 17. BUSINESS KPI MODEL
+
+Track:
+
+### Lead
+
+- volume,
+- response time,
+- qualification.
+
+### AI
+
+- recommendations,
+- accepted,
+- rejected,
+- modified,
+- abstained,
+- correction rate.
+
+### Sales
+
+- follow-ups,
+- site visits,
+- opportunities,
+- bookings,
+- revenue outcomes.
+
+### Adoption
+
+- active users,
+- active organizations,
+- workflow usage,
+- repeat usage.
+
+### Reliability
+
+- errors,
+- queue lag,
+- task failures,
+- database pressure,
+- incidents.
+
+---
+
+# 18. AI FEEDBACK LOOP
+
+For meaningful AI recommendations capture:
+
+```text
+ACCEPT
+REJECT
+MODIFY
+IGNORE
+```
+
+Where useful, collect controlled reason codes:
+
+```text
+WRONG_PROPERTY
+WRONG_TIMING
+WRONG_QUALIFICATION
+MISSING_CONTEXT
+STALE_DATA
+BAD_INTENT_INFERENCE
+ALREADY_CONTACTED
+NOT_ACTIONABLE
+AGENT_ABSTAINED
+OTHER
+```
+
+Do not create excessive friction.
+
+---
+
+# 19. CONTEXT QUALITY
+
+For each recommendation classify available context:
+
+```text
+COMPLETE
+PARTIAL
+MISSING
+STALE
+CONFLICTING
+UNAVAILABLE
+```
+
+Relevant context can include:
+
+```text
+Lead identity
+Contact details
+Budget
+Location
+Property preference
+Timeline
+Intent
+Communication history
+Follow-up history
+Property availability
+Property facts
+Assigned salesperson
+Deal state
+Site visit state
+```
+
+This allows AI errors to be distinguished from data deficiencies.
+
+---
+
+# 20. PROPERTY TRUTH
+
+AI property recommendations must be grounded in actual inventory.
+
+Verify:
+
+```text
+Availability
+Status
+Price
+Location
+Configuration
+Freshness
+```
+
+Do not recommend stale or unavailable inventory.
+
+---
+
+# 21. EXECUTION PHASE 7 — CUSTOMER SUCCESS OPERATIONS
+
+Create operational procedures for:
+
+```text
+Onboarding
+Training
+First Value
+Daily Support
+Weekly Review
+Incident Escalation
+Data Correction
+Workflow Correction
+Pilot Health
+Renewal / Conversion
+```
+
+Track:
+
+```text
+TIME_TO_FIRST_VALUE
+```
+
+Define it operationally and measure it from real customer activity.
+
+---
+
+# 22. EXECUTION PHASE 8 — COMMERCIAL OPERATIONS
+
+Validate:
+
+```text
+Pricing
+Pilot Pricing
+Billing
+Invoices
+Payment Collection
+Cancellation
+Expiry
+Data Export
+Data Deletion
+Support
+Terms
+Privacy
+DPA Requirements
+SLA Expectations
+Incident Management
+```
+
+Do not build a billing platform unnecessarily if an existing reliable implementation can be reused.
+
+---
+
+# 23. UNIT ECONOMICS
+
+Instrument:
+
+```text
+Revenue / tenant
+Infrastructure cost / tenant
+AI cost / tenant
+Messaging cost
+Storage cost
+Support cost
+Onboarding cost
+Gross margin
+```
+
+Classify every economic value:
+
+```text
+OBSERVED
+ESTIMATED
+PROJECTED
+UNKNOWN
+```
+
+Do not extrapolate tiny samples as final economics.
+
+---
+
+# 24. EXECUTION PHASE 9 — CONTROLLED REAL CUSTOMER PILOT
+
+Only after Gates A–E pass may the system operate as a controlled commercial pilot.
+
+Start with:
+
+```text
+1 existing real organization
+```
+
+Then cautiously expand toward:
+
+```text
+1–3 real organizations
+```
+
+The customer must use genuine business activity.
+
+No synthetic production traffic.
+
+No fabricated decisions.
+
+No manufactured conversions.
+
+No manufactured revenue.
+
+Stage 1 remains:
+
+```text
+autonomy = 0
+```
+
+Humans remain responsible for externally consequential actions.
+
+---
+
+# 25. PILOT OPERATING LOOP
+
+For each customer:
+
+```text
+Real Lead
+↓
+WefyLabs Intelligence
+↓
+AI Recommendation
+↓
+Human Review
+↓
+Human Action
+↓
+Customer Interaction
+↓
+Sales Outcome
+↓
+Evidence
+↓
+Feedback
+↓
+Product Improvement
+```
+
+This is the primary Phase 2C.4 loop.
+
+---
+
+# 26. GATE F — PILOT HEALTH
+
+Before expansion, verify:
+
+```text
+Real usage exists
++
+Users return
++
+Core workflow is being used
++
+AI feedback exists
++
+Customer support works
++
+Tenant isolation remains intact
++
+No critical incidents
++
+No provider side effects
++
+Capacity remains safe
++
+Audit/evidence remains intact
+```
+
+---
+
+# 27. EXECUTION PHASE 10 — CUSTOMER #2
+
+Do not onboard customer #2 merely to increase the count.
+
+First determine:
+
+```text
+Was customer #1 onboarding repeatable?
+Was support manageable?
+Was capacity stable?
+Was tenant isolation stable?
+Was the workflow genuinely used?
+Were there recurring product failures?
+```
+
+Then onboard customer #2.
+
+Run a completely independent tenant-isolation verification.
+
+---
+
+# 28. GATE G — MULTI-TENANT EXPANSION SAFETY
+
+Before customer #3:
+
+```text
+Customer #1 stable
++
+Customer #2 stable
++
+No systemic isolation issues
++
+No systemic database saturation
++
+Worker scaling understood
++
+Onboarding repeatable
++
+Support manageable
++
+Observability sufficient
+```
+
+---
+
+# 29. EXECUTION PHASE 11 — CUSTOMER #3
+
+Onboard customer #3 only if Gate G passes.
+
+Record:
+
+```text
+Onboarding duration
+Manual interventions
+Lead volume
+Property volume
+Usage
+Support requests
+Errors
+Capacity
+AI feedback
+Outcome signals
+```
+
+The purpose is to determine whether WefyLabs is becoming repeatable rather than bespoke.
+
+---
+
+# 30. EXECUTION PHASE 12 — COMMERCIAL VALIDATION
+
+Now evaluate:
+
+### Product usage
+
+Are customers repeatedly using WefyLabs?
+
+### Workflow value
+
+Does telemetry plus customer feedback indicate genuine operational usefulness?
+
+### Outcome signal
+
+Are sales outcomes improving or changing during usage?
+
+### Retention
+
+Do organizations continue using the system?
+
+### Willingness to pay
+
+Do customers demonstrate actual payment intent or payment behavior?
+
+### Operational feasibility
+
+Can customers be supported without unsustainable engineering effort?
+
+### Economic feasibility
+
+Do expected economics support a viable business model?
+
+---
+
+# 31. BASELINE VS PILOT
+
+Where data is sufficient:
+
+```text
+BEFORE WefyLabs
+vs
+DURING WefyLabs
+```
+
+Compare:
+
+- response time,
+- qualification,
+- follow-up,
+- site visits,
+- opportunity progression,
+- booking conversion.
+
+Use evidence language carefully.
+
+Do not claim causality without causal evidence.
+
+---
+
+# 32. COMMERCIAL STATUS MODEL
+
+Use:
+
+```text
+INTERNAL_HARDENING
+CONTROLLED_PILOT_READY
+PILOT_ACTIVE
+COMMERCIAL_VALIDATION
+COMMERCIAL_READY
+PAUSED
+BLOCKED
+ROLLBACK_REQUIRED
+CUSTOMER_OFFBOARDED
+```
+
+Separately report:
+
+```text
+STAGE_1_STATUS
+STAGE_2_EVIDENCE_STATUS
+COMMERCIAL_STATUS
+```
+
+Never merge commercial readiness with autonomous readiness.
+
+---
+
+# 33. EXECUTION PHASE 13 — LONGITUDINAL STAGE-1 EVIDENCE
+
+While the commercial pilot operates, continue collecting genuine Stage-1 evidence.
+
+Do not interfere with the evidence clock.
+
+Do not manufacture activity.
+
+Do not reset the timeline.
+
+The previously established Stage-2 threshold remains:
+
+```text
+≥ 14 genuine calendar days
+AND
+≥ 50 genuine human decisions
+AND
+all safety gates remain green
+```
+
+Commercial activity may produce evidence, but commercial validation does not automatically qualify Stage 2.
+
+---
+
+# 34. STAGE-2 GATE
+
+Only return:
+
+```text
+EVIDENCE_SUFFICIENT_FOR_STAGE_2_HUMAN_REVIEW
+```
+
+when all evidence requirements are satisfied.
+
+Otherwise:
+
+```text
+STAGE_2_NOT_ELIGIBLE
+```
+
+Do not enable autonomous execution automatically.
+
+A human review remains mandatory.
+
+---
+
+# 35. SECURITY REQUIREMENTS
+
+Audit:
+
+### Authentication
+- session validation,
+- token validation,
+- expiry,
+- logout,
+- recovery.
+
+### Authorization
+- owner,
+- manager,
+- broker,
+- read-only.
+
+### Tenant isolation
+- API,
+- services,
+- Celery,
+- Beat,
+- agent tools,
+- analytics,
+- exports.
+
+### AI security
+- prompt injection,
+- malicious customer text,
+- tool abuse,
+- unauthorized actions,
+- hallucinated property facts.
+
+---
+
+# 36. OBSERVABILITY
+
+Monitor:
+
+```text
+API error rate
+API latency
+Database connections
+Database saturation
+Redis
+Celery queue depth
+Task latency
+Task retries
+Task failures
+Beat heartbeat
+Pilot events
+Observations
+Human decisions
+Provider interception
+Audit integrity
+Snapshot reconciliation
+Tenant errors
+Auth failures
+```
+
+---
+
+# 37. INCIDENT MANAGEMENT
+
+Every incident must include:
+
+```text
+Incident ID
+Severity
+Affected tenant(s)
+Impact
+Root cause
+Containment
+Fix
+Regression test
+Evidence
+Resolution
+Preventive action
+```
+
+Do not hide incidents.
+
+Do not silently repair production state.
+
+---
+
+# 38. BACKUP / RECOVERY
+
+Verify:
+
+```text
+Database backup
+Restore process
+Migration recovery
+Evidence recovery
+Worker restart
+Beat restart
+Redis restart
+Application restart
+```
+
+The objective is recoverability, not just the existence of backups.
+
+---
+
+# 39. REPLAY / IDEMPOTENCY
+
+Verify:
+
+```text
+Same Event
+→ Same logical processing
+→ No duplicate observation
+→ No duplicate decision
+→ No duplicate action
+→ No duplicate revenue attribution
+```
+
+---
+
+# 40. DATA QUALITY
+
+Measure:
+
+```text
+Missing fields
+Stale fields
+Invalid fields
+Duplicate leads
+Duplicate contacts
+Duplicate properties
+Inconsistent statuses
+Invalid property facts
+Invalid relationships
+```
+
+Classify failures:
+
+```text
+USER_DATA_ERROR
+IMPORT_ERROR
+INTEGRATION_ERROR
+SYSTEM_ERROR
+AI_ERROR
+```
+
+---
+
+# 41. CUSTOMER FEEDBACK
+
+Run structured pilot reviews.
+
+Capture:
+
+```text
+Most useful workflow
+Least useful workflow
+Time saved
+AI errors
+Missing context
+Property-data issues
+UI friction
+Missing actions
+Continued usage intent
+Payment intent
+```
+
+Do not manufacture satisfaction metrics.
+
+---
+
+# 42. NO FEATURE SPRAWL
+
+Before implementing any new feature, answer:
+
+```text
+Does it improve the lead-to-revenue loop?
+Does it reduce pilot risk?
+Does it improve onboarding?
+Does it improve customer value?
+Does it improve commercial repeatability?
+```
+
+If no meaningful answer exists:
+
+```text
+DO NOT BUILD IT
+```
+
+Prioritize:
+
+```text
+Reliability
+Capacity
+Security
+Observability
+Data quality
+Customer workflow
+Commercial operations
+Evidence
+```
+
+---
+
+# 43. IMPLEMENTATION DISCIPLINE
+
+For every change:
+
+```text
+INSPECT
+↓
+UNDERSTAND
+↓
+FORM HYPOTHESIS
+↓
+IMPLEMENT MINIMAL CHANGE
+↓
+UNIT TEST
+↓
+INTEGRATION TEST
+↓
+DATABASE VERIFY
+↓
+RUNTIME VERIFY
+↓
+REGRESSION
+↓
+DOCUMENT EVIDENCE
+```
+
+Do not perform blind rewrites.
+
+Do not duplicate services.
+
+Do not replace working architecture without evidence.
+
+---
+
+# 44. LEGACY CODE
+
+Classify legacy code:
+
+```text
+ACTIVE
+DEPRECATED
+SHADOWED
+UNUSED
+DANGEROUS
+```
+
+Any legacy route that can bypass:
+
+- tenant security,
+- authentication,
+- governance,
+- provider boundaries,
+- audit,
+
+must be hardened, disabled, or removed.
+
+---
+
+# 45. TEST REQUIREMENTS
+
+Maintain and expand the current regression suite.
+
+Test:
+
+```text
+Unit
+Integration
+Database
+Tenant Isolation
+Authentication
+Authorization
+Governance
+Agent Contracts
+Provider Safety
+Celery
+Beat
+Replay
+Idempotency
+Snapshots
+Audit
+Onboarding
+Customer Workflow
+Data Quality
+Capacity
+Recovery
+Commercial Workflow
+```
+
+Never hide failures with:
+
+```text
+continue-on-error
+|| true
+ignored failures
+```
+
+---
+
+# 46. PRODUCTION SMOKE TEST
+
+Create a repeatable smoke path:
+
+```text
+Login
+→ Organization Resolution
+→ Lead Access
+→ Lead Intelligence
+→ Qualification
+→ Property Match
+→ Next Best Action
+→ Human Action
+→ Event
+→ Observation
+→ Audit
+→ Snapshot
+```
+
+Stage-1 smoke tests must not create external provider side effects.
+
+---
+
+# 47. REQUIRED EVIDENCE ARTIFACTS
+
+Generate authoritative artifacts such as:
+
+```text
+PHASE2C_4_MASTER_PRODUCTION_AUDIT.md
+PHASE2C_4_COMMERCIAL_PILOT_REPORT.md
+PHASE2C_4_TENANT_ONBOARDING_REPORT.md
+PHASE2C_4_CAPACITY_REPORT.json
+PHASE2C_4_SECURITY_REPORT.md
+PHASE2C_4_DATA_QUALITY_REPORT.json
+PHASE2C_4_CUSTOMER_VALUE_REPORT.md
+PHASE2C_4_WEEKLY_PILOT_EVIDENCE.csv
+PHASE2C_4_INCIDENT_REGISTER.md
+PHASE2C_4_STAGE1_EVIDENCE.md
+PHASE2C_4_COMMERCIAL_READINESS.md
+PHASE2C_4_FINAL_GATE.md
+```
+
+Do not create evidence that does not exist.
+
+---
+
+# 48. EVIDENCE MATURITY
+
+Use:
+
+```text
+E0 — No operational evidence
+E1 — Controlled software/runtime evidence
+E2 — First real production trace
+E3 — Sustained real production evidence
+E4 — Multi-tenant commercial evidence
+E5 — Repeatable commercial validation
+```
+
+Evidence maturity must be earned from real evidence.
+
+---
+
+# 49. FINAL AUDIT QUESTIONS
+
+Answer every question with actual evidence.
+
+### Production
+
+1. Is production healthy?
+2. Is the pilot active?
+3. What is the current stage?
+4. Is autonomy 0?
+5. Is the kill switch working?
+6. Are provider side effects 0?
+7. Are production events genuine?
+8. Are observations genuine?
+9. Are human decisions genuine?
+
+### Tenant
+
+10. Is Organization canonical?
+11. Is actor identity server-derived?
+12. Are background jobs tenant-safe?
+13. Are cross-tenant violations 0?
+
+### Data
+
+14. Is schema current?
+15. What drift remains?
+16. Is customer data intact?
+17. Are duplicates controlled?
+18. Is property truth reliable?
+
+### Capacity
+
+19. What is the real DB capacity?
+20. What is measured peak?
+21. What is safe capacity?
+22. What happens at customer #2?
+23. What happens at customer #3?
+24. What is the bottleneck?
+
+### AI
+
+25. Genuine recommendations?
+26. Accepted?
+27. Rejected?
+28. Modified?
+29. Abstained?
+30. Why rejected?
+
+### Sales
+
+31. Real leads?
+32. Qualified?
+33. Follow-ups?
+34. Site visits?
+35. Opportunities?
+36. Bookings?
+37. Revenue?
+
+### Customer
+
+38. Are users returning?
+39. Is core workflow repeatedly used?
+40. What is valuable?
+41. What is wrong?
+42. Would they pay?
+43. Did anyone pay?
+44. What blocks expansion?
+
+### Commercial
+
+45. Is onboarding repeatable?
+46. Is support manageable?
+47. Are economics understood?
+48. Has pricing been tested?
+49. Is paid-pilot readiness demonstrated?
+50. Is broader commercial readiness demonstrated?
+
+### Stage 2
+
+51. Genuine calendar days?
+52. Genuine human decisions?
+53. Are safety gates green?
+54. Is Stage 2 eligible for human review?
+
+---
+
+# 50. FINAL DECISION MODEL
+
+If safety, security, capacity, tenancy, data integrity, or provider safety fails:
+
+```text
+BLOCKED
+```
+
+If safe but onboarding is not ready:
+
+```text
+CONTROLLED_PILOT_READY
+```
+
+If real customers actively use it:
+
+```text
+PILOT_ACTIVE
+```
+
+If multi-customer usage and measurable value accumulate:
+
+```text
+COMMERCIAL_VALIDATION
+```
+
+If customer value, retention, willingness to pay, supportability, reliability, and economics are sufficiently repeatable:
+
+```text
+COMMERCIAL_READY
+```
+
+Do not call it commercially ready merely because the software works.
+
+---
+
+# 51. FINAL REQUIRED OUTPUT
+
+End with:
+
+```text
+============================================================
+WEFYLABS PHASE 2C.4 FINAL GATE
+============================================================
+
+EXECUTION PHASE REACHED:
+[PHASE NUMBER]
+
+FOUNDATION SAFETY:
+[PASS / FAIL]
+
+CAPACITY SAFETY:
+[PASS / FAIL]
+
+SECURITY:
+[PASS / FAIL]
+
+TENANT ISOLATION:
+[PASS / FAIL]
+
+PROVIDER SAFETY:
+[PASS / FAIL]
+
+DATA INTEGRITY:
+[PASS / FAIL]
+
+CUSTOMER ONBOARDING:
+[PASS / FAIL]
+
+CORE REVENUE WORKFLOW:
+[PASS / FAIL]
+
+OBSERVABILITY:
+[PASS / FAIL]
+
+CUSTOMER VALUE:
+[PASS / FAIL / INSUFFICIENT EVIDENCE]
+
+COMMERCIAL VALIDATION:
+[PASS / FAIL / INSUFFICIENT EVIDENCE]
+
+CURRENT COMMERCIAL STATUS:
+[STATE]
+
+CURRENT STAGE:
+STAGE_1_SHADOW
+
+CURRENT AUTONOMY:
+0
+
+STAGE-2 STATUS:
+[ELIGIBLE FOR HUMAN REVIEW / NOT ELIGIBLE]
+
+GENUINE CALENDAR DAYS:
+[N]
+
+GENUINE HUMAN DECISIONS:
+[N]
+
+REAL CUSTOMERS:
+[N]
+
+REAL LEADS:
+[N]
+
+REAL SITE VISITS:
+[N]
+
+REAL OPPORTUNITIES:
+[N]
+
+REAL BOOKINGS:
+[N]
+
+OBSERVED REVENUE:
+[N / UNKNOWN]
+
+FABRICATED EVIDENCE:
+0
+
+CROSS-TENANT VIOLATIONS:
+0
+
+UNINTENDED PROVIDER SIDE EFFECTS:
+0
+
+BROKEN AUDIT LINKS:
+0
+
+UNRESOLVED P0:
+[N]
+
+UNRESOLVED P1:
+[N]
+
+REGRESSION:
+[X / Y PASS]
+
+FINAL DECISION:
+[ONE STATUS]
+
+BLOCKERS:
+[EXACT LIST]
+
+NEXT EXACT ACTION:
+[ONE ACTION]
+============================================================
+```
+
+# 52. ABSOLUTE FINAL INSTRUCTION
+
+The system must be developed and evaluated in this exact priority:
+
+```text
+1. TRUTH
+2. SAFETY
+3. SECURITY
+4. TENANCY
+5. CAPACITY
+6. RELIABILITY
+7. CORE WORKFLOW
+8. REAL CUSTOMER USAGE
+9. CUSTOMER VALUE
+10. COMMERCIAL VALIDATION
+11. LONGITUDINAL EVIDENCE
+12. ONLY THEN — FUTURE AUTONOMY REVIEW
+```
+
+Do not reverse this order.
+
+Do not build autonomy before proving workflow reliability.
+
+Do not add features before proving customer usage.
+
+Do not call tests “customer traction.”
+
+Do not call AI activity “business value.”
+
+Do not call a pilot “commercially validated” without commercial evidence.
+
+Do not call Stage 2 eligible without its evidence threshold.
+
+Do not manufacture evidence for any reason.
+
+The ultimate success criterion is:
+
+```text
+REAL CUSTOMER
+↓
+REAL LEAD
+↓
+REAL WefyLabs INTELLIGENCE
+↓
+REAL HUMAN DECISION
+↓
+REAL SALES ACTION
+↓
+REAL CUSTOMER RESPONSE
+↓
+REAL SITE VISIT
+↓
+REAL OPPORTUNITY
+↓
+REAL BOOKING / REVENUE
+↓
+REAL LEARNING
+↓
+REPEAT USAGE
+↓
+CUSTOMER VALUE
+↓
+WILLINGNESS TO PAY
+↓
+REPEATABLE COMMERCIAL MODEL
+```
+
+**Start at Execution Phase 0. Do not modify production code until the repository has been reconstructed and the fresh production baseline has been established. After every phase, enforce its gate before moving to the next phase.**
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-03T22:01:08+05:30.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\aamir\OneDrive\Desktop\crm real state\.github\workflows\ci-cd.yml (LANGUAGE_YAML)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\terraform\main.tf (LANGUAGE_HCL)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\Dockerfile.prod (LANGUAGE_UNSPECIFIED)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\modules\security\services\file_security.py (LANGUAGE_PYTHON)
+- c:\Users\aamir\OneDrive\Desktop\crm real state\apps\api\app\modules\security\services\password_security.py (LANGUAGE_PYTHON)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (High) to Claude Sonnet 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

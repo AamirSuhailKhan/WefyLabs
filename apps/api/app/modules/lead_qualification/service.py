@@ -14,6 +14,10 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
+# Sprint 1E — Learning layer wiring (non-blocking, failure-safe)
+from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+from app.models.intelligence_models import OutcomeEventType, OutcomeEntityType
+
 from app.models.lead import Lead
 from app.models.broker import Broker
 from app.models.qualification_models import (
@@ -228,6 +232,26 @@ class LeadQualificationDomainService:
             self.db.add(audit)
 
         await self.db.commit()
+
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        # Record qualification state transitions as OutcomeEvents.
+        # Non-blocking: failures are caught internally.
+        if prev_state != result_dto.qualification_state:
+            new_state = result_dto.qualification_state
+            _qual_event = None
+            if new_state in ("QUALIFIED", QualificationState.QUALIFIED.value if hasattr(QualificationState, 'QUALIFIED') else "QUALIFIED"):
+                _qual_event = OutcomeEventType.LEAD_QUALIFIED
+            elif new_state in ("DISQUALIFIED", "REJECTED"):
+                _qual_event = OutcomeEventType.LEAD_DISQUALIFIED
+            if _qual_event:
+                await OutcomeRecorder.record_lead_qualified(
+                    db=self.db,
+                    org_id=organization_id,
+                    lead_id=lead_id,
+                    qualified_by="DETERMINISTIC_POLICY",
+                    qualification_score=result_dto.completeness_score,
+                    qualified_at=datetime.now(timezone.utc),
+                )
 
         # Observability Metrics
         org_hash = mask_org_id(organization_id)

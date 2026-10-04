@@ -1,0 +1,186 @@
+{
+  "git_commit": {
+    "value": "4bc1a309a522df90fb69477a0715acac3a87c816",
+    "class": "REAL_PRODUCTION"
+  },
+  "deployment_version": {
+    "value": "1.0.0",
+    "class": "REAL_PRODUCTION"
+  },
+  "migration_revision": {
+    "value": "0042_phase2c_pilot_tables",
+    "class": "REAL_PRODUCTION"
+  },
+  "database_health": {
+    "status": "HEALTHY",
+    "engine": "PostgreSQL 17.6 on x86_64-pc-linux-gnu",
+    "class": "REAL_PRODUCTION"
+  },
+  "organization_count": {
+    "value": 11,
+    "class": "REAL_PRODUCTION"
+  },
+  "pilot_tenant_count": {
+    "value": 1,
+    "class": "REAL_PRODUCTION"
+  },
+  "lead_count": {
+    "value": 7,
+    "class": "REAL_PRODUCTION"
+  },
+  "property_count": {
+    "value": 9,
+    "class": "REAL_PRODUCTION"
+  },
+  "real_events": {
+    "value": 3,
+    "class": "REAL_PRODUCTION"
+  },
+  "real_observations": {
+    "value": 1,
+    "class": "REAL_PRODUCTION"
+  },
+  "synthetic_observations": {
+    "value": 0,
+    "class": "SYNTHETIC_TEST"
+  },
+  "real_human_decisions": {
+    "value": 1,
+    "class": "REAL_PRODUCTION"
+  },
+  "real_comparisons": {
+    "value": 1,
+    "class": "REAL_PRODUCTION"
+  },
+  "real_sales_outcomes": {
+    "customer_responses": 0,
+    "deals": 0,
+    "bookings": 0,
+    "site_visits": 0,
+    "opportunities": 0,
+    "class": "REAL_PRODUCTION"
+  },
+  "provider_calls": {
+    "value": 0,
+    "class": "REAL_PRODUCTION"
+  },
+  "provider_configurations": {
+    "stage": "STAGE_1_SHADOW",
+    "autonomy": 0,
+    "interception": "ACTIVE_SIMULATED_NOOP",
+    "class": "REAL_PRODUCTION"
+  },
+  "celery_workers": {
+    "concurrency_limit": 2,
+    "active_queues": 40,
+    "class": "REAL_PRODUCTION"
+  },
+  "celery_beat": {
+    "scheduler": "celery.beat:PersistentScheduler",
+    "pidfile": "/tmp/celerybeat.pid",
+    "class": "REAL_PRODUCTION"
+  },
+  "redis_health": {
+    "ping": true,
+    "keys": 509,
+    "version": "8.4.0",
+    "class": "REAL_PRODUCTION"
+  },
+  "database_connections": {
+    "active_total": 13,
+    "pgbouncer_ceiling": 15,
+    "breakdown": [
+      {
+        "state": "idle",
+        "application_name": "pg_net 0.20.4",
+        "count": 1
+      },
+      {
+        "state": "idle",
+        "application_name": "Supavisor (auth_query)",
+        "count": 1
+      },
+      {
+        "state": "active",
+        "application_name": "Supavisor",
+        "count": 1
+      },
+      {
+        "state": "idle",
+        "application_name": "",
+        "count": 1
+      },
+      {
+        "state": "idle",
+        "application_name": "PostgREST 14.5",
+        "count": 1
+      },
+      {
+        "state": null,
+        "application_name": "",
+        "count": 6
+      },
+      {
+        "state": null,
+        "application_name": "pg_cron scheduler",
+        "count": 1
+      },
+      {
+        "state": "idle",
+        "application_name": "postgres_exporter",
+        "count": 1
+      }
+    ],
+    "class": "REAL_PRODUCTION"
+  },
+  "api_pool_configuration": {
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_recycle": 1800,
+    "class": "REAL_PRODUCTION"
+  },
+  "queue_depth": {
+    "value": 0,
+    "class": "REAL_PRODUCTION"
+  },
+  "task_failures": {
+    "value": 0,
+    "class": "REAL_PRODUCTION"
+  },
+  "recent_incidents": {
+    "value": 0,
+    "class": "REAL_PRODUCTION"
+  },
+  "kill_switch_state": {
+    "global_paused": false,
+    "reason": null,
+    "class": "REAL_PRODUCTION"
+  },
+  "audit_integrity": {
+    "events_count": 2,
+    "broken_links": 0,
+    "status": "VALID",
+    "class": "REAL_PRODUCTION"
+  },
+  "snapshot_reconciliation": {
+    "snapshots_count": 2,
+    "snapshots": [
+      {
+        "period_start": "2026-10-02 00:00:00+00:00",
+        "period_end": "2026-10-02 23:59:59+00:00",
+        "metric_name": "shadow_accuracy",
+        "metric_value": 0.0,
+        "sample_size": 1
+      },
+      {
+        "period_start": "2026-10-03 00:00:00+00:00",
+        "period_end": "2026-10-03 23:59:59+00:00",
+        "metric_name": "shadow_accuracy",
+        "metric_value": 0.0,
+        "sample_size": 0
+      }
+    ],
+    "status": "RECONCILED",
+    "class": "REAL_PRODUCTION"
+  }
+}

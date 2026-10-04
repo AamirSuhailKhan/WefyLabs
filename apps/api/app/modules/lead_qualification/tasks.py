@@ -127,3 +127,76 @@ def evaluate_lead_qualification_task(
         raise self.retry(exc=exc)
 
 
+@celery_app.task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=15,
+    retry_backoff=True,
+    autoretry_for=(Exception,),
+)
+def auto_qualify_new_lead_task(
+    self, organization_id: str, lead_id: str
+) -> Dict[str, Any]:
+    """
+    Composite background task: extraction + policy evaluation for a newly created lead.
+    Dispatched automatically via the LEAD_CREATED domain event subscriber.
+    Idempotent — safe to retry.
+    """
+    logger.info(
+        f"[CELERY_AUTO_QUALIFY] Starting auto-qualification for "
+        f"org={organization_id}, lead={lead_id}"
+    )
+
+    import asyncio
+
+    async def _run():
+        async with AsyncSessionLocal() as session:
+            service = LeadQualificationDomainService(session)
+
+            # Step 1: Extract qualification facts from any existing conversations/notes
+            try:
+                summary = await service.extract_and_ingest_from_lead_conversations(
+                    organization_id=organization_id,
+                    lead_id=lead_id,
+                    message_id=None,
+                    actor_id="auto_qualify_worker",
+                )
+                logger.info(
+                    f"[CELERY_AUTO_QUALIFY] Extraction done — "
+                    f"facts={summary.facts_extracted_count}, "
+                    f"conflicts={summary.conflicts_detected_count}"
+                )
+            except Exception as e:
+                logger.warning(f"[CELERY_AUTO_QUALIFY] Extraction phase warning (non-fatal): {e}")
+
+            # Step 2: Deterministic policy evaluation
+            result = await service.evaluate_lead_qualification(
+                organization_id=organization_id,
+                lead_id=lead_id,
+                actor_id="auto_qualify_worker",
+            )
+
+            return {
+                "status": "success",
+                "lead_id": lead_id,
+                "qualification_state": result.qualification_state,
+                "completeness_score": result.completeness_score,
+                "confidence_score": result.confidence_score,
+                "missing_required": result.missing_required_information,
+            }
+
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(lambda: asyncio.run(_run())).result()
+        else:
+            return asyncio.run(_run())
+    except Exception as exc:
+        logger.error(f"[CELERY_AUTO_QUALIFY] Auto-qualification failed: {exc}")
+        raise self.retry(exc=exc)

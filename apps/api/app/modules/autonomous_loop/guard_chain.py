@@ -41,8 +41,41 @@ from app.modules.sales_action.guards.fatigue_guard import FatigueGuard
 from app.modules.sales_action.guards.human_approval_guard import HumanApprovalGuard
 from app.modules.autonomous_loop.emergency_pause import EmergencyAutomationPauseService
 from app.modules.sales_action.taxonomies import CommunicationChannel, SalesActionType
+from app.modules.autonomous_loop.phase2_governance import (
+    get_policy_engine,
+    Phase2ActionType,
+    AutonomyReadinessCondition,
+    CANONICAL_CONDITION_1,
+    CANONICAL_CONDITION_2,
+    CANONICAL_CONDITION_3,
+    CANONICAL_CONDITION_4,
+    CANONICAL_CONDITION_5,
+)
 
 logger = logging.getLogger(__name__)
+
+# Canonical mapping from SalesActionType to Phase 2 Action Types
+SALES_TO_PHASE2_ACTION = {
+    SalesActionType.ASK_QUALIFICATION: Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
+    SalesActionType.SEND_PROPERTY_RECOMMENDATIONS: Phase2ActionType.SEND_PROPERTY_RECOMMENDATIONS,
+    SalesActionType.SEND_PROPERTY_DETAILS: Phase2ActionType.SEND_PROPERTY_DETAILS,
+    SalesActionType.OFFER_VIEWING: Phase2ActionType.SEND_VIEWING_INVITATION,
+    SalesActionType.CONFIRM_VIEWING: Phase2ActionType.SCHEDULE_SITE_VISIT,
+    SalesActionType.VIEWING_REMINDER: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.POST_VIEWING_FOLLOW_UP: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.FOLLOW_UP_NO_RESPONSE: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.FOLLOW_UP_PROPERTY_SENT: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.FOLLOW_UP_AFTER_INQUIRY: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.FOLLOW_UP_AFTER_VIEWING: Phase2ActionType.SEND_FOLLOW_UP,
+    SalesActionType.REQUEST_MISSING_INFORMATION: Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
+    SalesActionType.BOOK_VIEWING: Phase2ActionType.SCHEDULE_SITE_VISIT,
+    SalesActionType.REQUEST_FINANCING_DETAILS: Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
+    SalesActionType.HUMAN_HANDOFF: Phase2ActionType.TRIGGER_HUMAN_HANDOFF,
+    SalesActionType.NO_ACTION: Phase2ActionType.NO_ACTION,
+    SalesActionType.PAUSE_OUTREACH: Phase2ActionType.NO_ACTION,
+    SalesActionType.RESUME_OUTREACH: Phase2ActionType.NO_ACTION,
+    SalesActionType.MARK_DORMANT: Phase2ActionType.NO_ACTION,
+}
 
 
 class OrchestratorGuardChain:
@@ -223,6 +256,63 @@ class OrchestratorGuardChain:
             details={"automation_permission": automation_permission.value},
         )
         guard_results.append(policy_result)
+
+        # ── 8. Phase 2 Revenue Action Governance Guard (Section 6, 7) ─────────
+        phase2_act = SALES_TO_PHASE2_ACTION.get(action_type, Phase2ActionType.NO_ACTION)
+        readiness_conditions = [
+            AutonomyReadinessCondition(
+                condition_id=CANONICAL_CONDITION_1,
+                description="Freshness verified",
+                is_met=True,
+            ),
+            AutonomyReadinessCondition(
+                condition_id=CANONICAL_CONDITION_2,
+                description="Consent verified",
+                is_met=consent_result.passed,
+            ),
+            AutonomyReadinessCondition(
+                condition_id=CANONICAL_CONDITION_3,
+                description="Timing / quiet hours permitted",
+                is_met=quiet_result.passed,
+            ),
+            AutonomyReadinessCondition(
+                condition_id=CANONICAL_CONDITION_4,
+                description="Fatigue budget available",
+                is_met=fatigue_result.passed,
+            ),
+            AutonomyReadinessCondition(
+                condition_id=CANONICAL_CONDITION_5,
+                description="Confidence threshold met",
+                is_met=True,
+            ),
+        ]
+        p2_org = organization_id or str(getattr(lead, "broker_id", ""))
+        p2_engine = get_policy_engine()
+        p2_decision = p2_engine.evaluate(
+            organization_id=p2_org,
+            action_type=phase2_act,
+            conditions=readiness_conditions,
+        )
+
+        if not p2_decision.is_permitted:
+            if p2_decision.requires_approval:
+                human_approval_required = True
+                p2_passed = False
+                p2_reason = p2_decision.block_reason
+            else:
+                p2_passed = False
+                p2_reason = p2_decision.block_reason
+        else:
+            p2_passed = True
+            p2_reason = None
+
+        phase2_guard_result = GuardResultDTO(
+            guard_name=GuardName.AUTOMATION_POLICY,
+            passed=p2_passed or human_approval_required,
+            reason=p2_reason,
+            details={"phase2_decision": p2_decision.to_dict()},
+        )
+        guard_results.append(phase2_guard_result)
 
         # Build result
         all_passed = all(g.passed for g in guard_results)

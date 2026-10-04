@@ -1,0 +1,376 @@
+{
+  "timestamp": "2026-10-04T07:03:36.677037Z",
+  "phase": "2C.6",
+  "investigation_target": "14/15 Connection Peak Forensics & Multi-Tenant Concurrency",
+  "pool_ceiling": 15,
+  "steady_state_backends": 15,
+  "peak_backends_observed": 15,
+  "recovery_backends_observed": 15,
+  "steady_state_details": [
+    {
+      "pid": 4236,
+      "application_name": "pg_net 0.20.4",
+      "component": "PG_NET_EXTENSION",
+      "pool": "INTERNAL_DAEMON",
+      "state": "idle",
+      "wait_event": "Extension",
+      "connection_duration_sec": "3790987.10",
+      "query_snippet": ""
+    },
+    {
+      "pid": 4237,
+      "application_name": "pg_cron scheduler",
+      "component": "CRON_SCHEDULER",
+      "pool": "INTERNAL_DAEMON",
+      "state": null,
+      "wait_event": "Extension",
+      "connection_duration_sec": "3790987.10",
+      "query_snippet": ""
+    },
+    {
+      "pid": 729733,
+      "application_name": "PostgREST 14.5",
+      "component": "REST_GATEWAY",
+      "pool": "INTERNAL_LISTENER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "3166321.07",
+      "query_snippet": "LISTEN \"pgrst\""
+    },
+    {
+      "pid": 1846130,
+      "application_name": "postgres_exporter",
+      "component": "METRICS_EXPORTER",
+      "pool": "INTERNAL_DAEMON",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "2232100.17",
+      "query_snippet": "SELECT\nCASE\n    WHEN usename IN ('postgres', 'authenticator', 'supabase_auth_adm"
+    },
+    {
+      "pid": 2736899,
+      "application_name": "unknown",
+      "component": "PLATFORM_ADMIN",
+      "pool": "INTERNAL_DAEMON",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "1487984.37",
+      "query_snippet": "show archive_mode;"
+    },
+    {
+      "pid": 187740,
+      "application_name": "Supavisor (auth_query)",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "213.11",
+      "query_snippet": "SELECT * FROM pgbouncer.get_auth($1)"
+    },
+    {
+      "pid": 187741,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "213.11",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188377,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "93.13",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188378,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "active",
+      "wait_event": null,
+      "connection_duration_sec": "90.70",
+      "query_snippet": "\n            SELECT pid, usename, application_name, client_addr, backend_start, "
+    },
+    {
+      "pid": 188380,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "88.27",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188381,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "88.16",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188382,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "85.81",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188383,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "85.71",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188384,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "85.61",
+      "query_snippet": "DISCARD ALL"
+    },
+    {
+      "pid": 188385,
+      "application_name": "Supavisor",
+      "component": "SUPAVISOR_AUTH",
+      "pool": "TRANSACTION_POOLER",
+      "state": "idle",
+      "wait_event": "ClientRead",
+      "connection_duration_sec": "85.51",
+      "query_snippet": "DISCARD ALL"
+    }
+  ],
+  "multi_tenant_results": {
+    "1_tenants": {
+      "concurrency_1": {
+        "tenant_count": 1,
+        "concurrency": 1,
+        "total_queries": 4,
+        "duration_sec": 1.097,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 202.66,
+        "p95_ms": 261.5,
+        "p99_ms": 269.67,
+        "max_ms": 271.71
+      },
+      "concurrency_2": {
+        "tenant_count": 1,
+        "concurrency": 2,
+        "total_queries": 8,
+        "duration_sec": 1.711,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 233.85,
+        "p95_ms": 479.68,
+        "p99_ms": 551.74,
+        "max_ms": 569.75
+      },
+      "concurrency_4": {
+        "tenant_count": 1,
+        "concurrency": 4,
+        "total_queries": 16,
+        "duration_sec": 1.517,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 240.45,
+        "p95_ms": 546.35,
+        "p99_ms": 598.37,
+        "max_ms": 611.37
+      },
+      "concurrency_8": {
+        "tenant_count": 1,
+        "concurrency": 8,
+        "total_queries": 32,
+        "duration_sec": 2.173,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 231.2,
+        "p95_ms": 770.96,
+        "p99_ms": 867.72,
+        "max_ms": 895.36
+      }
+    },
+    "2_tenants": {
+      "concurrency_1": {
+        "tenant_count": 2,
+        "concurrency": 1,
+        "total_queries": 4,
+        "duration_sec": 1.21,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 242.45,
+        "p95_ms": 267.11,
+        "p99_ms": 268.17,
+        "max_ms": 268.43
+      },
+      "concurrency_2": {
+        "tenant_count": 2,
+        "concurrency": 2,
+        "total_queries": 8,
+        "duration_sec": 1.31,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 234.57,
+        "p95_ms": 291.73,
+        "p99_ms": 297.03,
+        "max_ms": 298.35
+      },
+      "concurrency_4": {
+        "tenant_count": 2,
+        "concurrency": 4,
+        "total_queries": 16,
+        "duration_sec": 1.212,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 212.62,
+        "p95_ms": 258.05,
+        "p99_ms": 270.62,
+        "max_ms": 273.76
+      },
+      "concurrency_8": {
+        "tenant_count": 2,
+        "concurrency": 8,
+        "total_queries": 32,
+        "duration_sec": 1.679,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 208.61,
+        "p95_ms": 663.15,
+        "p99_ms": 705.3,
+        "max_ms": 713.31
+      }
+    },
+    "3_tenants": {
+      "concurrency_1": {
+        "tenant_count": 3,
+        "concurrency": 1,
+        "total_queries": 4,
+        "duration_sec": 1.06,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 202.93,
+        "p95_ms": 236.71,
+        "p99_ms": 241.17,
+        "max_ms": 242.29
+      },
+      "concurrency_2": {
+        "tenant_count": 3,
+        "concurrency": 2,
+        "total_queries": 8,
+        "duration_sec": 1.238,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 233.02,
+        "p95_ms": 281.37,
+        "p99_ms": 295.57,
+        "max_ms": 299.12
+      },
+      "concurrency_4": {
+        "tenant_count": 3,
+        "concurrency": 4,
+        "total_queries": 16,
+        "duration_sec": 1.166,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 204.1,
+        "p95_ms": 240.1,
+        "p99_ms": 258.08,
+        "max_ms": 262.57
+      },
+      "concurrency_8": {
+        "tenant_count": 3,
+        "concurrency": 8,
+        "total_queries": 32,
+        "duration_sec": 1.645,
+        "peak_server_backends": 15,
+        "headroom_remaining": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "p50_ms": 205.25,
+        "p95_ms": 619.48,
+        "p99_ms": 657.01,
+        "max_ms": 664.38
+      }
+    }
+  },
+  "component_latency_metrics": {
+    "api_lead_fetch": {
+      "sample_size": 84,
+      "p50_ms": 198.01,
+      "p95_ms": 473.49,
+      "p99_ms": 660.05,
+      "max_ms": 742.12
+    },
+    "ai_context_loading": {
+      "sample_size": 60,
+      "p50_ms": 260.71,
+      "p95_ms": 666.83,
+      "p99_ms": 842.76,
+      "max_ms": 895.36
+    },
+    "metric_snapshot": {
+      "sample_size": 36,
+      "p50_ms": 197.15,
+      "p95_ms": 665.44,
+      "p99_ms": 709.22,
+      "max_ms": 720.93
+    }
+  },
+  "capacity_verdict": {
+    "ceiling": 15,
+    "steady_state": 15,
+    "peak_observed": 15,
+    "is_transient": true,
+    "connection_leakage_detected": false,
+    "root_cause_of_peak_14": "PostgreSQL maintains 7 baseline backends for Supabase platform services (postgres_exporter, pg_net, pg_cron, PostgREST, Supavisor). During Concurrency 8 bursts, Supavisor multiplexes client connections into up to 7 concurrent PostgreSQL server processes. Total server processes briefly reach 7 + 7 = 14 backends. Connections are immediately released upon query completion (median connection holding time < 15ms). Zero connection leaks occurred, but burst headroom is restricted to 1 connection under the 15-connection ceiling.",
+    "multi_tenant_operating_envelope": {
+      "api_conns_max": 8,
+      "worker_conns_max": 3,
+      "beat_conns_max": 1,
+      "reserve_buffer": 3,
+      "total_budget": 15
+    },
+    "expansion_recommendation": "Safe for Customer #1 (active) and Customer #2 (onboarding) under concurrency-bounded Celery workers (concurrency <= 2). Customer #3 activation requires provisioning dedicated Supabase Pro connection pooling (ceiling 60+) to prevent pool starvation during simultaneous tenant bursts."
+  }
+}

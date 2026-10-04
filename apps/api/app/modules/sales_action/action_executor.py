@@ -82,6 +82,36 @@ class SalesActionExecutor:
                 handoff_reason=decision.sales_brief.handoff_reason if decision.sales_brief else "MANUAL_ESCALATION"
             ).inc()
 
+        # Phase 2 Governance Enforcement Gate (Canonical Gate Requirement - Sections 4, 5, 6)
+        from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType
+        from app.modules.autonomous_loop.guard_chain import SALES_TO_PHASE2_ACTION
+        
+        has_approval = (decision.status == SalesActionStatus.APPROVED)
+        phase2_act = SALES_TO_PHASE2_ACTION.get(action_type, Phase2ActionType.NO_ACTION)
+        policy_decision = get_policy_engine().evaluate(str(org_id), phase2_act, has_human_approval=has_approval)
+        
+        if not policy_decision.is_permitted:
+            logger.warning(
+                f"[SalesActionExecutor] Action {action_type.value} BLOCKED by Phase 2 Governance: "
+                f"{policy_decision.block_reason}"
+            )
+            return SalesActionExecutionResultDTO(
+                action_id=decision.action_id,
+                lead_id=str(lead.id),
+                organization_id=str(org_id),
+                action_type=action_type,
+                channel=decision.recommended_channel.value if decision.recommended_channel else "UNKNOWN",
+                status=SalesActionStatus.BLOCKED,
+                provider="PHASE2_GOVERNANCE",
+                details={
+                    "governance_blocked": True,
+                    "reason": policy_decision.block_reason,
+                    "decision_id": policy_decision.decision_id,
+                    "execution_mode": policy_decision.execution_mode.value,
+                    "effective_level": policy_decision.effective_level.value,
+                },
+            )
+
         # Delegate execution to RealDeliveryEngine
         result = await self.delivery_engine.execute_sales_action_delivery(
             decision=decision,

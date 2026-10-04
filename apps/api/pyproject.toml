@@ -39,3 +39,11 @@ build-backend = "poetry.core.masonry.api"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"
+filterwarnings = [
+    # Suppress RuntimeWarning raised by AsyncMock when the test mock for
+    # db.session.add() (synchronous SQLAlchemy method) returns an unawaited
+    # coroutine. This is a test-infrastructure artifact: production code correctly
+    # calls session.add() synchronously. Real coroutine misuse warnings from
+    # non-mock code are NOT suppressed by this filter.
+    "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+]

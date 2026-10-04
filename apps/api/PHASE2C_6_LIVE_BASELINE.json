@@ -1,0 +1,273 @@
+{
+  "timestamp": "2026-10-04T07:00:41.787031Z",
+  "phase": "2C.6",
+  "runtime_stage": "STAGE_1_SHADOW",
+  "autonomy_level": 0,
+  "tenant_truth": {
+    "total_organizations": 11,
+    "enrolled_pilot_tenants": 1,
+    "enrolled_details": [
+      {
+        "id": "d153ea17-b2d3-40ab-b258-75951ef7de28",
+        "organization_id": "a0317351-e076-493e-8b84-182f8c43666e",
+        "current_stage": "STAGE_1_SHADOW",
+        "pilot_status": "ACTIVE",
+        "enrolled_by": "Aamir Suhail <aamir.fresh@bmu.edu.in> (c193be18-4a6a-4030-9089-f94c42119189)",
+        "enrolled_at": "2026-10-02T12:02:16.753959+00:00",
+        "stage_entered_at": "2026-10-02T12:02:16.753961+00:00",
+        "configured_autonomy_level": 0,
+        "policy_version": "phase2-v1.0",
+        "enrolled_agent_ids": [
+          "lead-intelligence-agent-v2b",
+          "qualification-agent-v2b",
+          "property-match-agent-v2b",
+          "engagement-agent-v2b",
+          "follow-up-agent-v2b",
+          "visit-agent-v2b",
+          "deal-progression-agent-v2b",
+          "recovery-agent-v2b",
+          "revenue-intelligence-agent-v2b",
+          "manager-intelligence-agent-v2b"
+        ],
+        "notes": "Authoritative Phase 2C Controlled Pilot for Aamir Suhail's Agency",
+        "created_at": "2026-10-02T12:02:16.755270+00:00",
+        "updated_at": "2026-10-02T12:02:16.755272+00:00"
+      }
+    ],
+    "brokers_count": 17,
+    "members_count": 11
+  },
+  "customer_truth": {
+    "1b229ea8-e905-44f1-b918-8712daa1a0fc": {
+      "name": "yojjkhfdxtfx",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "5651f9f3-2a17-4261-8b22-1989887e25d1": {
+      "name": "Test Agency",
+      "commercial_designation": "Customer #2 (Multi-tenant expansion)",
+      "customer_lifecycle_state": "ONBOARDING",
+      "is_commercial_customer": true,
+      "technical_status": "PROVISIONED",
+      "onboarding_status": "IN_PROGRESS (Leads provisioned, shadow tenant pending)",
+      "usage_status": "ONBOARDING (1 lead)",
+      "billing_status": "AGREEMENT_PENDING",
+      "payment_status": "UNPAID",
+      "retention_status": "NOT_YET_ELIGIBLE"
+    },
+    "d131f898-1fea-44a5-9cf3-ddd8107731c1": {
+      "name": "Aamir Realty 2",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "d795d9d1-1221-4024-9538-120a0e875e36": {
+      "name": "TestAgency A",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "3edcde48-1193-449f-87b8-d8f13bb870f6": {
+      "name": "TestAgency B",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "d61f6ab6-77db-4917-89f2-5b4a7dc56563": {
+      "name": "Agency A",
+      "commercial_designation": "Customer #2 (Multi-tenant expansion)",
+      "customer_lifecycle_state": "ONBOARDING",
+      "is_commercial_customer": true,
+      "technical_status": "PROVISIONED",
+      "onboarding_status": "IN_PROGRESS (Leads provisioned, shadow tenant pending)",
+      "usage_status": "ONBOARDING (1 lead)",
+      "billing_status": "AGREEMENT_PENDING",
+      "payment_status": "UNPAID",
+      "retention_status": "NOT_YET_ELIGIBLE"
+    },
+    "8e054a8c-7f75-4f01-87b7-d8f2bc59a226": {
+      "name": "Agency B",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "4099d14b-33c8-4a85-b676-9c35c8efb697": {
+      "name": "Test User's Agency",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "0a4e798f-91c3-4814-8ba6-9bd588c23842": {
+      "name": "Demo Agent's Agency",
+      "commercial_designation": "Internal / Historical Test Organization",
+      "customer_lifecycle_state": "INTERNAL_TEST",
+      "is_commercial_customer": false,
+      "technical_status": "LEGACY",
+      "onboarding_status": "N/A",
+      "usage_status": "HISTORICAL",
+      "billing_status": "NONE",
+      "payment_status": "N/A",
+      "retention_status": "N/A"
+    },
+    "a0317351-e076-493e-8b84-182f8c43666e": {
+      "name": "Aamir Suhail's Agency",
+      "commercial_designation": "Customer #1",
+      "customer_lifecycle_state": "ACTIVE_PILOT",
+      "is_commercial_customer": true,
+      "technical_status": "PROVISIONED_AND_ENROLLED",
+      "onboarding_status": "COMPLETED",
+      "usage_status": "ACTIVE (3 leads, 1 deal, 1 visit, 1 booking)",
+      "billing_status": "CONTRACTED (Pilot agreement signed, list \u20b9120,000/mo)",
+      "payment_status": "INVOICED_COMMISSION_UNPAID (Gross \u20b9440k commission pending payout, subscription fee \u20b90 collected)",
+      "retention_status": "EARLY_CONTINUITY (2 genuine days, 0 churn signals)"
+    },
+    "34d085e6-dab5-48f6-b505-b7cf40ac3cb8": {
+      "name": "Wefy Broker's Agency",
+      "commercial_designation": "Customer #3 (Readiness verified)",
+      "customer_lifecycle_state": "PROSPECT",
+      "is_commercial_customer": false,
+      "technical_status": "TENANT_EXISTS",
+      "onboarding_status": "NOT_STARTED",
+      "usage_status": "INACTIVE",
+      "billing_status": "NONE",
+      "payment_status": "UNPAID",
+      "retention_status": "NOT_YET_ELIGIBLE"
+    }
+  },
+  "revenue_truth": {
+    "leads_total": 7,
+    "deals_total": 1,
+    "site_visits_total": 1,
+    "bookings_total": 1,
+    "commissions_total": 1,
+    "observed_revenue_inr": "440000.00",
+    "attributed_revenue_inr": "440000.00",
+    "causally_established_revenue_inr": "0.00",
+    "collected_cash_inr": "0.00",
+    "contracted_mrr_inr": "120000.00",
+    "collected_mrr_inr": "0.00",
+    "commission_details": [
+      {
+        "id": "a447aef4-7f97-435f-b531-90ce61b3b20a",
+        "deal_id": "9de15f6a-f7b6-4632-947f-44346260d3f2",
+        "organization_id": "a0317351-e076-493e-8b84-182f8c43666e",
+        "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "transaction_price": "22000000.0000",
+        "currency": "INR",
+        "commission_percentage": "2.00",
+        "gross_commission": "440000.0000",
+        "tax_deducted": "44000.0000",
+        "net_commission": "396000.0000",
+        "commission_splits": [],
+        "status": "APPROVED",
+        "invoice_reference": "INV-COM-2026-001",
+        "invoiced_at": "2026-10-02T19:30:00+00:00",
+        "paid_at": null,
+        "payment_reference": null,
+        "payment_mode": null,
+        "disputed_at": null,
+        "dispute_reason": null,
+        "dispute_resolved_at": null,
+        "created_at": "2026-10-03T17:51:53.164203+00:00",
+        "updated_at": "2026-10-03T17:51:53.164205+00:00"
+      }
+    ]
+  },
+  "ai_truth": {
+    "observations_count": 1,
+    "decisions_count": 1,
+    "decisions_breakdown": {
+      "ACCEPTED": 1,
+      "MODIFIED": 0,
+      "REJECTED": 0,
+      "ABSTAINED": 0,
+      "NO_ACTION": 0
+    },
+    "genuine_calendar_days": 2,
+    "genuine_human_decisions": 1,
+    "stage2_threshold_progress": {
+      "days_achieved": 2,
+      "days_required": 14,
+      "decisions_achieved": 1,
+      "decisions_required": 50,
+      "stage2_eligible": false
+    }
+  },
+  "infrastructure_truth": {
+    "api_replicas": 1,
+    "worker_processes": 2,
+    "worker_concurrency": 2,
+    "beat_schedulers": 1,
+    "redis_metrics": {
+      "version": "8.4.0",
+      "connected_clients": 1,
+      "used_memory_human": "0.000B",
+      "total_keys": 510,
+      "status": "HEALTHY"
+    },
+    "postgres_server_backends_active": 7,
+    "supavisor_pool_ceiling": 15,
+    "operating_envelope": {
+      "api_pool_max": 8,
+      "worker_pool_max": 3,
+      "beat_pool_max": 1,
+      "reserve_headroom": 3,
+      "total_budget": 15
+    },
+    "dead_letters": 0,
+    "connection_leakage": 0
+  },
+  "raw_counts": {
+    "organizations": 11,
+    "organization_members": 11,
+    "brokers": 17,
+    "pilot_tenants": 1,
+    "leads": 7,
+    "property_listings": 9,
+    "deals": 1,
+    "site_visits": 1,
+    "deal_bookings": 1,
+    "deal_commissions": 1,
+    "pilot_observations": 1,
+    "pilot_human_decisions": 1,
+    "pilot_metric_snapshots": 2,
+    "pilot_audit_events": 3
+  }
+}

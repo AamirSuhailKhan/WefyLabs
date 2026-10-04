@@ -12,13 +12,23 @@ interface KanbanBoardProps {
 }
 
 const STAGE_COLUMNS = [
-  { id: 'New',               label: 'NEW',                color: '#0D9488' },
-  { id: 'Contacted',         label: 'CONTACTED',          color: '#3B82F6' },
-  { id: 'Viewing Scheduled', label: 'VIEWING SCHEDULED',  color: '#F59E0B' },
-  { id: 'Negotiating',       label: 'NEGOTIATING',        color: '#EF4444' },
-  { id: 'Closed Won',        label: 'CLOSED WON',         color: '#10B981' },
-  { id: 'Closed Lost',       label: 'CLOSED LOST',        color: '#6B7280' },
+  { id: 'new',               label: 'NEW',                color: '#0D9488' },
+  { id: 'contacted',         label: 'CONTACTED',          color: '#3B82F6' },
+  { id: 'viewing_scheduled', label: 'VIEWING SCHEDULED',  color: '#F59E0B' },
+  { id: 'negotiating',       label: 'NEGOTIATING',        color: '#EF4444' },
+  { id: 'closed_won',        label: 'CLOSED WON',         color: '#10B981' },
+  { id: 'closed_lost',       label: 'CLOSED LOST',        color: '#6B7280' },
 ];
+
+export function getCanonicalStage(lead: Lead): string {
+  const raw = (lead.pipeline_stage || lead.stage_name || 'new').toLowerCase().trim().replace(/\s+/g, '_');
+  if (raw === 'viewing' || raw === 'viewing_scheduled') return 'viewing_scheduled';
+  if (raw === 'negotiation' || raw === 'negotiating') return 'negotiating';
+  if (raw === 'won' || raw === 'closed_won') return 'closed_won';
+  if (raw === 'lost' || raw === 'closed_lost') return 'closed_lost';
+  if (raw === 'contacted') return 'contacted';
+  return 'new';
+}
 
 function formatBudget(min?: number, max?: number): string {
   if (!min && !max) return 'Budget N/A';
@@ -64,7 +74,7 @@ export default function KanbanBoard({ leads, onSelectLead, onUpdateStage }: Kanb
     <div className="w-full overflow-x-auto pb-6 no-scrollbar">
       <div className="flex gap-3 min-w-[1300px]">
         {STAGE_COLUMNS.map((col) => {
-          const colLeads = leads.filter((l) => (l.stage_name || 'New') === col.id);
+          const colLeads = leads.filter((l) => getCanonicalStage(l) === col.id);
 
           return (
             <div key={col.id} className="flex-1 flex flex-col">
@@ -158,13 +168,13 @@ export default function KanbanBoard({ leads, onSelectLead, onUpdateStage }: Kanb
                             onClick={(e) => e.stopPropagation()}
                           >
                             <select
-                              value={lead.stage_name || 'New'}
+                              value={getCanonicalStage(lead)}
                               onChange={(e) => onUpdateStage(lead.id, e.target.value)}
                               className="text-[10px] bg-[#FAF7F2] border border-[#D4D0C8] rounded-md px-2 py-1 text-[#4A4A4A] font-semibold focus:outline-none focus:border-[#1A1A1A] cursor-pointer"
                               style={{ fontFamily: 'Inter, sans-serif' }}
                             >
                               {STAGE_COLUMNS.map((s) => (
-                                <option key={s.id} value={s.id}>{s.id}</option>
+                                <option key={s.id} value={s.id}>{s.label}</option>
                               ))}
                             </select>
 

@@ -15,6 +15,9 @@ Design rules:
 - AI may propose — humans (or authorized workflows) confirm
 """
 from __future__ import annotations
+# Sprint 1E — Learning layer wiring (non-blocking, failure-safe)
+from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+from app.models.intelligence_models import OutcomeEventType, OutcomeEntityType, OutcomeSource
 
 import logging
 import uuid
@@ -358,6 +361,54 @@ class OpportunityStageService:
             )
 
         await self.db.flush()
+
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        # Non-blocking: failures are caught by OutcomeRecorder.safe_record().
+        if target_stage == OpportunityStage.WON:
+            await OutcomeRecorder.record_deal_won(
+                db=self.db,
+                org_id=str(org_uuid),
+                deal_id=str(deal.id),
+                lead_id=str(deal.lead_id) if deal.lead_id else str(deal.id),
+                property_id=None,
+                agent_id=changed_by_id,
+                revenue_amount=deal.final_transaction_price or deal.agreed_price,
+                currency=deal.currency or "AED",
+                won_at=now,
+            )
+        elif target_stage == OpportunityStage.LOST:
+            await OutcomeRecorder.record_deal_lost(
+                db=self.db,
+                org_id=str(org_uuid),
+                deal_id=str(deal.id),
+                lead_id=str(deal.lead_id) if deal.lead_id else str(deal.id),
+                agent_id=changed_by_id,
+                lost_reason=deal.lost_reason,
+                lost_at=now,
+            )
+        elif target_stage in (OpportunityStage.NEGOTIATION, OpportunityStage.BOOKING_PENDING, OpportunityStage.BOOKED):
+            await OutcomeRecorder.safe_record(
+                db=self.db,
+                org_id=str(org_uuid),
+                event_type=OutcomeEventType.OPPORTUNITY_ADVANCED,
+                entity_type=OutcomeEntityType.OPPORTUNITY,
+                entity_id=str(deal.id),
+                source_table="deals",
+                source_event_id=str(deal.id),
+                occurred_at=now,
+                lead_id=str(deal.lead_id) if deal.lead_id else None,
+                opportunity_id=str(deal.id),
+                agent_id=changed_by_id,
+                actor_type=changed_by_type,
+                outcome_source=OutcomeSource.HUMAN if changed_by_type == "HUMAN" else OutcomeSource.AUTOMATION,
+                metadata={
+                    "from_stage": current_stage,
+                    "to_stage": target_stage,
+                    "source": source,
+                    "reason": reason,
+                },
+            )
+
         logger.info(f"[Stage] Deal {deal.id}: {current_stage} -> {target_stage} by {changed_by_id}")
         return deal
 
@@ -651,6 +702,31 @@ class SiteVisitService:
             )
 
         await self.db.flush()
+
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        if new_status == SiteVisitStatus.COMPLETED:
+            await OutcomeRecorder.record_site_visit_completed(
+                db=self.db,
+                org_id=str(org_uuid),
+                visit_id=str(sv.id),
+                lead_id=str(sv.lead_id),
+                deal_id=str(sv.deal_id) if sv.deal_id else None,
+                property_id=str(sv.property_listing_id) if sv.property_listing_id else None,
+                agent_id=updated_by_id,
+                completed_at=now,
+                outcome_notes=notes,
+            )
+        elif new_status == SiteVisitStatus.NO_SHOW:
+            await OutcomeRecorder.record_site_visit_no_show(
+                db=self.db,
+                org_id=str(org_uuid),
+                visit_id=str(sv.id),
+                lead_id=str(sv.lead_id),
+                deal_id=str(sv.deal_id) if sv.deal_id else None,
+                agent_id=updated_by_id,
+                occurred_at=now,
+            )
+
         return sv
 
     async def record_outcome(
@@ -809,6 +885,35 @@ class NegotiationService:
                 actor_type=actor if actor != NegotiationRoundActor.AI_DRAFT else "AI",
             )
 
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        outcome_evt = OutcomeEventType.OFFER_CREATED
+        if round_type in ("CUSTOMER_OFFER", "COUNTER_OFFER") and actor == NegotiationRoundActor.CUSTOMER:
+            outcome_evt = OutcomeEventType.OFFER_CREATED
+        lead_id_str = str(deal.lead_id) if deal and deal.lead_id else None
+        await OutcomeRecorder.safe_record(
+            db=self.db,
+            org_id=str(org_uuid),
+            event_type=outcome_evt,
+            entity_type=OutcomeEntityType.OFFER,
+            entity_id=str(round_obj.id),
+            source_table="negotiation_rounds",
+            source_event_id=str(round_obj.id),
+            occurred_at=round_obj.occurred_at,
+            lead_id=lead_id_str,
+            opportunity_id=str(deal_uuid),
+            agent_id=actor_id,
+            actor_type="HUMAN" if actor != NegotiationRoundActor.AI_DRAFT else "AI_AGENT",
+            outcome_source=OutcomeSource.AI_AGENT if actor == NegotiationRoundActor.AI_DRAFT else OutcomeSource.HUMAN,
+            revenue_impact=price,
+            currency=currency,
+            metadata={
+                "round_number": round_number,
+                "round_type": round_type,
+                "actor": actor,
+                "requires_approval": requires_approval,
+            },
+        )
+
         logger.info(f"[Negotiation] Round #{round_number} ({round_type}) added to deal {deal_id}")
         return round_obj
 
@@ -938,6 +1043,20 @@ class BookingIntentService:
                 actor_id=created_by_id, actor_type=created_by_type,
                 idempotency_key=idempotency_key,
             )
+
+        # ── Sprint 1E: Learning layer wiring ──────────────────────────────────
+        await OutcomeRecorder.record_booking_intent_created(
+            db=self.db,
+            org_id=str(org_uuid),
+            booking_intent_id=str(intent.id),
+            lead_id=str(lead_uuid),
+            deal_id=str(deal_uuid),
+            property_id=str(property_listing_id) if property_listing_id else None,
+            agent_id=created_by_id,
+            intent_amount=intended_price,
+            currency=currency,
+            created_at=now,
+        )
 
         logger.info(f"[BookingIntent] Created intent for deal {deal_id} unit {unit_id}")
         return intent

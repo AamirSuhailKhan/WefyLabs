@@ -48,6 +48,7 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False
 )
 async_session_maker = AsyncSessionLocal
+async_session_factory = AsyncSessionLocal
 
 
 class Base(AsyncAttrs, DeclarativeBase):

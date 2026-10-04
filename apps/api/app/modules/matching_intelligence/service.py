@@ -180,12 +180,38 @@ class MatchingIntelligenceFacade:
             notes=notes,
             interest_level=interest_level,
         )
-        return await self.matching_engine.shortlist_property_for_lead(
+        result = await self.matching_engine.shortlist_property_for_lead(
             lead_id=lead_id,
             property_id=property_id,
             broker=broker,
             dto=dto,
         )
+
+        # ── Sprint 1E: Learning layer wiring for property demand ──────────────
+        try:
+            from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+            from app.models.intelligence_models import OutcomeEventType, OutcomeEntityType, OutcomeSource
+            from datetime import datetime, timezone
+            await OutcomeRecorder.safe_record(
+                db=self.db,
+                org_id=str(tid),
+                event_type=OutcomeEventType.PROPERTY_SHORTLISTED,
+                entity_type=OutcomeEntityType.PROPERTY,
+                entity_id=str(property_id),
+                source_table="lead_property_interest",
+                source_event_id=str(property_id),
+                occurred_at=datetime.now(timezone.utc),
+                lead_id=str(lead_id) if lead_id else None,
+                property_id=str(property_id),
+                agent_id=str(broker.id),
+                actor_type="HUMAN",
+                outcome_source=OutcomeSource.HUMAN,
+                metadata={"interest_level": interest_level, "notes": notes},
+            )
+        except Exception as exc:
+            logger.warning(f"[MatchingIntelligence] Learning record error on shortlist: {exc}")
+
+        return result
 
     async def remove_from_shortlist(
         self,
@@ -270,6 +296,42 @@ class MatchingIntelligenceFacade:
             req=dto,
             broker=broker,
         )
+
+        # ── Sprint 1E: Learning layer wiring for customer preferences ─────────
+        try:
+            from app.modules.intelligence.outcome_recorder import OutcomeRecorder
+            from app.models.intelligence_models import OutcomeEventType, OutcomeEntityType, OutcomeSource
+            from datetime import datetime, timezone
+            itype = (interaction_type or "").upper()
+            evt_type = (
+                OutcomeEventType.PROPERTY_MATCH_ACCEPTED if itype in ("LIKED", "SHORTLISTED")
+                else OutcomeEventType.PROPERTY_MATCH_REJECTED if itype == "REJECTED"
+                else OutcomeEventType.PROPERTY_VISITED if itype == "VISITED"
+                else OutcomeEventType.PROPERTY_DISCUSSED
+            )
+            await OutcomeRecorder.safe_record(
+                db=self.db,
+                org_id=str(tid),
+                event_type=evt_type,
+                entity_type=OutcomeEntityType.PROPERTY,
+                entity_id=str(property_id),
+                source_table="memory_property_feedback",
+                source_event_id=str(property_id),
+                occurred_at=datetime.now(timezone.utc),
+                lead_id=str(lead_id) if lead_id else None,
+                property_id=str(property_id),
+                agent_id=str(broker.id),
+                actor_type="HUMAN",
+                outcome_source=OutcomeSource.HUMAN,
+                metadata={
+                    "interaction_type": interaction_type,
+                    "rejection_reason": rejection_reason,
+                    "notes": notes or feedback,
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"[MatchingIntelligence] Learning record error on interaction: {exc}")
+
         return {
             "status": "success",
             "lead_id": str(lead_id),

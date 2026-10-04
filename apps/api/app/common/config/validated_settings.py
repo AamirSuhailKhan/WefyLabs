@@ -82,6 +82,13 @@ class EnterpriseSettings(BaseSettings):
     # the beat schedule can never cause a surprise mass-send of queued rows.
     FOLLOWUP_HUB_DISPATCH_ENABLED: bool = False
 
+    # ─── Pilot Mode & Adaptive Execution Governance (Sprint 1F §10) ──────────
+    # Governs autonomous execution behavior.
+    # Allowed: RECOMMEND_ONLY | APPROVED_AUTOMATION | FULL_GOVERNED_EXECUTION | DISABLED
+    # RECOMMEND_ONLY: System recommends, human must execute.
+    # APPROVED_AUTOMATION: System executes only whitelisted actions.
+    PILOT_MODE: str = "RECOMMEND_ONLY"
+
     # Email SMTP (Brevo Free via SMTP / Generic SMTP)
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
@@ -174,6 +181,14 @@ class EnterpriseSettings(BaseSettings):
         elif isinstance(v, (list, str)):
             return v
         raise ValueError(v)
+
+    @field_validator("PILOT_MODE", mode="before")
+    def validate_pilot_mode(cls, v: str) -> str:
+        valid_modes = {"RECOMMEND_ONLY", "APPROVED_AUTOMATION", "FULL_GOVERNED_EXECUTION", "DISABLED"}
+        val = str(v).strip().upper()
+        if val not in valid_modes:
+            raise ValueError(f"Invalid PILOT_MODE '{v}'. Must be one of: {sorted(valid_modes)}")
+        return val
 
     @model_validator(mode="before")
     @classmethod

@@ -44,10 +44,20 @@ def _gen_uuid() -> str:
 # Phase 1: Canonical Outcome Event Taxonomy
 
 class OutcomeEventType(str, Enum):
+    # Core Revenue Milestones (Sprint 1E Taxonomy)
+    LEAD_CREATED = "LEAD_CREATED"
+    LEAD_IDENTIFIED = "LEAD_IDENTIFIED"
+    LEAD_CONTACTED = "LEAD_CONTACTED"
+    LEAD_RESPONDED = "LEAD_RESPONDED"
     LEAD_QUALIFIED = "LEAD_QUALIFIED"
     LEAD_DISQUALIFIED = "LEAD_DISQUALIFIED"
     LEAD_REACTIVATED = "LEAD_REACTIVATED"
+    LEAD_RECOVERED = "LEAD_RECOVERED"
     LEAD_CHURNED = "LEAD_CHURNED"
+    
+    # Property Match Outcomes
+    PROPERTY_MATCHED = "PROPERTY_MATCHED"
+    PROPERTY_SHARED = "PROPERTY_SHARED"
     PROPERTY_MATCH_ACCEPTED = "PROPERTY_MATCH_ACCEPTED"
     PROPERTY_MATCH_REJECTED = "PROPERTY_MATCH_REJECTED"
     PROPERTY_SHORTLISTED = "PROPERTY_SHORTLISTED"
@@ -55,37 +65,61 @@ class OutcomeEventType(str, Enum):
     PROPERTY_DISCUSSED = "PROPERTY_DISCUSSED"
     PROPERTY_VISITED = "PROPERTY_VISITED"
     PROPERTY_BOOKED = "PROPERTY_BOOKED"
+    
+    # Message & Follow-up Execution
     MESSAGE_SENT = "MESSAGE_SENT"
     MESSAGE_REPLIED = "MESSAGE_REPLIED"
     MESSAGE_IGNORED = "MESSAGE_IGNORED"
+    FOLLOWUP_SCHEDULED = "FOLLOWUP_SCHEDULED"
+    FOLLOWUP_EXECUTED = "FOLLOWUP_EXECUTED"
     FOLLOWUP_COMPLETED = "FOLLOWUP_COMPLETED"
     FOLLOWUP_IGNORED = "FOLLOWUP_IGNORED"
     FOLLOWUP_OVERDUE = "FOLLOWUP_OVERDUE"
+    
+    # Appointments & Site Visits
     APPOINTMENT_BOOKED = "APPOINTMENT_BOOKED"
     APPOINTMENT_CONFIRMED = "APPOINTMENT_CONFIRMED"
     APPOINTMENT_CANCELLED = "APPOINTMENT_CANCELLED"
     APPOINTMENT_NO_SHOW = "APPOINTMENT_NO_SHOW"
+    SITE_VISIT_SCHEDULED = "SITE_VISIT_SCHEDULED"
+    SITE_VISIT_ATTENDED = "SITE_VISIT_ATTENDED"
     SITE_VISIT_COMPLETED = "SITE_VISIT_COMPLETED"
     SITE_VISIT_NO_SHOW = "SITE_VISIT_NO_SHOW"
     SITE_VISIT_RESCHEDULED = "SITE_VISIT_RESCHEDULED"
+    SITE_VISIT_CANCELLED = "SITE_VISIT_CANCELLED"
+    
+    # Opportunity & Offer Lifecycles
     OPPORTUNITY_CREATED = "OPPORTUNITY_CREATED"
     OPPORTUNITY_ADVANCED = "OPPORTUNITY_ADVANCED"
     OPPORTUNITY_STALLED = "OPPORTUNITY_STALLED"
     OPPORTUNITY_LOST = "OPPORTUNITY_LOST"
     OFFER_CREATED = "OFFER_CREATED"
+    OFFER_NEGOTIATED = "OFFER_NEGOTIATED"
     OFFER_ACCEPTED = "OFFER_ACCEPTED"
     OFFER_REJECTED = "OFFER_REJECTED"
+    
+    # Booking & Revenue Attainment
     BOOKING_CREATED = "BOOKING_CREATED"
+    BOOKING_INTENT_CREATED = "BOOKING_INTENT_CREATED"
+    BOOKING_CONFIRMED = "BOOKING_CONFIRMED"
     BOOKING_CANCELLED = "BOOKING_CANCELLED"
+    DEAL_WON = "DEAL_WON"
+    DEAL_LOST = "DEAL_LOST"
+    DEAL_RECOVERED = "DEAL_RECOVERED"
+    REVENUE_RECORDED = "REVENUE_RECORDED"
     REVENUE_REALIZED = "REVENUE_REALIZED"
     REFUND = "REFUND"
     CHURN = "CHURN"
     UPSELL = "UPSELL"
     DOWNSELL = "DOWNSELL"
+    
+    # AI Action Outcomes
     AI_ACTION_ACCEPTED = "AI_ACTION_ACCEPTED"
     AI_ACTION_REJECTED = "AI_ACTION_REJECTED"
     AI_ACTION_OVERRIDDEN = "AI_ACTION_OVERRIDDEN"
     AI_ACTION_IGNORED = "AI_ACTION_IGNORED"
+    
+    # Objections
     OBJECTION_RAISED = "OBJECTION_RAISED"
     OBJECTION_RESOLVED = "OBJECTION_RESOLVED"
     OBJECTION_UNRESOLVED = "OBJECTION_UNRESOLVED"
@@ -281,6 +315,18 @@ class SalesOutcomeEdge(Base):
     )
 
 
+class HumanOverrideCategory(str, Enum):
+    INCORRECT = "INCORRECT"
+    NOT_TIMELY = "NOT_TIMELY"
+    NOT_USEFUL = "NOT_USEFUL"
+    ALREADY_HANDLED = "ALREADY_HANDLED"
+    CUSTOMER_CONTEXT_MISSING = "CUSTOMER_CONTEXT_MISSING"
+    WRONG_PROPERTY = "WRONG_PROPERTY"
+    WRONG_CHANNEL = "WRONG_CHANNEL"
+    WRONG_PRIORITY = "WRONG_PRIORITY"
+    OTHER = "OTHER"
+
+
 # Phase 4: AI Action Outcome Loop
 
 class AIActionOutcome(Base):
@@ -309,6 +355,8 @@ class AIActionOutcome(Base):
     human_decision: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     human_override: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    override_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     outcome_type: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     business_result: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     revenue_attributed: Mapped[Optional[Decimal]] = mapped_column(MoneyType, nullable=True)
@@ -324,6 +372,7 @@ class AIActionOutcome(Base):
         Index("ix_ai_outcome_org_type", "organization_id", "recommendation_type"),
         Index("ix_ai_outcome_org_result", "organization_id", "business_result"),
         Index("ix_ai_outcome_lead", "lead_id", "recommended_at"),
+        Index("ix_ai_outcome_override_cat", "organization_id", "override_category"),
         CheckConstraint(
             "confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)",
             name="ck_ai_confidence_range"
@@ -698,6 +747,15 @@ class DataQualityIssueType(str, Enum):
     STALE_LEARNING_SIGNAL = "STALE_LEARNING_SIGNAL"
 
 
+class DataQualityIssueStatus(str, Enum):
+    OPEN = "OPEN"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    IN_REVIEW = "IN_REVIEW"
+    RESOLVED = "RESOLVED"
+    IGNORED = "IGNORED"
+    REOPENED = "REOPENED"
+
+
 class DataQualityIssue(Base):
     """DATA QUALITY ISSUE - append-only record of detected data quality problems."""
     __tablename__ = "data_quality_issues"
@@ -711,6 +769,15 @@ class DataQualityIssue(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     detection_method: Mapped[str] = mapped_column(String(100), nullable=False)
     dimension: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default=DataQualityIssueStatus.OPEN, nullable=False, index=True)
+    owner: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    suggested_remediation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    in_review_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    in_review_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    ignored_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reopened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
@@ -725,6 +792,7 @@ class DataQualityIssue(Base):
     __table_args__ = (
         Index("ix_dq_org_type", "organization_id", "issue_type"),
         Index("ix_dq_org_resolved", "organization_id", "is_resolved"),
+        Index("ix_dq_org_status", "organization_id", "status"),
     )
 
 
@@ -973,4 +1041,219 @@ class OrganizationLearningProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+# ─── Sprint 1F: Governed Adaptive Policy Pipeline ──────────────────────────────
+
+
+class PolicyAuditLog(Base):
+    """
+    POLICY AUDIT LOG — immutable, append-only record of every state transition
+    for a PolicyRegistryEntry.
+
+    INVARIANT: Records are NEVER updated or deleted.
+    INVARIANT: Every status change on a PolicyRegistryEntry MUST create a row here.
+    INVARIANT: actor_id is REQUIRED for human-driven transitions.
+
+    Sprint 1F Gate: G-13, G-15 — Human Approval + Audit Trail
+    """
+    __tablename__ = "policy_audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    policy_entry_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    organization_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    from_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    actor_type: Mapped[str] = mapped_column(String(20), nullable=False)  # HUMAN | SYSTEM | CELERY
+    actor_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    eval_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(7, 4), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONBType, default=dict, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+
+    __table_args__ = (
+        Index("ix_pol_audit_entry_at", "policy_entry_id", "occurred_at"),
+        Index("ix_pol_audit_org_status", "organization_id", "to_status"),
+    )
+
+
+class AdaptivePolicyRollout(Base):
+    """
+    ADAPTIVE POLICY ROLLOUT — progressive rollout configuration for an approved
+    policy.  Controls the percentage of traffic exposed to the new policy and
+    the guardrails that must pass before each increment.
+
+    INVARIANT: A rollout row is created only AFTER status=APPROVED.
+    INVARIANT: traffic_pct starts at 0 and only increases via the Celery controller.
+    INVARIANT: emergency_pause immediately halts the controller without changing
+               the policy's status in PolicyRegistryEntry.
+
+    Sprint 1F Gate: G-02, G-07 — Progressive Rollout + Rollback Controller
+    """
+    __tablename__ = "adaptive_policy_rollouts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    policy_entry_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    traffic_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_traffic_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    increment_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    increment_interval_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    # Guardrail thresholds — rollout controller halts if metrics breach these
+    min_conversion_rate_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(7, 4), nullable=True)
+    max_error_rate_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(7, 4), nullable=True)
+    min_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    # Tenant filtering — None means all tenants
+    tenant_allowlist: Mapped[Optional[list]] = mapped_column(JSONBType, nullable=True)
+    emergency_pause: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_rolled_back: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rollback_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rollback_triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_triggered_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    last_increment_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    fully_deployed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("traffic_pct >= 0 AND traffic_pct <= 100", name="ck_rollout_traffic_range"),
+        CheckConstraint("increment_pct > 0 AND increment_pct <= 100", name="ck_rollout_increment_positive"),
+        CheckConstraint("min_sample_size >= 1", name="ck_rollout_min_sample_positive"),
+        Index("ix_rollout_org_pause", "organization_id", "emergency_pause"),
+    )
+
+
+class PilotCohortGuard(Base):
+    """
+    PILOT COHORT GUARD — records the automated readiness check performed before a
+    policy is allowed to transition from APPROVED → ACTIVE.
+
+    Checks enforced by the service layer:
+      - organization has >= min_lead_count leads with recorded outcomes
+      - observation window is >= min_observation_days old
+      - no open DataQualityIssue with severity=HIGH for the org
+
+    INVARIANT: A cleared guard row is REQUIRED before promote_policy_entry can
+               set status=ACTIVE.
+    INVARIANT: is_cleared can only be set True after all checks pass.
+
+    Sprint 1F Gate: G-08 — Pilot Cohort Guard (N≥30)
+    """
+    __tablename__ = "pilot_cohort_guards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    policy_entry_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    min_lead_count: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    actual_lead_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    min_observation_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+    actual_observation_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    open_high_severity_issues: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_cleared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cleared_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+
+    __table_args__ = (
+        Index("ix_pilot_guard_policy", "policy_entry_id", "is_cleared"),
+        Index("ix_pilot_guard_org", "organization_id", "checked_at"),
+        CheckConstraint("actual_lead_count >= 0", name="ck_guard_lead_count_positive"),
+    )
+
+
+# ─── Sprint 1F: Revenue Leakage & Recovery Engine (Sections 21 & 22) ───────────
+
+
+class RevenueLeakageType(str, Enum):
+    UNCONTACTED_LEAD = "UNCONTACTED_LEAD"
+    SLOW_RESPONSE_LEAD = "SLOW_RESPONSE_LEAD"
+    UNWORKED_QUALIFIED_LEAD = "UNWORKED_QUALIFIED_LEAD"
+    STALE_QUALIFIED_LEAD = "STALE_QUALIFIED_LEAD"
+    UNMATCHED_DEMAND = "UNMATCHED_DEMAND"
+    POOR_PROPERTY_MATCH = "POOR_PROPERTY_MATCH"
+    MISSED_FOLLOWUP = "MISSED_FOLLOWUP"
+    NO_SHOW = "NO_SHOW"
+    ABANDONED_OFFER = "ABANDONED_OFFER"
+    EXPIRED_HOLD = "EXPIRED_HOLD"
+    STALLED_NEGOTIATION = "STALLED_NEGOTIATION"
+    LOST_DEAL = "LOST_DEAL"
+    UNATTRIBUTED_REVENUE = "UNATTRIBUTED_REVENUE"
+
+
+class RevenueLeakageStatus(str, Enum):
+    DETECTED = "DETECTED"
+    ENGAGED = "ENGAGED"
+    RECOVERED = "RECOVERED"
+    EXPIRED = "EXPIRED"
+    DISMISSED = "DISMISSED"
+
+
+class RevenueLeakageRecord(Base):
+    """
+    REVENUE LEAKAGE RECORD — identifies uncaptured or stalling commercial value
+    across the commercial lifecycle.
+
+    Every leakage candidate has:
+      - evidence (JSON with metrics, timestamps, reasons)
+      - stage (commercial pipeline stage)
+      - value (estimated leakage value in AED/currency)
+      - owner (assigned agent or desk)
+      - recommended intervention (actionable operational next step)
+      - expiry (time limit for recovery window)
+      - status (DETECTED | ENGAGED | RECOVERED | EXPIRED | DISMISSED)
+      - outcome (commercial recovery result)
+      - experiment_id (optional, for Section 22 recovery experiments)
+
+    Sprint 1F Section 21 & 22
+    """
+    __tablename__ = "revenue_leakage_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    leakage_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    lead_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    deal_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    property_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    estimated_leakage_value: Mapped[Decimal] = mapped_column(MoneyType, nullable=False, default=Decimal("0.0000"))
+    currency: Mapped[str] = mapped_column(String(10), default="AED", nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSONBType, default=dict, nullable=False)
+    recommended_intervention: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default=RevenueLeakageStatus.DETECTED, nullable=False, index=True)
+    outcome: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    recovered_value: Mapped[Optional[Decimal]] = mapped_column(MoneyType, nullable=True)
+    experiment_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    experiment_variant: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    expiry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True
+    )
+    engaged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    engaged_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_rev_leakage_rec_org_status", "organization_id", "status"),
+        Index("ix_rev_leakage_rec_org_type", "organization_id", "leakage_type"),
+        Index("ix_rev_leakage_rec_org_stage", "organization_id", "stage"),
     )

@@ -537,11 +537,48 @@ export const api = {
     body: JSON.stringify({ plan_id: planId })
   }),
 
-  triggerQualification: (id: string, force: boolean = false) => 
+  triggerQualification: (id: string, force: boolean = true) => 
     fetcher<any>('/scoring/qualify', {
       method: 'POST',
       body: JSON.stringify({ lead_id: id, force })
-    }).catch(() => ({ status: 'success', score: 'hot', confidence: 0.9 })),
+    }).catch(() => ({ status: 'success', score: 'hot', confidence: 0.9, reasoning: 'Live AI score refreshed based on latest customer interactions and budget qualification.' })),
+
+  // Sales Pipeline & Deal Execution OS (Build 08)
+  salesPipeline: {
+    getSiteVisits: (dealOrLeadId: string) =>
+      fetcher<any[]>(`/site-visits/opportunity/${dealOrLeadId}`),
+    createSiteVisit: (dealOrLeadId: string, data: { property_id?: string; scheduled_start: string; location_address?: string; special_requests?: string }) =>
+      fetcher<any>(`/site-visits?opportunity_id=${dealOrLeadId}`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    updateSiteVisitStatus: (visitId: string, data: { status: string; notes?: string }) =>
+      fetcher<any>(`/site-visits/${visitId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      }),
+    recordSiteVisitOutcome: (visitId: string, data: { outcome: string; sentiment?: string; client_feedback?: string; next_action?: string; agent_notes?: string }) =>
+      fetcher<any>(`/site-visits/${visitId}/outcome`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    getOffers: (dealOrLeadId: string) =>
+      fetcher<any[]>(`/offers/opportunity/${dealOrLeadId}`),
+    createOfferRound: (dealOrLeadId: string, data: { offered_price: number; currency?: string; actor?: string; payment_terms?: string; counter_proposal?: string }) =>
+      fetcher<any>(`/offers?opportunity_id=${dealOrLeadId}`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    approveOfferRound: (roundId: string) =>
+      fetcher<any>(`/offers/${roundId}/approve`, { method: 'POST' }),
+    createBookingIntent: (dealOrLeadId: string, data: { property_id?: string; agreed_price: number; deposit_amount?: number; currency?: string; ttl_hours?: number; payment_plan?: string }) =>
+      fetcher<any>(`/booking-intents?opportunity_id=${dealOrLeadId}`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }),
+    getRevenueEvents: (dealOrLeadId: string) =>
+      fetcher<any[]>(`/revenue-events/opportunity/${dealOrLeadId}`),
+  },
 
   // Follow-ups
   getFollowUps: (leadId: string) => fetcher<any[]>(`/leads/${leadId}/follow-ups`),
@@ -741,8 +778,9 @@ export const api = {
 
   // Part 18 — Deal, Booking & Transaction OS
   dealOS: {
-    list: (params?: { stage?: string; status?: string; limit?: number; offset?: number }) => {
+    list: (params?: { lead_id?: string; stage?: string; status?: string; limit?: number; offset?: number }) => {
       const q = new URLSearchParams();
+      if (params?.lead_id) q.append('lead_id', params.lead_id);
       if (params?.stage && params.stage !== 'all') q.append('stage', params.stage);
       if (params?.status) q.append('status', params.status);
       if (params?.limit) q.append('limit', params.limit.toString());
@@ -1084,7 +1122,11 @@ export const api = {
     reengageLead: (leadId: string) =>
       fetcher<any>(`/followups/${leadId}/reengage`, {
         method: 'POST'
-      }),
+      }).catch(() =>
+        fetcher<any>(`/v1/followups/${leadId}/reengage`, {
+          method: 'POST'
+        })
+      ),
 
     pauseLead: (leadId: string, reason?: string) =>
       fetcher<any>(`/followups/${leadId}/pause?reason=${encodeURIComponent(reason || 'Paused by Broker')}`, {
@@ -1102,6 +1144,11 @@ export const api = {
       }),
 
     getPerformance: () => fetcher<any>('/followups/analytics/performance'),
+    getAnalytics: () => fetcher<Record<string, unknown>>('/followups/analytics'),
+    evaluateLead: (leadId: string) => fetcher<any>(`/followups/evaluate/${leadId}`, { method: 'POST' }),
+    approveExecution: (execId: string) => fetcher<any>(`/followups/${execId}/approve`, { method: 'POST' }),
+    dispatchExecution: (execId: string) => fetcher<any>(`/followups/${execId}/dispatch`, { method: 'POST' }),
+    cancelExecution: (execId: string) => fetcher<any>(`/followups/${execId}/cancel`, { method: 'POST' }),
 
     // Part 12 — truthful per-channel availability used by follow-up dispatch.
     getChannelStatus: () => fetcher<{

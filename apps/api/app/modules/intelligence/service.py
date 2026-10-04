@@ -781,6 +781,39 @@ class IntelligenceService:
             total_assignments += n
             total_conversions += c
 
+        is_stat_sig = False
+        ci_str = None
+        recommended_variant = None
+
+        control = next((vd for vd in variant_data if vd.get("is_control")), None)
+        treatments = [vd for vd in variant_data if not vd.get("is_control")]
+
+        if control and treatments and control["assignments"] >= 30:
+            best_treatment = max(treatments, key=lambda t: t["conversion_rate"])
+            n1 = control["assignments"]
+            c1 = control["conversions"]
+            p1 = c1 / n1 if n1 > 0 else 0.0
+
+            n2 = best_treatment["assignments"]
+            c2 = best_treatment["conversions"]
+            p2 = c2 / n2 if n2 > 0 else 0.0
+
+            if n2 >= 30 and (c1 + c2) > 0:
+                p_pool = (c1 + c2) / (n1 + n2)
+                se = math.sqrt(p_pool * (1 - p_pool) * (1 / n1 + 1 / n2)) if p_pool < 1.0 else 0.0
+                if se > 0:
+                    z = (p2 - p1) / se
+                    if abs(z) >= 1.96:
+                        is_stat_sig = True
+                        diff = p2 - p1
+                        ci_low = round(diff - 1.96 * se, 4)
+                        ci_high = round(diff + 1.96 * se, 4)
+                        ci_str = f"[{ci_low}, {ci_high}]"
+                        if z > 1.96:
+                            recommended_variant = best_treatment["name"]
+                        else:
+                            recommended_variant = control["name"]
+
         return ExperimentEvaluationResponse(
             experiment_id=exp.id,
             status=exp.status,
@@ -788,9 +821,9 @@ class IntelligenceService:
             total_assignments=total_assignments,
             total_conversions=total_conversions,
             variants=variant_data,
-            is_statistically_significant=False,
-            confidence_interval=None,
-            recommended_variant=None,
+            is_statistically_significant=is_stat_sig,
+            confidence_interval=ci_str,
+            recommended_variant=recommended_variant,
         )
 
     # ─── 7. Benchmarking Engine & Privacy ───────────────────────────────────
@@ -1092,7 +1125,9 @@ class IntelligenceService:
         org_id: str,
     ) -> DataQualityReportResponse:
         issues: List[DataQualityIssue] = []
+        now = datetime.now(timezone.utc)
 
+        # 1. Missing Source Attribution on Outcome Events
         missing_q = select(OutcomeEvent).where(
             and_(
                 OutcomeEvent.organization_id == org_id,
@@ -1105,7 +1140,7 @@ class IntelligenceService:
             issue = DataQualityIssue(
                 id=str(uuid.uuid4()),
                 organization_id=org_id,
-                issue_type=DataQualityIssueType.MISSING_VALUE.value,
+                issue_type=DataQualityIssueType.MISSING_SOURCE_ATTRIBUTION.value,
                 severity="LOW",
                 entity_type="outcome_event",
                 entity_id=r.id,
@@ -1116,15 +1151,53 @@ class IntelligenceService:
                 resolved_at=None,
                 resolved_by=None,
                 resolution_notes=None,
-                detected_at=datetime.now(timezone.utc),
+                detected_at=now,
             )
             session.add(issue)
             issues.append(issue)
 
+        # 2. Duplicate Leads (Phone collisions within organization)
+        try:
+            from app.models.lead import Lead
+            dup_q = (
+                select(Lead.phone, func.count(Lead.id))
+                .where(
+                    and_(
+                        Lead.organization_id == uuid.UUID(org_id),
+                        Lead.deleted_at.is_(None),
+                    )
+                )
+                .group_by(Lead.phone)
+                .having(func.count(Lead.id) > 1)
+                .limit(5)
+            )
+            dup_results = (await session.execute(dup_q)).all()
+            for phone, count in dup_results:
+                issue = DataQualityIssue(
+                    id=str(uuid.uuid4()),
+                    organization_id=org_id,
+                    issue_type=DataQualityIssueType.DUPLICATE_LEAD.value,
+                    severity="HIGH",
+                    entity_type="leads",
+                    entity_id=f"phone_{phone}",
+                    description=f"Duplicate lead detected: phone {phone} has {count} active records.",
+                    detection_method="EXACT_FIELD_COLLISION",
+                    dimension="UNIQUENESS",
+                    is_resolved=False,
+                    detected_at=now,
+                )
+                session.add(issue)
+                issues.append(issue)
+        except Exception as e:
+            logger.warning(f"[DataQuality] Lead duplicate check non-fatal error: {e}")
+
         await session.flush()
 
         unresolved_count = len(issues)
-        score = max(0.5, 1.0 - (unresolved_count * 0.05))
+        high_count = sum(1 for i in issues if i.severity == "HIGH")
+        med_count = sum(1 for i in issues if i.severity == "MEDIUM")
+        low_count = sum(1 for i in issues if i.severity == "LOW")
+        score = max(0.4, 1.0 - (high_count * 0.15 + med_count * 0.08 + low_count * 0.03))
 
         issue_dtos = [
             DataQualityIssueResponse(
@@ -1144,7 +1217,7 @@ class IntelligenceService:
             overall_quality_score=round(score, 2),
             total_issues=len(issues),
             unresolved_issues=unresolved_count,
-            issues_by_severity={"LOW": unresolved_count, "MEDIUM": 0, "HIGH": 0},
+            issues_by_severity={"HIGH": high_count, "MEDIUM": med_count, "LOW": low_count},
             recent_issues=issue_dtos,
         )
 
