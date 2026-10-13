@@ -323,10 +323,16 @@ celery_app.conf.update(
 )
 
 # ── Upstash Redis TLS SSL Configuration ──────────────────────────────────────
-# When using rediss:// (TLS), Celery requires ssl_cert_reqs for both broker and backend
+# When using rediss:// (TLS), Celery requires ssl_cert_reqs for both broker and backend.
+# Enforces strict production CA certificate verification using certifi to mitigate MITM risks.
 if settings.REDIS_URL and settings.REDIS_URL.startswith("rediss://"):
+    import certifi
+    _ssl_options = {
+        "ssl_cert_reqs": ssl.CERT_REQUIRED,
+        "ssl_ca_certs": certifi.where(),
+    }
     celery_app.conf.update(
-        broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
-        redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+        broker_use_ssl=_ssl_options,
+        redis_backend_use_ssl=_ssl_options,
     )
 

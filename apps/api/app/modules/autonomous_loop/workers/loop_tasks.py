@@ -116,16 +116,17 @@ if celery_app:
                     ret_val["pilot_observation"] = pilot_obs_result
                 return ret_val
 
+        loop = asyncio.new_event_loop()
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                future = asyncio.run_coroutine_threadsafe(_run(), loop)
-                return future.result()
-            else:
-                return asyncio.run(_run())
+            return loop.run_until_complete(_run())
         except Exception as exc:
             logger.error(f"[LOOP_WORKER] Event processing error: {exc}", exc_info=True)
             raise self.retry(exc=exc)
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
 
     @celery_app.task(
         name="autonomous_loop.retry_failed_events",
@@ -191,12 +192,14 @@ if celery_app:
                 await session.commit()
                 return {"status": "SUCCESS", "retried": retried}
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_run(), loop)
-            return future.result()
-        else:
-            return asyncio.run(_run())
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_run())
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
 
     @celery_app.task(
         name="autonomous_loop.evaluate_inactive_leads",
@@ -268,12 +271,14 @@ if celery_app:
                 await session.commit()
                 return {"status": "SUCCESS", "leads_scanned": len(leads), "processed": processed}
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_run(), loop)
-            return future.result()
-        else:
-            return asyncio.run(_run())
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_run())
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
 
     @celery_app.task(
         name="autonomous_loop.generate_daily_pilot_snapshots",
@@ -349,9 +354,11 @@ if celery_app:
                     "snapshots_created": snapshots_created,
                 }
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_run(), loop)
-            return future.result()
-        else:
-            return asyncio.run(_run())
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(_run())
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
