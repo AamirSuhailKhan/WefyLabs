@@ -17,9 +17,10 @@ STAGE1_NATURAL_INGRESS_READY_WAITING_FOR_REAL_ACTIVITY
 The production Celery worker is verified, running with strict Redis TLS verification (`certifi.where()`), and actively consuming tasks from `sales-loop-orchestration`. The website enquiry form has been connected to Next.js route `/api/contact` and verified against the backend lead capture hub.
 
 ### Integration Safety Verification (Gate 4):
-- **Test Suite Executed:** [`apps/api/tests/test_website_ingress_integration.py`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/api/tests/test_website_ingress_integration.py)
-- **Results:** 7 / 7 test cases passed cleanly.
-- **Classification:** **`TEST_EVIDENCE_ONLY`** (Explicitly marked as integration test evidence; NOT counted as longitudinal production evidence).
+- **Test Suites Executed:**
+  - Python Ingress Integration Suite: [`apps/api/tests/test_website_ingress_integration.py`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/api/tests/test_website_ingress_integration.py) (7/7 PASS)
+  - TypeScript Route Spec Suite: [`apps/web/tests/contact-route.spec.ts`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/web/tests/contact-route.spec.ts) (3/3 PASS)
+- **Classification:** **`TEST_EVIDENCE_ONLY`** (Explicitly marked as test evidence; NOT counted as longitudinal production evidence).
 - **Verified Behaviors:**
   1. Missing contact info rejected with 422.
   2. Honeypot spam trap caught and neutralized.
@@ -35,7 +36,7 @@ The production Celery worker is verified, running with strict Redis TLS verifica
   - Genuine customer enquiries received during this window: **0**.
   - Synthetic records injected: **0**.
   - Manufactured broker decisions: **0**.
-- **Classification:** As mandated by Gate 5, because no genuine customer lead has arrived through the public website, the system is formally classified as **`READY_WAITING_FOR_REAL_ACTIVITY`**.
+- **Classification:** As mandated by Gate 5, because no genuine customer lead has arrived through the public website, the system is formally classified as **`STAGE1_NATURAL_INGRESS_READY_WAITING_FOR_REAL_ACTIVITY`**.
 
 ---
 
