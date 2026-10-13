@@ -21,7 +21,7 @@ The live WefyLabs website enquiry form on the landing page has been fully inspec
 | **Validation & Error Handling** | Client checks required fields; server validates contact presence; API returns 422/429/500 errors rendered as inline alert banners. |
 | **Bot Anti-Spam Honeypot** | Hidden input field `_hp_trap` caught and neutralized both in Next.js route handler and FastAPI controller. |
 | **Idempotency & Replay** | Double-click disabled via `isSubmitting` state; client sends idempotency tokens; backend deduplicates via `UniversalIntakeService`. |
-| **Commit Synchronization** | Committed in `96467a0` and synchronized across both `origin/main` and `origin/level-3`. |
+| **Commit Synchronization** | Committed in `96467a0`, verified & documented in `8acbbe8`, and synchronized across both `origin/main` and `origin/level-3`. |
 
 ---
 

@@ -13,11 +13,11 @@ Inspection of repository remotes and commit lineage confirmed the deployment syn
 
 | Branch / Remote | Observed State | Hash / Commit | Status |
 |---|---|---|---|
-| **Origin Default Branch** | `main` | `1b95b17...` (HEAD) | ✅ SYNCHRONIZED |
-| **Origin Level-3 Branch** | `level-3` | `1b95b17...` (HEAD) | ✅ SYNCHRONIZED |
-| **Local Active Branch** | `level-3` | `1b95b17...` (HEAD) | ✅ UP TO DATE |
-| **Local Main Branch** | `main` | `1b95b17...` (HEAD) | ✅ SYNCHRONIZED |
-| **Included Commits** | `37d92d5`: Worker event loop fix + Redis TLS CA fix<br>`96467a0`: Website form integration + server route<br>`1b95b17`: Governance artifacts + route specs | Linear fast-forward chain | ✅ COMMITTED & PUSHED |
+| **Origin Default Branch** | `main` | `8acbbe8...` (HEAD) | ✅ SYNCHRONIZED |
+| **Origin Level-3 Branch** | `level-3` | `8acbbe8...` (HEAD) | ✅ SYNCHRONIZED |
+| **Local Active Branch** | `level-3` | `8acbbe8...` (HEAD) | ✅ UP TO DATE |
+| **Local Main Branch** | `main` | `8acbbe8...` (HEAD) | ✅ SYNCHRONIZED |
+| **Included Commits** | `37d92d5`: Worker event loop fix + Redis TLS CA fix<br>`96467a0`: Website form integration + server route<br>`1b95b17`: Governance artifacts + route specs<br>`8acbbe8`: Dashboard manual verification documentation | Linear fast-forward chain | ✅ COMMITTED & PUSHED |
 
 ---
 
@@ -53,7 +53,7 @@ Because external hosting dashboard APIs and container execution logs cannot be q
 ### Exact Manual Verification Required on Render (Backend & Worker):
 1. **Navigate to Render Dashboard:** (`dashboard.render.com`).
 2. **Inspect Service `wefylabs-api` (FastAPI REST API):**
-   - Check **Events & Logs**: Verify latest auto-deploy was triggered from `main` at commit `1b95b17` (or `96467a0`).
+   - Check **Events & Logs**: Verify latest auto-deploy was triggered from `main` at commit `8acbbe8` (or earlier `1b95b17` / `96467a0`).
    - Verify health check: `GET /health/readiness` returns HTTP 200 `{"status": "ready"}`.
 3. **Inspect Service `wefylabs-celery-worker` (Background Worker):**
    - Check **Logs**: Verify latest deploy completed without build errors.
@@ -72,7 +72,7 @@ Because external hosting dashboard APIs and container execution logs cannot be q
 ### Exact Manual Verification Required on Vercel (Frontend):
 1. **Navigate to Vercel Dashboard:** (`vercel.com/dashboard`).
 2. **Inspect Project `leadscore-web`:**
-   - Check **Deployments**: Verify latest production deployment is from `main` (commit `1b95b17` or `96467a0`) and status is `Ready`.
+   - Check **Deployments**: Verify latest production deployment is from `main` (commit `8acbbe8` or earlier `1b95b17` / `96467a0`) and status is `Ready`.
    - Confirm build output includes the dynamic route `ƒ /api/contact`.
 3. **Inspect Project Settings → Environment Variables:**
    - Verify `WEBSITE_LEAD_SOURCE_TOKEN` is present in the `Production` environment.

@@ -12,10 +12,10 @@ In accordance with Phase 2C.6E instructions, separate outcomes are reported for 
 
 | # | Operational Dimension | Status Classification | Details & Verified Truth |
 |---|---|---|---|
-| **1** | **Code Complete** | ✅ **COMPLETE** | Form in [`GlobalPricing.tsx`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/web/src/components/landing/GlobalPricing.tsx) wired to server route [`apps/web/src/app/api/contact/route.ts`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/web/src/app/api/contact/route.ts); `test_website_ingress_integration.py` and `contact-route.spec.ts` implemented; committed in `96467a0`. |
+| **1** | **Code Complete** | ✅ **COMPLETE** | Form in [`GlobalPricing.tsx`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/web/src/components/landing/GlobalPricing.tsx) wired to server route [`apps/web/src/app/api/contact/route.ts`](file:///c:/Users/aamir/OneDrive/Desktop/crm%20real%20state/apps/web/src/app/api/contact/route.ts); `test_website_ingress_integration.py` and `contact-route.spec.ts` implemented; committed in `96467a0`, verified in `8acbbe8`. |
 | **2** | **Tests Passed** | ✅ **PASSED** | 7/7 Python integration tests PASS; 30/30 ingress tests PASS; 16/16 pilot activation tests PASS; 119/119 frontend specs PASS; 14/14 evidence consistency validator checks PASS. |
-| **3** | **Frontend Deployed** | ℹ️ **UNVERIFIED** | Code committed and pushed to default deployment branch `main` at commit `96467a0`. Because external Vercel hosting container/build logs cannot be scraped from the local CLI, remote frontend deployment is classified as **`UNVERIFIED`** per Gate 1 instructions. |
-| **4** | **Backend & Worker Deployed** | ℹ️ **UNVERIFIED** | Code committed and pushed to default deployment branch `main` at commit `96467a0`. Local worker running healthy on Upstash Redis TLS; external Render container logs uninspected; classified as **`UNVERIFIED`** per Gate 1 instructions. |
+| **3** | **Frontend Deployed** | ℹ️ **UNVERIFIED** | Code committed and pushed to default deployment branch `main` at commit `8acbbe8`. Because external Vercel hosting container/build logs cannot be scraped from the local CLI, remote frontend deployment is classified as **`UNVERIFIED`** per Gate 1 instructions. |
+| **4** | **Backend & Worker Deployed** | ℹ️ **UNVERIFIED** | Code committed and pushed to default deployment branch `main` at commit `8acbbe8`. Local worker running healthy on Upstash Redis TLS; external Render container logs uninspected; classified as **`UNVERIFIED`** per Gate 1 instructions. |
 | **5** | **Production Secret Configured** | ✅ **CONFIGURED_SERVER_SIDE** | `WEBSITE_LEAD_SOURCE_TOKEN` isolated strictly in server-side environment variables (`apps/web/.env.local`); zero secrets in browser code bundles, URLs, or client logs. |
 | **6** | **Live Integration Verified** | ✅ **LOCAL_INTEGRATION_VERIFIED** | Local pipeline verified end-to-end: Next.js server route -> FastAPI lead capture hub -> PostgreSQL lead -> Redis queue -> Celery worker. |
 | **7** | **Natural Ingress Proven** | ⏳ **STAGE1_NATURAL_INGRESS_READY_WAITING_FOR_REAL_ACTIVITY** | Live database audited: 7 total leads (100% historical); 0 customer enquiries arrived during session; 0 synthetic records injected; awaiting real customer submissions. |
@@ -35,7 +35,7 @@ In accordance with Phase 2C.6E instructions, separate outcomes are reported for 
 ## 2. SEVEN-GATE COMPLIANCE AUDIT
 
 1. **Gate 1 — Git & Deployment Truth:**
-   - Both `origin/main` and `origin/level-3` synchronized at commit `96467a0`.
+   - Both `origin/main` and `origin/level-3` synchronized at commit `8acbbe8`.
    - Mod modifications to `GlobalPricing.tsx`, `apps/web/src/app/api/contact/route.ts`, and test suites are committed.
    - Hosting provider active deployment status classified as `UNVERIFIED` per explicit directive.
 2. **Gate 2 — Production Environment:**

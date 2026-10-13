@@ -63,8 +63,8 @@ Direct evaluation from [`PilotRepository.evaluate_stage1_gates`](file:///c:/User
 
 | Component | Target Role | Verified State | Details |
 |---|---|---|---|
-| **Git Revision (main)** | Default deploy branch | Commit `96467a0` | Synchronized with `level-3` |
-| **Git Revision (level-3)** | Feature branch | Commit `96467a0` | Includes website form + server route + tests |
+| **Git Revision (main)** | Default deploy branch | Commit `8acbbe8` | Synchronized with `level-3` |
+| **Git Revision (level-3)** | Feature branch | Commit `8acbbe8` | Includes website form + server route + tests + docs |
 | **Celery Worker (Local)** | Event processor | `RUNNING` | `celery@LAPTOP-MCIDT71B` (solo pool, concurrency=2) |
 | **Celery Worker (Render)** | Remote processor | `UNVERIFIED` | Pushed to `main`; remote container logs uninspected |
 | **Redis Broker** | Queue transport | `CONNECTED` | Upstash Redis TLS with `ssl.CERT_REQUIRED` |
