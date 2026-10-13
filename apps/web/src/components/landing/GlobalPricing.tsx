@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, Send, Sparkles, ArrowRight } from 'lucide-react';
+import { Check, X, Send, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 import { useRegion } from '@/lib/i18n/region-context';
 import { formatCurrency } from '@/lib/i18n/currency';
 import { FlagIcon } from '@/components/shared/FlagIcon';
@@ -15,6 +15,9 @@ export default function GlobalPricing() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [hpTrap, setHpTrap] = useState('');
   const [contactForm, setContactForm] = useState({
     name: '',
     email: '',
@@ -40,24 +43,54 @@ export default function GlobalPricing() {
 
   const handleOpenCustomModal = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    setSubmitError(null);
     setIsContactModalOpen(true);
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setContactSubmitted(true);
-    setTimeout(() => {
-      setIsContactModalOpen(false);
-      setContactSubmitted(false);
-      setContactForm({
-        name: '',
-        email: '',
-        phone: '',
-        company: '',
-        leadsPerMonth: '1000+',
-        message: '',
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: contactForm.name,
+          email: contactForm.email,
+          phone: contactForm.phone,
+          company: contactForm.company,
+          leadsPerMonth: contactForm.leadsPerMonth,
+          message: contactForm.message,
+          _hp_trap: hpTrap,
+        }),
       });
-    }, 2500);
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Submission failed (${response.status}). Please try again.`);
+      }
+
+      setContactSubmitted(true);
+      setTimeout(() => {
+        setIsContactModalOpen(false);
+        setContactSubmitted(false);
+        setContactForm({
+          name: '',
+          email: '',
+          phone: '',
+          company: '',
+          leadsPerMonth: '1000+',
+          message: '',
+        });
+      }, 3500);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to submit quote request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -378,6 +411,23 @@ export default function GlobalPricing() {
                   </div>
 
                   <form onSubmit={handleContactSubmit} className="space-y-4 font-sans text-sm">
+                    {submitError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-sans leading-relaxed">
+                        ⚠️ {submitError}
+                      </div>
+                    )}
+
+                    {/* Anti-spam bot honeypot - hidden from real users */}
+                    <input
+                      type="text"
+                      name="_hp_trap"
+                      value={hpTrap}
+                      onChange={(e) => setHpTrap(e.target.value)}
+                      className="hidden"
+                      tabIndex={-1}
+                      autoComplete="off"
+                    />
+
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-1 uppercase font-mono">Full Name *</label>
                       <input
@@ -454,10 +504,20 @@ export default function GlobalPricing() {
 
                     <button
                       type="submit"
-                      className="w-full py-3.5 px-4 bg-gray-900 text-white font-bold text-sm rounded-xl hover:bg-gray-800 transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
+                      disabled={isSubmitting}
+                      className="w-full py-3.5 px-4 bg-gray-900 text-white font-bold text-sm rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
                     >
-                      <Send className="w-4 h-4" />
-                      SUBMIT CUSTOM QUOTE REQUEST
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>SENDING INQUIRY...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          <span>SUBMIT CUSTOM QUOTE REQUEST</span>
+                        </>
+                      )}
                     </button>
                   </form>
                 </>
