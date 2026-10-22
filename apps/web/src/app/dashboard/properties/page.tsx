@@ -10,7 +10,7 @@ import {
   Layers, ArrowUpDown, UploadCloud, Copy, CheckCircle2, AlertCircle,
   Clock, ArrowRight
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { formatCurrencyINR } from '@/lib/utils';
 import { api } from '@/lib/api-client';
 
@@ -384,10 +384,7 @@ function PropertiesContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      <DashboardNav />
-
-      <div className="pt-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8] pb-6">
           <div>
@@ -806,7 +803,6 @@ function PropertiesContent() {
             ))}
           </div>
         )}
-      </div>
 
       {/* ─── Share Modal ─── */}
       {isShareModalOpen && activeProperty && (
@@ -1437,7 +1433,7 @@ function PropertiesContent() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

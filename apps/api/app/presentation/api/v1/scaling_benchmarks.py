@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.dependencies import get_db, get_current_broker
+from app.dependencies import get_db, get_current_broker, require_super_admin
 from app.models.broker import Broker
 from app.models.lead import Lead
 from app.core.cache_manager import HighScaleCacheManager

@@ -119,43 +119,9 @@ class GovernedActionExecutor:
         action_type = proposal.action_type
         params = parameters if parameters is not None else proposal.parameters
         auth_id = authorization_id or proposal.authorization_id
+        has_approval = False
 
-        # ── Step 0: Phase 2 Governance Enforcement Gate (Sections 4, 5, 6) ─────
-        from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType
-        
-        _NBA_TO_PHASE2 = {
-            NextBestActionType.NO_ACTION: Phase2ActionType.NO_ACTION,
-            NextBestActionType.ASK_QUALIFICATION: Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
-            NextBestActionType.SEND_PROPERTY: Phase2ActionType.SEND_PROPERTY_RECOMMENDATIONS,
-            NextBestActionType.ANSWER_QUESTION: Phase2ActionType.SUMMARIZE_LEAD,
-            NextBestActionType.HANDLE_OBJECTION: Phase2ActionType.LOG_OBJECTION,
-            NextBestActionType.FOLLOW_UP: Phase2ActionType.SEND_FOLLOW_UP,
-            NextBestActionType.SCHEDULE_APPOINTMENT: Phase2ActionType.SCHEDULE_SITE_VISIT,
-            NextBestActionType.CONFIRM_APPOINTMENT: Phase2ActionType.SCHEDULE_SITE_VISIT,
-            NextBestActionType.HANDOFF_HUMAN: Phase2ActionType.TRIGGER_HUMAN_HANDOFF,
-            NextBestActionType.WAIT: Phase2ActionType.NO_ACTION,
-        }
-        phase2_act = _NBA_TO_PHASE2.get(action_type, Phase2ActionType.NO_ACTION)
-        policy_decision = get_policy_engine().evaluate(str(org), phase2_act)
-        if not policy_decision.is_permitted:
-            logger.warning(
-                f"[GovernedActionExecutor] Action {action_type.value} BLOCKED by Phase 2 Governance: {policy_decision.block_reason}"
-            )
-            return ActionResultDTO(
-                action_type=action_type,
-                success=False,
-                status="BLOCKED",
-                execution_id=exec_id,
-                authorization_id=str(auth_id) if auth_id else None,
-                error_message=policy_decision.block_reason,
-                details={
-                    "governance_blocked": True,
-                    "execution_mode": policy_decision.execution_mode.value,
-                    "decision_id": policy_decision.decision_id,
-                },
-            )
-
-        # ── Step 1: Authorization Gate ────────────────────────────────────────
+        # ── Step 1: Authorization Gate (Enforces Token Integrity, Expiry & Replay Protection) ──
         if proposal.requires_authorization:
             if not auth_id:
                 logger.warning(
@@ -183,6 +149,7 @@ class GovernedActionExecutor:
                     parameters=params,
                     consume=True,
                 )
+                has_approval = True
             except Exception as exc:
                 logger.warning(f"[ActionExecutor] Authorization verification failed: {exc}")
                 return ActionResultDTO(
@@ -193,6 +160,41 @@ class GovernedActionExecutor:
                     authorization_id=str(auth_id),
                     error_message=str(exc),
                 )
+
+        # ── Step 2: Phase 2 Governance Enforcement Gate (Sections 4, 5, 6) ─────
+        from app.modules.autonomous_loop.phase2_governance import get_policy_engine, Phase2ActionType
+
+        _NBA_TO_PHASE2 = {
+            NextBestActionType.NO_ACTION: Phase2ActionType.NO_ACTION,
+            NextBestActionType.ASK_QUALIFICATION: Phase2ActionType.UPDATE_QUALIFICATION_PROFILE,
+            NextBestActionType.SEND_PROPERTY: Phase2ActionType.SEND_PROPERTY_RECOMMENDATIONS,
+            NextBestActionType.ANSWER_QUESTION: Phase2ActionType.SUMMARIZE_LEAD,
+            NextBestActionType.HANDLE_OBJECTION: Phase2ActionType.LOG_OBJECTION,
+            NextBestActionType.FOLLOW_UP: Phase2ActionType.SEND_FOLLOW_UP,
+            NextBestActionType.SCHEDULE_APPOINTMENT: Phase2ActionType.SCHEDULE_SITE_VISIT,
+            NextBestActionType.CONFIRM_APPOINTMENT: Phase2ActionType.SCHEDULE_SITE_VISIT,
+            NextBestActionType.HANDOFF_HUMAN: Phase2ActionType.TRIGGER_HUMAN_HANDOFF,
+            NextBestActionType.WAIT: Phase2ActionType.NO_ACTION,
+        }
+        phase2_act = _NBA_TO_PHASE2.get(action_type, Phase2ActionType.NO_ACTION)
+        policy_decision = get_policy_engine().evaluate(str(org), phase2_act, has_human_approval=has_approval)
+        if not policy_decision.is_permitted:
+            logger.warning(
+                f"[GovernedActionExecutor] Action {action_type.value} BLOCKED by Phase 2 Governance: {policy_decision.block_reason}"
+            )
+            return ActionResultDTO(
+                action_type=action_type,
+                success=False,
+                status="BLOCKED",
+                execution_id=exec_id,
+                authorization_id=str(auth_id) if auth_id else None,
+                error_message=policy_decision.block_reason,
+                details={
+                    "governance_blocked": True,
+                    "execution_mode": policy_decision.execution_mode.value,
+                    "decision_id": policy_decision.decision_id,
+                },
+            )
 
         # ── Step 2: Dispatch to Underlying Domain Subsystem ───────────────────
         try:

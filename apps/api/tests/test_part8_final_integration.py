@@ -526,6 +526,8 @@ class TestPhaseOSystemContracts:
                 "0039_build09_revenue_intelligence",
                 "0040_master_build_13_billing",
                 "0041_master_build_14_intelligence",
+                "0042_phase2c_pilot_tables",
+                "0043_schema_drift_remediation",
             ]
         )
         assert has_valid_head, (

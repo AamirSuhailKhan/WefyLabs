@@ -61,16 +61,36 @@ async def test_webhook_engine_signature_and_replay():
     # Test expired replay timestamp
     assert service.check_replay_attack(str(time.time() - 1000)) is False
 
+    import hmac
+    import hashlib
+
+    raw_body = b'{"message": "Hi"}'
+    valid_sig = "sha256=" + hmac.new(b"test_secret_123", raw_body, hashlib.sha256).hexdigest()
+
     dto = WebhookPayloadDTO(
         provider="whatsapp",
         event_type="message_received",
         payload={"phone": "+1234567890", "message": "Hi"},
-        timestamp=str(time.time())
+        timestamp=str(time.time()),
+        signature=valid_sig
     )
 
-    response = await service.ingest_webhook(dto, b'{"message": "Hi"}', {"x-organization-id": "org_test"})
+    response = await service.ingest_webhook(dto, raw_body, {"x-organization-id": "org_test"})
     assert response.received is True
     assert response.status == "processed"
+
+    # Verify invalid signature is rejected with 401
+    invalid_dto = WebhookPayloadDTO(
+        provider="whatsapp",
+        event_type="message_received",
+        payload={"phone": "+1234567890", "message": "Hi"},
+        timestamp=str(time.time()),
+        signature="sha256=invalidhex12345"
+    )
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc_info:
+        await service.ingest_webhook(invalid_dto, raw_body, {"x-organization-id": "org_test"})
+    assert exc_info.value.status_code == 401
 
 def test_api_envelope_formatting():
     success_resp = create_success_response(data={"id": 123}, meta={"page": 1}, request_id="req_001")

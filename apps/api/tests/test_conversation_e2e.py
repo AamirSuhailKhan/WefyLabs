@@ -134,7 +134,8 @@ async def test_scenario_4_human_escalation_handoff(db_session, test_broker, test
         "lead_data": {"name": test_lead.name, "phone": test_lead.phone},
         "qualification": {"budget_max": 15000000, "bedrooms": 3},
     }
-    res = await executor.run(
+    # 1. Unapproved tool execution in Stage 1 is denied by Phase 2 Governance
+    res_unapproved = await executor.run(
         db=db_session,
         session_id="sess-esc-123",
         turn_index=3,
@@ -145,6 +146,23 @@ async def test_scenario_4_human_escalation_handoff(db_session, test_broker, test
             "notes": "Customer requested immediate callback regarding payment schedules.",
         },
         context=ctx,
+    )
+    assert res_unapproved.success is False
+    assert "Phase 2 Governance blocked tool escalate_to_human" in res_unapproved.error
+
+    # 2. Approved tool execution succeeds and records escalation record
+    ctx_approved = {**ctx, "has_human_approval": True}
+    res = await executor.run(
+        db=db_session,
+        session_id="sess-esc-123",
+        turn_index=3,
+        tool_name="escalate_to_human",
+        arguments={
+            "reason": "human_requested",
+            "priority": "high",
+            "notes": "Customer requested immediate callback regarding payment schedules.",
+        },
+        context=ctx_approved,
     )
     assert res.success is True
     assert res.result["escalated"] is True

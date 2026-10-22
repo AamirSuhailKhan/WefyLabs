@@ -611,14 +611,25 @@ class TestZeroFakeSuccessAndReliability:
             action_type=NextBestActionType.ASK_QUALIFICATION,
             reason="Asking budget",
             risk_tier=ActionRiskTier.LOW,
-            requires_authorization=False,
+            requires_authorization=True,
             parameters={
+                "lead_id": str(lead.id),
                 "conversation_id": conv.id,
                 "recipient": "+919811122233",
                 "message_body": "What is your budget?",
                 "channel": "whatsapp",
             },
         )
+        auth_record = await executor.authorizer.create_authorization(
+            organization_id=org_id,
+            actor_id=str(broker.id),
+            action_type="ASK_QUALIFICATION",
+            resource_type="lead",
+            resource_id=str(lead.id),
+            parameters=proposal.parameters,
+            ttl_seconds=300,
+        )
+        proposal.authorization_id = str(auth_record.id)
 
         # Mock outbox/send_outbound_message to simulate provider outage
         with patch(
@@ -922,6 +933,8 @@ class TestSalesAgentAPIEndpoints:
         from app.main import app
         from app.database import get_db
 
+        from app.dependencies import get_current_tenant, get_current_broker, TenantContext
+
         async def override_get_db():
             yield db_session
 
@@ -929,6 +942,9 @@ class TestSalesAgentAPIEndpoints:
 
         org_id = _org()
         broker, lead, conv = await _seed_broker_and_lead(db_session, org_id)
+
+        app.dependency_overrides[get_current_tenant] = lambda: TenantContext(organization_id=org_id, role="MANAGER")
+        app.dependency_overrides[get_current_broker] = lambda: broker
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -20,6 +20,8 @@ from app.models.lead import Lead
 from app.models.crm_models import Task, Meeting, Activity
 from app.models.property_models import PropertyListing, LeadPropertyInterest
 from app.models.command_center_models import CommandCenterDismissal
+from app.models.organization import Organization, OrganizationMember
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker
 from app.models.audit_log import AuditLog
 from app.modules.command_center.dto import (
     PriorityItemDTO,
@@ -57,7 +59,8 @@ class CommandCenterService:
     async def get_command_center_data(
         self,
         broker: Any,
-        timezone_str: str = "Asia/Kolkata"
+        timezone_str: str = "Asia/Kolkata",
+        requested_org_id: Optional[Any] = None
     ) -> CommandCenterResponseDTO:
         """
         Gathers and synthesizes all operational items for the broker's workspace.
@@ -70,14 +73,19 @@ class CommandCenterService:
             if broker_obj:
                 broker = broker_obj
                 broker_name = getattr(broker, "name", "Agent") or "Agent"
-                org_id_str = str(getattr(broker, "organization_id", None) or broker.id)
             else:
                 broker_name = "Agent"
-                org_id_str = str(broker_uuid)
         else:
             broker_uuid = uuid.UUID(str(broker.id))
-            org_id_str = str(getattr(broker, "organization_id", None) or broker.id)
             broker_name = getattr(broker, "name", "Agent") or "Agent"
+
+        resolved_org_id = await resolve_organization_id_for_broker(
+            self.db,
+            broker_uuid,
+            requested_organization_id=requested_org_id,
+            allow_fallback=True
+        )
+        org_id_str = str(resolved_org_id) if resolved_org_id else str(broker_uuid)
 
         # 1. Fetch active dismissals and snoozes
         stmt_dismissals = select(CommandCenterDismissal).where(
@@ -502,11 +510,24 @@ class CommandCenterService:
             ai_service=self.ai_service
         )
 
+        # Resolve organization currency dynamically
+        org_currency = "INR"
+        target_org_uuid = resolved_org_id
+        if not target_org_uuid:
+            stmt_m = select(OrganizationMember.organization_id).where(OrganizationMember.broker_id == broker_uuid)
+            target_org_uuid = (await self.db.execute(stmt_m)).scalars().first()
+
+        if target_org_uuid:
+            org_obj = await self.db.get(Organization, target_org_uuid)
+            if org_obj:
+                org_currency = org_obj.currency_code or org_obj.reporting_currency_code or ("AED" if org_obj.country_code == "AE" else "INR")
+
         return CommandCenterResponseDTO(
             organization_id=org_id_str,
             broker_id=str(broker_uuid),
             broker_name=broker_name,
             timezone=timezone_str,
+            currency=org_currency,
             summary=summary_dto,
             daily_briefing=briefing_dto,
             priorities=ranked_priorities,

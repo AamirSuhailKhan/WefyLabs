@@ -13,6 +13,7 @@ from sqlalchemy import select, and_, func
 
 from app.models.lead import Lead
 from app.models.broker import Broker
+from app.models.organization import Organization
 from app.models.transaction_models import DealTransaction
 from app.models.revenue_autopilot_models import RevenueOpportunity
 from app.modules.crm.dto.crm_schemas import (
@@ -71,6 +72,17 @@ class CRMPipelineService:
         broker = broker_res.scalars().first()
         broker_name = broker.name if broker else "Assigned Agent"
 
+        org_curr = "INR"
+        if organization_id:
+            try:
+                org_val = uuid.UUID(str(organization_id))
+                org_res = await self.db.execute(select(Organization.currency_code).where(Organization.id == org_val))
+                fetched_curr = org_res.scalar_one_or_none()
+                if fetched_curr:
+                    org_curr = fetched_curr
+            except Exception:
+                pass
+
         # 4. Fetch leads
         leads_stmt = select(Lead).where(
             Lead.broker_id == broker_id,
@@ -128,7 +140,7 @@ class CRMPipelineService:
                 owner_id=str(lead.broker_id),
                 owner_name=broker_name,
                 deal_value=deal_val,
-                currency=lead.budget_currency or "AED",
+                currency=lead.budget_currency or org_curr,
                 age_days=age_days,
                 last_activity_at=lead.updated_at,
                 next_action=None,

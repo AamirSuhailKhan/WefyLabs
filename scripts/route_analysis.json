@@ -1,0 +1,741 @@
+[
+  {
+    "route": "/admin",
+    "file": "admin/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/auth/callback",
+    "file": "auth/callback/page.tsx",
+    "api_calls": [
+      "api.auth.clearOAuthState",
+      "api.auth.exchangeGoogleCode",
+      "api.calendar.exchangeGoogleCallback"
+    ],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/dashboard",
+    "file": "dashboard/page.tsx",
+    "api_calls": [
+      "api.commandCenter.getData",
+      "api.getLeads",
+      "api.revenueIntelligence.getOverview",
+      "api.updateLeadStage"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/analytics",
+    "file": "dashboard/analytics/page.tsx",
+    "api_calls": [
+      "api.getLeads",
+      "api.predictive.getDashboard",
+      "api.predictive.getLeadIntelligence"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/analytics/executive",
+    "file": "dashboard/analytics/executive/page.tsx",
+    "api_calls": [
+      "api.bi.getExecutiveSummary"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/analytics/predictions",
+    "file": "dashboard/analytics/predictions/page.tsx",
+    "api_calls": [],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/automations",
+    "file": "dashboard/automations/page.tsx",
+    "api_calls": [
+      "api.workflows.generateAI",
+      "api.workflows.list"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/autopilot",
+    "file": "dashboard/autopilot/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/calendar",
+    "file": "dashboard/calendar/page.tsx",
+    "api_calls": [
+      "api.calendar.getBrief",
+      "api.calendar.recordOutcome",
+      "api.commandCenter.getData",
+      "api.crm.getDashboard",
+      "api.getLeads"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm",
+    "file": "dashboard/crm/page.tsx",
+    "api_calls": [
+      "api.crm.getDashboard",
+      "api.crm.search"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/activities",
+    "file": "dashboard/crm/activities/page.tsx",
+    "api_calls": [
+      "api.crm.getActivities"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/customers",
+    "file": "dashboard/crm/customers/page.tsx",
+    "api_calls": [
+      "api.crm.getCustomers"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/customers/[id]",
+    "file": "dashboard/crm/customers/[id]/page.tsx",
+    "api_calls": [
+      "api.crm.createNote",
+      "api.crm.createTask",
+      "api.crm.getCustomer360"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/leads",
+    "file": "dashboard/crm/leads/page.tsx",
+    "api_calls": [
+      "api.crm.bulkLeads",
+      "api.crm.getLeads",
+      "api.crm.updateLeadStage"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/pipeline",
+    "file": "dashboard/crm/pipeline/page.tsx",
+    "api_calls": [
+      "api.crm.getPipeline",
+      "api.crm.updateLeadStage"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/crm/tasks",
+    "file": "dashboard/crm/tasks/page.tsx",
+    "api_calls": [
+      "api.crm.createTask",
+      "api.crm.deleteTask",
+      "api.crm.getTasks",
+      "api.crm.updateTask"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/deals",
+    "file": "dashboard/deals/page.tsx",
+    "api_calls": [
+      "api.dealOS.advanceStage",
+      "api.dealOS.completeClosing",
+      "api.dealOS.confirmBooking",
+      "api.dealOS.create",
+      "api.dealOS.createClosing",
+      "api.dealOS.createReservation",
+      "api.dealOS.get",
+      "api.dealOS.getSummary",
+      "api.dealOS.list",
+      "api.dealOS.recordCommission",
+      "api.dealOS.recordPostSale",
+      "api.dealOS.requestBooking",
+      "api.dealOS.submitOffer"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/follow-ups",
+    "file": "dashboard/follow-ups/page.tsx",
+    "api_calls": [
+      "api.followups.createRule",
+      "api.followups.getChannelStatus",
+      "api.followups.getDailyBriefing",
+      "api.followups.getDashboardSummary",
+      "api.followups.getPerformance",
+      "api.followups.getRules",
+      "api.followups.snoozeTask",
+      "api.followups.updateRule",
+      "api.updateTask"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/inbox",
+    "file": "dashboard/inbox/page.tsx",
+    "api_calls": [
+      "api.getLeadById",
+      "api.getLeads",
+      "api.inbox.generateAIDraft",
+      "api.inbox.getConversations",
+      "api.inbox.getInbox",
+      "api.inbox.handback",
+      "api.inbox.sendMessage",
+      "api.inbox.takeover",
+      "api.properties.list"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/intelligence",
+    "file": "dashboard/intelligence/page.tsx",
+    "api_calls": [
+      "api.intelligenceOS.getBenchmarkComparison",
+      "api.intelligenceOS.getChannelAnalytics",
+      "api.intelligenceOS.getCoachingSignals",
+      "api.intelligenceOS.getCompetitiveMatrix",
+      "api.intelligenceOS.getExecutiveDashboard",
+      "api.intelligenceOS.getManagerDashboard",
+      "api.intelligenceOS.getMoatMetrics",
+      "api.intelligenceOS.getPlaybook",
+      "api.intelligenceOS.getSalesDashboard"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/inventory",
+    "file": "dashboard/inventory/page.tsx",
+    "api_calls": [
+      "api.inventoryOS.createProject",
+      "api.inventoryOS.createUnit",
+      "api.inventoryOS.getDashboard",
+      "api.inventoryOS.getUnit",
+      "api.inventoryOS.listProjects",
+      "api.inventoryOS.listUnits",
+      "api.inventoryOS.transitionUnitStatus"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/lead-capture",
+    "file": "dashboard/lead-capture/page.tsx",
+    "api_calls": [
+      "api.leadCapture.getMetrics",
+      "api.leadCapture.listEvents",
+      "api.leadCapture.sendTestLead"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/lead-capture/events",
+    "file": "dashboard/lead-capture/events/page.tsx",
+    "api_calls": [
+      "api.leadCapture.listEvents",
+      "api.leadCapture.retryEvent"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/lead-capture/forms",
+    "file": "dashboard/lead-capture/forms/page.tsx",
+    "api_calls": [
+      "api.leadCapture.listSources"
+    ],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/lead-capture/import",
+    "file": "dashboard/lead-capture/import/page.tsx",
+    "api_calls": [
+      "api.leadCapture.listImportBatches",
+      "api.leadCapture.uploadImportFile"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/lead-capture/sources",
+    "file": "dashboard/lead-capture/sources/page.tsx",
+    "api_calls": [
+      "api.leadCapture.createSource",
+      "api.leadCapture.getEmbedCode",
+      "api.leadCapture.listSources",
+      "api.leadCapture.rotateToken",
+      "api.leadCapture.sendTestLead"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/leads",
+    "file": "dashboard/leads/page.tsx",
+    "api_calls": [
+      "api.createLead",
+      "api.getLeads"
+    ],
+    "has_loading": false,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing",
+    "file": "dashboard/marketing/page.tsx",
+    "api_calls": [],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing/assets",
+    "file": "dashboard/marketing/assets/page.tsx",
+    "api_calls": [
+      "fetch(${API}/assets)"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing/campaigns",
+    "file": "dashboard/marketing/campaigns/page.tsx",
+    "api_calls": [
+      "fetch(${API}/campaigns)"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing/landing-pages",
+    "file": "dashboard/marketing/landing-pages/page.tsx",
+    "api_calls": [
+      "fetch(${API}/landing-pages)"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing/launches",
+    "file": "dashboard/marketing/launches/page.tsx",
+    "api_calls": [
+      "fetch(${API}/launches)"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/marketing/listings",
+    "file": "dashboard/marketing/listings/page.tsx",
+    "api_calls": [
+      "fetch(${API}/listings)"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/matching",
+    "file": "dashboard/matching/page.tsx",
+    "api_calls": [
+      "api.matching.getDashboard",
+      "api.matching.getLeadMatches",
+      "api.matching.getPropertyLeadMatches",
+      "api.matching.recommendMatch",
+      "api.matching.shortlistMatch"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/partners",
+    "file": "dashboard/partners/page.tsx",
+    "api_calls": [
+      "api.inventoryOS.createAgreement",
+      "api.inventoryOS.getChannelPartner",
+      "api.inventoryOS.listChannelPartners",
+      "api.inventoryOS.listProjects",
+      "api.inventoryOS.registerChannelPartner",
+      "api.inventoryOS.registerPartnerLead",
+      "api.inventoryOS.verifyKyc"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/performance",
+    "file": "dashboard/performance/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/pipeline",
+    "file": "dashboard/pipeline/page.tsx",
+    "api_calls": [
+      "api.getLeads",
+      "api.updateLeadStage"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/properties",
+    "file": "dashboard/properties/page.tsx",
+    "api_calls": [
+      "api.matching.getPropertyLeadMatches",
+      "api.matching.recommend",
+      "api.matching.shortlist",
+      "api.properties.create",
+      "api.properties.delete",
+      "api.properties.getDashboard",
+      "api.properties.getLeads",
+      "api.properties.list",
+      "api.properties.listVisits",
+      "api.properties.recordVisitOutcome",
+      "api.properties.reserve",
+      "api.properties.scheduleVisit",
+      "api.properties.updatePrice"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/revenue-intelligence",
+    "file": "dashboard/revenue-intelligence/page.tsx",
+    "api_calls": [
+      "api.revenueIntelligence.getActions",
+      "api.revenueIntelligence.getAttribution",
+      "api.revenueIntelligence.getDataQuality",
+      "api.revenueIntelligence.getFunnel",
+      "api.revenueIntelligence.getLeadJourney",
+      "api.revenueIntelligence.getLeakage",
+      "api.revenueIntelligence.getLeakageItems",
+      "api.revenueIntelligence.getOutcomes",
+      "api.revenueIntelligence.getOverview",
+      "api.revenueIntelligence.getTeam",
+      "api.revenueIntelligence.recompute"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/settings",
+    "file": "dashboard/settings/page.tsx",
+    "api_calls": [
+      "api.billing.getStatus",
+      "api.calendar.disconnectGoogle",
+      "api.calendar.getGoogleConnectUrl",
+      "api.calendar.getGoogleStatus"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/dashboard/tasks",
+    "file": "dashboard/tasks/page.tsx",
+    "api_calls": [
+      "api.completeTask",
+      "api.createTask",
+      "api.deleteTask",
+      "api.getLeads",
+      "api.getTasks",
+      "api.updateTask",
+      "api.updateTaskStatus"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Canonical AppShell (DashboardLayoutClient)"
+  },
+  {
+    "route": "/knowledge",
+    "file": "knowledge/page.tsx",
+    "api_calls": [
+      "api.knowledge.archiveDocument",
+      "api.knowledge.deleteDocument",
+      "api.knowledge.fullReindex",
+      "api.knowledge.getHealth",
+      "api.knowledge.listConflicts",
+      "api.knowledge.listDocuments",
+      "api.knowledge.listFreshnessPolicies",
+      "api.knowledge.listJobs",
+      "api.knowledge.publishDocument",
+      "api.knowledge.reindexDocument",
+      "api.knowledge.resolveConflict",
+      "api.knowledge.search",
+      "api.knowledge.uploadDocument"
+    ],
+    "has_loading": true,
+    "has_empty": true,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/leads/[id]",
+    "file": "leads/[id]/page.tsx",
+    "api_calls": [
+      "api.getLeadById",
+      "api.triggerQualification",
+      "api.updateLeadStatus"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/login",
+    "file": "login/page.tsx",
+    "api_calls": [
+      "api.auth.getGoogleAuthUrl",
+      "api.auth.login",
+      "api.auth.setOAuthState"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/mobile",
+    "file": "mobile/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/onboarding",
+    "file": "onboarding/page.tsx",
+    "api_calls": [
+      "api.auth.me",
+      "api.onboarding.commitCsv",
+      "api.onboarding.getActivation",
+      "api.onboarding.getStatus",
+      "api.onboarding.inviteTeam",
+      "api.onboarding.startDemo",
+      "api.onboarding.updateBusinessProfile",
+      "api.onboarding.updateStep"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/operations",
+    "file": "operations/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/page.tsx",
+    "file": "page.tsx",
+    "api_calls": [
+      "fetch(/api/v1/lead-acquisition/public-capture)"
+    ],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/portal",
+    "file": "portal/page.tsx",
+    "api_calls": [
+      "fetch(/api/v1/portal/auth/token)"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/portal/[org]/chat",
+    "file": "portal/[org]/chat/page.tsx",
+    "api_calls": [
+      "fetch(${base}/lead-capture/public)"
+    ],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/portal/[org]/property/[id]",
+    "file": "portal/[org]/property/[id]/page.tsx",
+    "api_calls": [
+      "api.properties"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/register",
+    "file": "register/page.tsx",
+    "api_calls": [
+      "api.auth.getGoogleAuthUrl",
+      "api.auth.register",
+      "api.auth.setOAuthState"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/settings",
+    "file": "settings/page.tsx",
+    "api_calls": [
+      "api.getBrokerProfile",
+      "api.subscribe",
+      "api.updateBrokerProfile"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/settings/billing",
+    "file": "settings/billing/page.tsx",
+    "api_calls": [
+      "api.billing.portal"
+    ],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": true,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/settings/security",
+    "file": "settings/security/page.tsx",
+    "api_calls": [],
+    "has_loading": true,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Root Layout"
+  },
+  {
+    "route": "/simulator",
+    "file": "simulator/page.tsx",
+    "api_calls": [],
+    "has_loading": false,
+    "has_empty": false,
+    "has_error": false,
+    "layout": "Root Layout"
+  }
+]

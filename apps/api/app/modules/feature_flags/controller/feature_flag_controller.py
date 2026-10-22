@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_broker
+from app.dependencies import get_current_broker, require_super_admin
 from app.common.response import APIResponse, create_success_response
 from app.modules.feature_flags.service.feature_flag_service import FeatureFlagService
 from app.modules.feature_flags.dto.feature_flag_dto import FeatureFlagUpdateDTO, FeatureFlagResponseDTO
@@ -53,7 +53,7 @@ async def set_feature_flag(
     dto: FeatureFlagUpdateDTO,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_broker=Depends(get_current_broker),
+    current_broker=Depends(require_super_admin),
 ):
     service = FeatureFlagService(db)
     flag = await service.set_flag(

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Users, Search, ArrowLeft, ArrowUpRight, Phone, Mail, MapPin } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { LeadCRMListItem } from '@/types/crm';
 
@@ -34,10 +34,7 @@ export default function CRMCustomersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-24 pb-16">
+    <PageContainer>
         <div className="flex items-center gap-2 mb-4 text-xs text-[#6B7280]">
           <Link href="/dashboard/crm" className="hover:text-[#111827] flex items-center gap-1">
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -175,7 +172,6 @@ export default function CRMCustomersPage() {
             </table>
           </div>
         </div>
-      </main>
-    </div>
+      </PageContainer>
   );
 }

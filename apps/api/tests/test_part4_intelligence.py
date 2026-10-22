@@ -51,10 +51,13 @@ async def test_db():
 
 @pytest.fixture
 async def async_client(test_db):
+    from app.dependencies import get_current_tenant, TenantContext
     async def _get_test_db():
         yield test_db
 
+    test_tenant = TenantContext(organization_id="org_api_intel", role="ADMIN")
     app.dependency_overrides[get_db] = _get_test_db
+    app.dependency_overrides[get_current_tenant] = lambda: test_tenant
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

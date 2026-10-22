@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_broker
+from app.dependencies import get_current_broker, get_current_tenant, TenantContext
 from app.models.broker import Broker
 from app.modules.conversation_intelligence.service import ResponseIntelligenceService
 from app.modules.conversation_intelligence.dto import (
@@ -46,13 +46,14 @@ async def analyze_customer_message(
     lead_id: str,
     payload: AnalyzeMessageRequestDTO,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Executes full multi-intent, buying signal, objection, qualification,
     and NBA analysis on a customer response.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
 
     return await service.analyze_customer_response(
@@ -69,12 +70,13 @@ async def analyze_customer_message(
 async def get_lead_conversation_intelligence(
     lead_id: str,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Retrieves the current conversation summary, active intents, and next best action.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     lead = await service._validate_lead_tenant(lead_id, org_id, current_broker)
 
@@ -92,12 +94,13 @@ async def get_lead_conversation_intelligence(
 async def get_buying_signals(
     lead_id: str,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Returns latest buying signal indicators and level for a lead.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     await service._validate_lead_tenant(lead_id, org_id, current_broker)
 
@@ -114,12 +117,13 @@ async def get_buying_signals(
 async def get_customer_objections(
     lead_id: str,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Returns all unresolved objections detected for this lead.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     await service._validate_lead_tenant(lead_id, org_id, current_broker)
 
@@ -130,12 +134,13 @@ async def get_customer_objections(
 async def get_human_handoff_status(
     lead_id: str,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Returns whether human intervention is active and any handoff brief.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     await service._validate_lead_tenant(lead_id, org_id, current_broker)
 
@@ -151,12 +156,13 @@ async def generate_draft_reply(
     lead_id: str,
     payload: DraftReplyRequestDTO,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Generates a fact-grounded draft reply ready for broker review.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     lead = await service._validate_lead_tenant(lead_id, org_id, current_broker)
 
@@ -187,12 +193,13 @@ async def approve_draft_reply(
     lead_id: str,
     payload: ApproveDraftReplyRequestDTO,
     current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Approves the drafted message and executes dispatch through the Part 21.6 delivery engine.
     """
-    org_id = str(current_broker.organization_id or current_broker.id)
+    org_id = tenant.organization_id
     service = ResponseIntelligenceService(db)
     await service._validate_lead_tenant(lead_id, org_id, current_broker)
 

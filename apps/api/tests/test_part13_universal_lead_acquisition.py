@@ -962,6 +962,34 @@ async def test_google_webhook_post_key_verification(db_session, brokers):
 
 
 @pytest.mark.asyncio
+async def test_acquisition_webhook_rejects_source_id_without_capability_token(db_session, brokers):
+    broker_a, _ = brokers
+    source = await LeadSourceService(db_session).create_source(
+        str(broker_a.id),
+        LeadSourceCreateDTO(
+            name="Capability token required",
+            channel="META",
+            configuration={"verify_token": "verification-secret"},
+        ),
+    )
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            post_response = await client.post(
+                f"/api/v1/lead-acquisition/webhooks/google?source_id={source.id}",
+                json={"lead_id": "attacker-event", "name": "Injected", "phone": "+919111111111"},
+            )
+            get_response = await client.get(
+                "/api/v1/lead-acquisition/webhooks/meta?hub.mode=subscribe"
+                "&hub.verify_token=attacker-choice&hub.challenge=challenge",
+            )
+        assert post_response.status_code == 403
+        assert get_response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.asyncio
 async def test_connector_status_and_maintenance_endpoints(db_session, brokers):
     """
     Scenario: Authenticated operator queries connector statuses, triggers reconcile & backfill.

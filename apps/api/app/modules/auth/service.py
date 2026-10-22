@@ -33,6 +33,7 @@ def create_access_token(data: dict | str | uuid.UUID, expires_delta: timedelta |
         to_encode = {"sub": str(data)}
     else:
         to_encode = data.copy()
+    to_encode.setdefault("jti", secrets.token_urlsafe(24))
     now = datetime.now(timezone.utc)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "iat": now})
@@ -257,15 +258,20 @@ async def exchange_google_oauth_code(
     caller is validated against the server-side store and consumed atomically.
     """
     session_id = (session_id or "").strip()
-    if not session_id:
+    if not session_id or not session_id.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OAuth session context is required."
+            detail="OAuth state does not belong to this session."
         )
     if not req.code or not req.code.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Authorization code is required."
+        )
+    if not req.state or not req.state.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing, unknown, or invalid OAuth state."
         )
 
     # ── Phase 0 P0.1: mock identity paths removed from production code ──
@@ -279,7 +285,37 @@ async def exchange_google_oauth_code(
             detail="Caller-supplied OAuth identity is not accepted. Use the verified Google OAuth flow."
         )
 
-    # ── Phase 0 P0.1: distributed one-time replay protection ─────────────
+    # ── Step 1 & 2: OAuth CSRF state validation (session-bound, atomic one-time consumption) ──
+    # Must be validated and consumed BEFORE any provider code exchange or side effects.
+    try:
+        consume_oauth_state(req.state, session_id)
+    except OAuthStateSessionMismatch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state does not belong to this session."
+        )
+    except OAuthStateReplayed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state has already been used."
+        )
+    except OAuthStateExpired:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state has expired. Please restart sign-in."
+        )
+    except OAuthStateMissing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing, unknown, or invalid OAuth state."
+        )
+    except OAuthStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"OAuth state validation unavailable: {exc}"
+        )
+
+    # ── Step 3: Distributed one-time replay protection for authorization code ──
     # Atomic Redis SET-NX with TTL, shared across all workers.
     try:
         consume_authorization_code(req.code)
@@ -297,7 +333,7 @@ async def exchange_google_oauth_code(
     verified_email: Optional[str] = None
     verified_name: Optional[str] = None
 
-    # Production Google Token & UserInfo Exchange
+    # ── Step 4: Production Google Token & UserInfo Exchange ──
     try:
         target_redirect = req.redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -349,8 +385,14 @@ async def exchange_google_oauth_code(
                     detail="Failed to retrieve verified Google profile identity."
                 )
             userinfo = userinfo_res.json()
+            if userinfo.get("email_verified") is not True:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google account email is not verified."
+                )
             verified_email = userinfo.get("email")
             verified_name = userinfo.get("name") or "Google User"
+            google_subject = userinfo.get("sub")
     except HTTPException:
         raise
     except Exception as e:
@@ -359,45 +401,20 @@ async def exchange_google_oauth_code(
             detail=f"Google OAuth provider communication error: {str(e)}"
         )
 
-    if not verified_email:
+    if not verified_email or not isinstance(google_subject, str) or not google_subject.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google account did not return a verified email address."
+            detail="Google account did not return a verified identity."
         )
 
-    # ── Phase 0 P0.1: OAuth CSRF state validation (session-bound, one-time) ──
-    # MUST be provided when the flow was initiated with server-side state.
-    try:
-        consume_oauth_state(req.state, session_id)
-    except OAuthStateSessionMismatch:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OAuth state does not belong to this session."
-        )
-    except OAuthStateReplayed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OAuth state has already been used."
-        )
-    except OAuthStateExpired:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OAuth state has expired. Please restart sign-in."
-        )
-    except OAuthStateMissing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing, unknown, or invalid OAuth state."
-        )
-    except OAuthStateError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"OAuth state validation unavailable: {exc}"
-        )
-
-    # Resolve existing broker for safe identity linking
-    stmt = select(Broker).where(Broker.email == verified_email)
+    # The immutable Google subject is the primary provider identity. Email is
+    # used only to link a previously unlinked local account after verification.
+    stmt = select(Broker).where(Broker.google_subject == google_subject)
     existing = (await db.execute(stmt)).scalars().first()
+
+    if existing is None:
+        stmt = select(Broker).where(Broker.email == verified_email)
+        existing = (await db.execute(stmt)).scalars().first()
 
     if existing:
         # Check suspension
@@ -406,6 +423,12 @@ async def exchange_google_oauth_code(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This broker account has been suspended."
             )
+        if existing.google_subject and existing.google_subject != google_subject:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This email is already linked to a different Google account."
+            )
+        existing.google_subject = google_subject
         # Update name if previously blank or generic
         if verified_name and (not existing.name or existing.name == "Google User"):
             existing.name = verified_name
@@ -430,7 +453,8 @@ async def exchange_google_oauth_code(
         city=None,
         subscription_status="trial",
         trial_ends_at=default_trial_ends_at(),
-        onboarding_status="AUTHENTICATED_NOT_ONBOARDED"
+        onboarding_status="AUTHENTICATED_NOT_ONBOARDED",
+        google_subject=google_subject,
     )
     db.add(new_broker)
     await db.commit()

@@ -496,13 +496,19 @@ async def get_revenue_briefing_endpoint(
     now = datetime.now(timezone.utc)
 
     # Fetch active counts
-    active_stmt = select(RevenueOpportunity).where(
-        and_(
-            RevenueOpportunity.broker_id == broker_uuid,
-            RevenueOpportunity.status.in_(["NEW", "RECOMMENDED", "ACTIONED"]),
-            RevenueOpportunity.deleted_at.is_(None)
+    active_stmt = (
+        select(RevenueOpportunity)
+        .options(selectinload(RevenueOpportunity.lead))
+        .where(
+            and_(
+                RevenueOpportunity.broker_id == broker_uuid,
+                RevenueOpportunity.status.in_(["NEW", "RECOMMENDED", "ACTIONED"]),
+                RevenueOpportunity.deleted_at.is_(None)
+            )
         )
-    ).order_by(desc(RevenueOpportunity.opportunity_score)).limit(10)
+        .order_by(desc(RevenueOpportunity.opportunity_score))
+        .limit(10)
+    )
     opps = list((await db.execute(active_stmt)).scalars().all())
 
     critical_count = sum(1 for o in opps if o.urgency == "CRITICAL" or o.priority == "CRITICAL")

@@ -133,19 +133,19 @@ async function start() {
   const apiProc = spawn(pythonCmd, apiArgs, {
     cwd: rootDir,
     stdio: 'inherit',
-    shell: true,
+    shell: false,
   });
   processes.push(apiProc);
 
   // 2. Spawn Next.js Frontend
-  const npxCmd = IS_WIN ? 'npx.cmd' : 'npx';
-  const webArgs = ['next', 'dev', '-p', String(WEB_PORT)];
-
   console.log(`\x1b[35m[web]\x1b[0m Starting Next.js frontend on http://localhost:${WEB_PORT}...`);
-  const webProc = spawn(npxCmd, webArgs, {
+  const webCmd = IS_WIN ? 'cmd.exe' : 'npm';
+  const webArgs = IS_WIN ? ['/c', 'npm', 'run', 'dev'] : ['run', 'dev'];
+
+  const webProc = spawn(webCmd, webArgs, {
     cwd: webDir,
     stdio: 'inherit',
-    shell: true,
+    shell: false,
   });
   processes.push(webProc);
 

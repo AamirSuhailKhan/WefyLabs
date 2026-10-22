@@ -36,6 +36,7 @@ class MergeReverter:
         self,
         merge_operation_id: str,
         undone_by: Optional[str] = None,
+        organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Undo a merge by restoring both identities from their snapshots.
@@ -49,9 +50,10 @@ class MergeReverter:
             }
         """
         # ── Load MergeOperation ───────────────────────────────────────────────
-        result = await self.db.execute(
-            select(MergeOperation).where(MergeOperation.id == merge_operation_id)
-        )
+        conditions = [MergeOperation.id == merge_operation_id]
+        if organization_id is not None:
+            conditions.append(MergeOperation.organization_id == organization_id)
+        result = await self.db.execute(select(MergeOperation).where(*conditions))
         merge_op = result.scalar_one_or_none()
 
         if not merge_op:
@@ -65,7 +67,10 @@ class MergeReverter:
         links_snapshot = merge_op.source_links_snapshot
 
         # ── Restore source identity from snapshot ─────────────────────────────
-        src_result = await self.db.execute(select(Identity).where(Identity.id == source_id))
+        src_result = await self.db.execute(select(Identity).where(
+            Identity.id == source_id,
+            Identity.organization_id == merge_op.organization_id,
+        ))
         source = src_result.scalar_one_or_none()
 
         if source:
@@ -85,7 +90,10 @@ class MergeReverter:
         if links_snapshot:
             link_ids = [l["id"] for l in links_snapshot]
             link_result = await self.db.execute(
-                select(IdentityLink).where(IdentityLink.id.in_(link_ids))
+                select(IdentityLink).where(
+                    IdentityLink.id.in_(link_ids),
+                    IdentityLink.organization_id == merge_op.organization_id,
+                )
             )
             for link in link_result.scalars().all():
                 link.identity_id = source_id
@@ -93,7 +101,10 @@ class MergeReverter:
                 link.is_active = True
 
         # ── Restore target lead_count ─────────────────────────────────────────
-        tgt_result = await self.db.execute(select(Identity).where(Identity.id == target_id))
+        tgt_result = await self.db.execute(select(Identity).where(
+            Identity.id == target_id,
+            Identity.organization_id == merge_op.organization_id,
+        ))
         target = tgt_result.scalar_one_or_none()
         if target and source:
             target.lead_count = max(1, (target.lead_count or 1) - (source.lead_count or 0))
@@ -127,4 +138,5 @@ class MergeReverter:
             "source_identity_id": source_id,
             "target_identity_id": target_id,
             "restored_links": len(links_snapshot) if links_snapshot else 0,
+            "organization_id": merge_op.organization_id,
         }

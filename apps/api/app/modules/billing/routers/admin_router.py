@@ -10,7 +10,7 @@ Administrative endpoints for:
 - Billing infrastructure & provider health
 
 Security & Compliance:
-- Role & permission enforced: requires billing:manage permission.
+- Cross-tenant administrative routes require the explicit platform super-admin allowlist.
 - Every adjustment/credit requires explicit actor, reason, and provenance.
 """
 from __future__ import annotations
@@ -27,9 +27,8 @@ from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.dependencies import get_db, get_current_broker
+from app.dependencies import get_db, require_super_admin
 from app.models.broker import Broker
-from app.models.organization import OrganizationMember
 from app.models.billing_models import (
     BillingAccount,
     Subscription as CanonicalSubscription,
@@ -70,33 +69,11 @@ class AdminAdjustmentRequest(BaseModel):
 
 # ─── RBAC Dependency Helper ───────────────────────────────────────────────────
 
-async def require_billing_manager(
-    current_broker: Broker = Depends(get_current_broker),
-    db: AsyncSession = Depends(get_db),
-) -> Broker:
-    """
-    Enforces that caller has administrative billing privileges.
-    Permits super-admins or members with OWNER, ADMIN, or FINANCE role.
-    """
-    stmt = select(OrganizationMember.role).where(OrganizationMember.broker_id == current_broker.id)
-    roles = (await db.execute(stmt)).scalars().all()
-    allowed_roles = {"OWNER", "ADMIN", "FINANCE"}
-
-    if not any(r.upper() in allowed_roles for r in roles):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: Admin billing operations require OWNER, ADMIN, or FINANCE role."
-        )
-    return current_broker
-
-
-# ─── 1. Tenant Billing Overview ───────────────────────────────────────────────
-
 @admin_router.get("/overview/{organization_id}", status_code=status.HTTP_200_OK)
 async def get_tenant_billing_overview(
     organization_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: Broker = Depends(require_billing_manager),
+    admin: Broker = Depends(require_super_admin),
 ):
     """
     Comprehensive customer billing lookup for support and finance teams.
@@ -152,7 +129,7 @@ async def get_tenant_billing_overview(
 async def admin_issue_credit(
     req: AdminCreditRequest,
     db: AsyncSession = Depends(get_db),
-    admin: Broker = Depends(require_billing_manager),
+    admin: Broker = Depends(require_super_admin),
 ):
     """
     Manually issues credit to an organization with audit trail provenance.
@@ -185,7 +162,7 @@ async def admin_issue_credit(
 async def admin_trigger_reconciliation(
     organization_id: str,
     db: AsyncSession = Depends(get_db),
-    admin: Broker = Depends(require_billing_manager),
+    admin: Broker = Depends(require_super_admin),
 ):
     """
     Triggers automated financial reconciliation audit for the organization.
@@ -202,7 +179,7 @@ async def admin_get_unit_economics(
     organization_id: str,
     days: int = 30,
     db: AsyncSession = Depends(get_db),
-    admin: Broker = Depends(require_billing_manager),
+    admin: Broker = Depends(require_super_admin),
 ):
     """
     Computes exact unit economics snapshot (MRR, gross revenue, direct costs, margin) for a tenant.
@@ -248,7 +225,7 @@ async def admin_get_unit_economics(
 @admin_router.get("/health", status_code=status.HTTP_200_OK)
 async def get_billing_system_health(
     db: AsyncSession = Depends(get_db),
-    admin: Broker = Depends(require_billing_manager),
+    admin: Broker = Depends(require_super_admin),
 ):
     """
     Returns operational health status of billing gateways and worker queues.

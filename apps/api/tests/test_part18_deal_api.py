@@ -28,6 +28,9 @@ from app.models.lead import Lead
 from app.modules.auth.service import create_access_token
 
 
+from app.models.organization import Organization, OrganizationMember
+
+
 @pytest.mark.asyncio
 async def test_part18_deals_api_full_journey(db_session: AsyncSession, test_broker: Broker, test_lead: Lead):
     async def override_get_db():
@@ -35,8 +38,16 @@ async def test_part18_deals_api_full_journey(db_session: AsyncSession, test_brok
 
     app.dependency_overrides[get_db] = override_get_db
 
+    org = Organization(id=uuid.uuid4(), name="Test Agency", slug=f"agency-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org.id, broker_id=test_broker.id, role="admin")
+    db_session.add_all([org, mem])
+    await db_session.commit()
+
     token = create_access_token({"sub": test_broker.email, "email": test_broker.email})
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-WefyLabs-Organization-Id": str(org.id)
+    }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # 1. Pipeline Summary Initial

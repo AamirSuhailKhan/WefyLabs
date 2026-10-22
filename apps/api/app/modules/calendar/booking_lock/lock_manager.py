@@ -41,7 +41,7 @@ class BookingLockManager:
         # Check for existing active unreleased holds overlapping this slot
         stmt = select(MeetingHold).where(
             and_(
-                MeetingHold.broker_id == broker_id,
+                MeetingHold.broker_id == str(broker_id),
                 MeetingHold.is_released == False,
                 MeetingHold.expires_at_utc > now,
                 MeetingHold.slot_start_utc < slot_end_utc,
@@ -56,6 +56,33 @@ class BookingLockManager:
                 f"[BOOKING_LOCK] Collision: Slot {slot_start_utc.isoformat()} already held by Lead {active_hold.lead_id}."
             )
             return None
+
+        # Check for existing confirmed or active meetings overlapping this slot
+        import uuid as _uuid
+        b_uuid = None
+        if broker_id:
+            try:
+                b_uuid = _uuid.UUID(str(broker_id))
+            except Exception:
+                b_uuid = broker_id
+
+        if b_uuid:
+            from app.models.calendar_models import Meeting
+            stmt_mtg = select(Meeting).where(
+                and_(
+                    Meeting.broker_id == b_uuid,
+                    Meeting.status.in_(["CONFIRMED", "REQUESTED", "HELD"]),
+                    Meeting.start_utc < slot_end_utc,
+                    Meeting.end_utc > slot_start_utc
+                )
+            )
+            res_mtg = await self.db.execute(stmt_mtg)
+            existing_mtg = res_mtg.scalar_one_or_none()
+            if existing_mtg:
+                logger.warning(
+                    f"[BOOKING_LOCK] Collision: Slot {slot_start_utc.isoformat()} already booked by Meeting {existing_mtg.id}."
+                )
+                return None
 
         hold = MeetingHold(
             broker_id=broker_id,

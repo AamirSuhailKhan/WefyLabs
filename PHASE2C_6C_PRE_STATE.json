@@ -1,0 +1,102 @@
+{
+  "phase": "2C.6C",
+  "checkpoint": "SYSTEM_FREEZE_BASELINE",
+  "captured_at": "2026-10-06T14:26:00+05:30",
+  "system": {
+    "git_commit": "9bc40ca9ccf853c1ee02be54f63c33564a7d8410",
+    "git_branch": "level-3",
+    "frontend_name": "leadscore-web",
+    "frontend_version": "0.1.0",
+    "next_version": "15.5.24",
+    "react_version": "19.0.0",
+    "backend_name": "leadscore-api",
+    "backend_version": "0.1.0",
+    "python_version": "3.14.6",
+    "fastapi_version": "0.115.0",
+    "database": {
+      "engine": "PostgreSQL",
+      "version": "17.6 on x86_64-pc-linux-gnu",
+      "host": "aws-0-ap-south-1.pooler.supabase.com",
+      "alembic_version": "0042_phase2c_pilot_tables"
+    },
+    "redis": {
+      "provider": "Upstash Redis",
+      "version": "8.4.0",
+      "status": "CONNECTED_PONG"
+    },
+    "celery": {
+      "version": "5.4.0",
+      "broker": "Upstash Redis (rediss)",
+      "task_serializer": "json",
+      "accept_content": ["json"],
+      "registered_queues_count": 51
+    },
+    "urls": {
+      "api_base_url": "http://localhost:8000/api/v1",
+      "frontend_origin": "http://localhost:3000",
+      "oauth_redirect_uri": "http://localhost:3000/auth/callback"
+    }
+  },
+  "governance": {
+    "runtime": "STAGE_1_SHADOW",
+    "autonomy_level": 0,
+    "effective_autonomy": 0,
+    "stage_2_eligibility": "NOT_ELIGIBLE",
+    "genuine_stage1_days": "4 / 14",
+    "verified_human_decisions": "1 / 50",
+    "security_p0_status": "CLOSED",
+    "security_p0_1_status": "CLOSED",
+    "provider_side_effects": 0,
+    "synthetic_commercial_evidence": 0,
+    "autonomous_revenue_attribution": "INR 0"
+  },
+  "pilot_tenant_truth": {
+    "pilot_id": "d153ea17-b2d3-40ab-b258-75951ef7de28",
+    "organization_id": "a0317351-e076-493e-8b84-182f8c43666e",
+    "organization_name": "Aamir Suhail's Agency",
+    "organization_slug": "org-9d0620",
+    "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+    "broker_name": "Aamir Suhail",
+    "broker_email": "aamir.fresh@bmu.edu.in",
+    "broker_role": "owner",
+    "enrolled_at": "2026-10-02T12:02:16.753959+00:00",
+    "counts": {
+      "leads": 3,
+      "properties": 3,
+      "site_visits": 1,
+      "deals": 1,
+      "bookings": 1,
+      "commissions": 1,
+      "pilot_observations": 1,
+      "pilot_human_decisions": 1
+    },
+    "commercial_reality": {
+      "booking_reference": "BKG-2026-001",
+      "booking_value_inr": 22000000,
+      "token_paid_inr": 1100000,
+      "gross_commission_inr": 440000,
+      "net_commission_inr": 396000,
+      "attribution": "OBSERVED_HUMAN_COMMERCIAL_TRANSACTION",
+      "causal_ai_revenue_inr": 0
+    }
+  },
+  "global_database_counts": {
+    "total_organizations": 11,
+    "total_users": 11,
+    "total_brokers": 11,
+    "total_organization_members": 11,
+    "total_leads": 7,
+    "total_property_listings": 9,
+    "total_revenue_opportunities": 3,
+    "total_deals": 1,
+    "total_deal_bookings": 1,
+    "total_deal_commissions": 1,
+    "total_deal_transactions": 2,
+    "total_site_visits": 1,
+    "total_tasks": 10,
+    "total_meetings": 1,
+    "total_pilot_tenants": 1,
+    "total_pilot_observations": 1,
+    "total_pilot_human_decisions": 1
+  }
+}

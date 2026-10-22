@@ -10,7 +10,7 @@ Endpoints for:
  - Project Launches
  - Intelligence (funnel, stale, ROI)
 
-Security: Every endpoint enforces organization_id via get_current_broker.
+Security: Authenticated endpoints use membership-validated TenantContext.
 """
 from __future__ import annotations
 
@@ -22,8 +22,7 @@ from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_broker
-from app.models.broker import Broker
+from app.dependencies import get_current_tenant, TenantContext
 from app.modules.marketing.service import (
     MarketingCampaignService, ListingStudioService, LandingPageService,
     TrackingLinkService, MarketingAssetService, ProjectLaunchService,
@@ -34,12 +33,12 @@ marketing_router = APIRouter(prefix="/marketing", tags=["Part 20 — Marketing &
 router = marketing_router
 
 
-def _org(broker: Broker) -> str:
-    return str(broker.organization_id or broker.id)
+def _org(tenant: TenantContext) -> str:
+    return tenant.organization_id
 
 
-def _bid(broker: Broker) -> str:
-    return str(broker.id)
+def _bid(tenant: TenantContext) -> str:
+    return str(tenant.broker_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -49,7 +48,7 @@ def _bid(broker: Broker) -> str:
 @marketing_router.post("/campaigns", status_code=201, summary="Create a marketing campaign")
 async def create_campaign(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -59,7 +58,7 @@ async def create_campaign(
     """
     svc = MarketingCampaignService(db)
     campaign = await svc.create_campaign(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         name=data.get("name", ""),
         objective=data.get("objective", "lead_generation"),
         description=data.get("description"),
@@ -72,7 +71,7 @@ async def create_campaign(
         utm_medium=data.get("utm_medium"),
         utm_campaign=data.get("utm_campaign"),
         bhk_scope=data.get("bhk_scope"),
-        owner_id=_bid(broker),
+        owner_id=_bid(tenant),
         lead_campaign_id=data.get("lead_campaign_id"),
         is_ai_assisted=data.get("is_ai_assisted", False),
     )
@@ -91,12 +90,12 @@ async def list_campaigns(
     project_id: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingCampaignService(db)
     campaigns = await svc.list_campaigns(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         status=status, objective=objective, project_id=project_id,
         limit=limit, offset=offset,
     )
@@ -118,11 +117,11 @@ async def list_campaigns(
 @marketing_router.get("/campaigns/{campaign_id}", summary="Get campaign detail")
 async def get_campaign(
     campaign_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingCampaignService(db)
-    campaign = await svc.get_campaign(_org(broker), campaign_id)
+    campaign = await svc.get_campaign(_org(tenant), campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return {
@@ -148,16 +147,16 @@ async def get_campaign(
 async def transition_campaign_status(
     campaign_id: str = Path(...),
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Controlled state transition. Requires approval before ACTIVE/SCHEDULED."""
     svc = MarketingCampaignService(db)
     campaign = await svc.transition_status(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         campaign_id=campaign_id,
         new_status=data.get("status", ""),
-        actor_id=_bid(broker),
+        actor_id=_bid(tenant),
         reason=data.get("reason"),
     )
     return {"id": campaign.id, "status": campaign.status}
@@ -167,15 +166,15 @@ async def transition_campaign_status(
 async def request_campaign_approval(
     campaign_id: str = Path(...),
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Submit campaign for human approval. Required before activation."""
     svc = MarketingCampaignService(db)
     approval = await svc.request_approval(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         campaign_id=campaign_id,
-        requested_by=_bid(broker),
+        requested_by=_bid(tenant),
         budget_requested=Decimal(str(data["budget"])) if data.get("budget") else None,
         channels=data.get("channels"),
         target_summary=data.get("target_summary"),
@@ -193,7 +192,7 @@ async def request_campaign_approval(
 async def decide_campaign_approval(
     approval_id: str = Path(...),
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -202,9 +201,9 @@ async def decide_campaign_approval(
     """
     svc = MarketingCampaignService(db)
     approval = await svc.decide_approval(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         approval_id=approval_id,
-        reviewer_id=_bid(broker),
+        reviewer_id=_bid(tenant),
         decision=data.get("decision", ""),
         reason=data.get("reason"),
         budget_approved=Decimal(str(data["budget_approved"])) if data.get("budget_approved") else None,
@@ -222,13 +221,13 @@ async def decide_campaign_approval(
 async def update_campaign_metrics(
     campaign_id: str = Path(...),
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Update factual performance metrics. Data provenance must be declared."""
     svc = MarketingCampaignService(db)
     campaign = await svc.update_metrics(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         campaign_id=campaign_id,
         impressions=data.get("impressions"),
         clicks=data.get("clicks"),
@@ -246,7 +245,7 @@ async def update_campaign_metrics(
 @marketing_router.post("/listings", status_code=201, summary="Create a property listing publication")
 async def create_listing(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -256,7 +255,7 @@ async def create_listing(
     """
     svc = ListingStudioService(db)
     listing = await svc.create_listing(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         project_id=data.get("project_id", ""),
         unit_id=data.get("unit_id"),
         campaign_id=data.get("campaign_id"),
@@ -271,7 +270,7 @@ async def create_listing(
         slug=data.get("slug"),
         seo_title=data.get("seo_title"),
         seo_description=data.get("seo_description"),
-        created_by=_bid(broker),
+        created_by=_bid(tenant),
     )
     return {
         "id": listing.id, "slug": listing.slug,
@@ -287,12 +286,12 @@ async def list_listings(
     is_stale: Optional[bool] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ListingStudioService(db)
     listings = await svc.list_listings(
-        organization_id=_org(broker), project_id=project_id,
+        organization_id=_org(tenant), project_id=project_id,
         status=status, is_stale=is_stale, limit=limit, offset=offset,
     )
     return {
@@ -312,11 +311,11 @@ async def list_listings(
 @marketing_router.get("/listings/{listing_id}", summary="Get listing publication detail")
 async def get_listing(
     listing_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ListingStudioService(db)
-    listing = await svc.get_listing(_org(broker), listing_id)
+    listing = await svc.get_listing(_org(tenant), listing_id)
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
     return {
@@ -336,25 +335,25 @@ async def get_listing(
 @marketing_router.post("/listings/{listing_id}/publish", summary="Publish a listing (requires approval)")
 async def publish_listing(
     listing_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ListingStudioService(db)
     listing = await svc.publish_listing(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         listing_id=listing_id,
-        approved_by=_bid(broker),
+        approved_by=_bid(tenant),
     )
     return {"id": listing.id, "status": listing.status, "published_at": listing.published_at.isoformat()}
 
 
 @marketing_router.get("/listings/diagnostics/stale", summary="Detect stale published listings")
 async def detect_stale_listings(
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ListingStudioService(db)
-    stale = await svc.detect_stale_listings(_org(broker))
+    stale = await svc.detect_stale_listings(_org(tenant))
     return {"stale_count": len(stale), "stale_listings": stale}
 
 
@@ -365,12 +364,12 @@ async def detect_stale_listings(
 @marketing_router.post("/landing-pages", status_code=201, summary="Create a landing page")
 async def create_landing_page(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = LandingPageService(db)
     page = await svc.create_landing_page(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         name=data.get("name", ""),
         slug=data.get("slug", ""),
         project_id=data.get("project_id"),
@@ -382,7 +381,7 @@ async def create_landing_page(
         utm_campaign=data.get("utm_campaign"),
         hero_content=data.get("hero_content"),
         form_config=data.get("form_config"),
-        created_by=_bid(broker),
+        created_by=_bid(tenant),
     )
     return {"id": page.id, "slug": page.slug, "status": page.status}
 
@@ -393,12 +392,12 @@ async def list_landing_pages(
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = LandingPageService(db)
     pages = await svc.list_landing_pages(
-        organization_id=_org(broker), project_id=project_id,
+        organization_id=_org(tenant), project_id=project_id,
         status=status, limit=limit, offset=offset,
     )
     return {"pages": [{"id": p.id, "name": p.name, "slug": p.slug, "status": p.status} for p in pages]}
@@ -407,11 +406,11 @@ async def list_landing_pages(
 @marketing_router.post("/landing-pages/{page_id}/publish", summary="Publish landing page")
 async def publish_landing_page(
     page_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = LandingPageService(db)
-    page = await svc.publish(organization_id=_org(broker), page_id=page_id, approved_by=_bid(broker))
+    page = await svc.publish(organization_id=_org(tenant), page_id=page_id, approved_by=_bid(tenant))
     return {"id": page.id, "status": page.status}
 
 
@@ -422,12 +421,12 @@ async def publish_landing_page(
 @marketing_router.post("/tracking-links", status_code=201, summary="Build a validated tracking link")
 async def create_tracking_link(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = TrackingLinkService(db)
     link = await svc.build_tracking_link(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         destination_url=data.get("destination_url", ""),
         campaign_id=data.get("campaign_id"),
         landing_page_id=data.get("landing_page_id"),
@@ -437,7 +436,7 @@ async def create_tracking_link(
         utm_campaign=data.get("utm_campaign"),
         utm_content=data.get("utm_content"),
         utm_term=data.get("utm_term"),
-        created_by=_bid(broker),
+        created_by=_bid(tenant),
     )
     return {
         "id": link.id,
@@ -453,11 +452,11 @@ async def list_tracking_links(
     campaign_id: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = TrackingLinkService(db)
-    links = await svc.list_links(organization_id=_org(broker), campaign_id=campaign_id, limit=limit, offset=offset)
+    links = await svc.list_links(organization_id=_org(tenant), campaign_id=campaign_id, limit=limit, offset=offset)
     return {
         "links": [
             {"id": l.id, "short_token": l.short_token, "click_count": l.click_count,
@@ -497,12 +496,12 @@ async def resolve_tracking_link(
 @marketing_router.post("/assets", status_code=201, summary="Create a marketing asset")
 async def create_asset(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingAssetService(db)
     asset = await svc.create_asset(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         name=data.get("name", ""),
         asset_type=data.get("asset_type", "image"),
         project_id=data.get("project_id"),
@@ -511,7 +510,7 @@ async def create_asset(
         mime_type=data.get("mime_type"),
         file_size_bytes=data.get("file_size_bytes"),
         is_ai_generated=data.get("is_ai_generated", False),
-        created_by=_bid(broker),
+        created_by=_bid(tenant),
     )
     return {"id": asset.id, "status": asset.status, "version": asset.version}
 
@@ -519,11 +518,11 @@ async def create_asset(
 @marketing_router.post("/assets/{asset_id}/approve", summary="Approve a marketing asset")
 async def approve_asset(
     asset_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingAssetService(db)
-    asset = await svc.approve_asset(_org(broker), asset_id, _bid(broker))
+    asset = await svc.approve_asset(_org(tenant), asset_id, _bid(tenant))
     return {"id": asset.id, "status": asset.status, "approved_at": asset.approved_at.isoformat() if asset.approved_at else None}
 
 
@@ -535,12 +534,12 @@ async def list_assets(
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingAssetService(db)
     assets = await svc.list_assets(
-        organization_id=_org(broker), project_id=project_id, campaign_id=campaign_id,
+        organization_id=_org(tenant), project_id=project_id, campaign_id=campaign_id,
         asset_type=asset_type, status=status, limit=limit, offset=offset,
     )
     return {
@@ -559,16 +558,16 @@ async def list_assets(
 @marketing_router.post("/launches", status_code=201, summary="Create a project launch workflow")
 async def create_launch(
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProjectLaunchService(db)
     launch = await svc.create_launch(
-        organization_id=_org(broker),
+        organization_id=_org(tenant),
         project_id=data.get("project_id", ""),
         campaign_id=data.get("campaign_id"),
         landing_page_id=data.get("landing_page_id"),
-        created_by=_bid(broker),
+        created_by=_bid(tenant),
     )
     return {"id": launch.id, "project_id": launch.project_id, "status": launch.status}
 
@@ -577,11 +576,11 @@ async def create_launch(
 async def update_launch_gate(
     launch_id: str = Path(...),
     data: Dict[str, Any] = Body(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProjectLaunchService(db)
-    launch = await svc.update_gate(_org(broker), launch_id, data.get("gate", ""), data.get("ready", False))
+    launch = await svc.update_gate(_org(tenant), launch_id, data.get("gate", ""), data.get("ready", False))
     return {
         "id": launch.id, "status": launch.status,
         "gates": {
@@ -602,12 +601,12 @@ async def update_launch_gate(
 @marketing_router.post("/launches/{launch_id}/approve-and-launch", summary="Approve and launch project (human action)")
 async def approve_and_launch(
     launch_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Human-only endpoint. All readiness gates must be complete. AI may not call this."""
     svc = ProjectLaunchService(db)
-    launch = await svc.approve_and_launch(_org(broker), launch_id, _bid(broker))
+    launch = await svc.approve_and_launch(_org(tenant), launch_id, _bid(tenant))
     return {"id": launch.id, "status": launch.status, "launched_at": launch.launched_at.isoformat() if launch.launched_at else None}
 
 
@@ -615,11 +614,11 @@ async def approve_and_launch(
 async def list_launches(
     project_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProjectLaunchService(db)
-    launches = await svc.list_launches(organization_id=_org(broker), project_id=project_id, status=status)
+    launches = await svc.list_launches(organization_id=_org(tenant), project_id=project_id, status=status)
     return {
         "launches": [
             {"id": l.id, "project_id": l.project_id, "status": l.status,
@@ -636,7 +635,7 @@ async def list_launches(
 @marketing_router.get("/intelligence/campaigns/{campaign_id}/funnel", summary="Get campaign marketing funnel")
 async def get_campaign_funnel(
     campaign_id: str = Path(...),
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -645,22 +644,22 @@ async def get_campaign_funnel(
     ROI is NOT_AVAILABLE unless both actual spend and revenue are recorded.
     """
     svc = MarketingIntelligenceService(db)
-    return await svc.get_campaign_funnel(_org(broker), campaign_id)
+    return await svc.get_campaign_funnel(_org(tenant), campaign_id)
 
 
 @marketing_router.get("/intelligence/stale-listings", summary="Get stale listing alert summary")
 async def stale_listings_alert(
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingIntelligenceService(db)
-    return await svc.get_stale_listings_alert(_org(broker))
+    return await svc.get_stale_listings_alert(_org(tenant))
 
 
 @marketing_router.get("/intelligence/pending-approvals", summary="Get pending campaign approval count")
 async def pending_approvals(
-    broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     svc = MarketingIntelligenceService(db)
-    return await svc.get_pending_approvals(_org(broker))
+    return await svc.get_pending_approvals(_org(tenant))

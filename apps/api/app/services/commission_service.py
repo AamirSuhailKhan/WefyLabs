@@ -1,15 +1,15 @@
 from dataclasses import dataclass
-from typing import Dict, Any
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 @dataclass
 class CommissionBreakdown:
-    property_sale_price: int
-    gross_commission_rate_pct: float
-    total_gci: float
-    brokerage_split_pct: float
-    agent_split_pct: float
-    brokerage_commission: float
-    agent_net_commission: float
+    property_sale_price: Decimal
+    gross_commission_rate_pct: Decimal
+    total_gci: Decimal
+    brokerage_split_pct: Decimal
+    agent_split_pct: Decimal
+    brokerage_commission: Decimal
+    agent_net_commission: Decimal
 
 class CommissionCalculatorService:
     """
@@ -20,20 +20,45 @@ class CommissionCalculatorService:
     @classmethod
     def calculate_deal_commission(
         cls,
-        property_sale_price: int,
-        gross_commission_rate_pct: float = 2.0, # e.g. 2.0%
-        agent_split_pct: float = 70.0 # 70% to agent, 30% to brokerage
+        property_sale_price: Decimal | int | str,
+        gross_commission_rate_pct: Decimal | float | str = Decimal("2.0"),
+        agent_split_pct: Decimal | float | str = Decimal("70.0"),
     ) -> CommissionBreakdown:
-        total_gci = round(property_sale_price * (gross_commission_rate_pct / 100.0), 2)
-        agent_net = round(total_gci * (agent_split_pct / 100.0), 2)
-        brokerage_net = round(total_gci - agent_net, 2)
+        """Return a display-only quote without binary floating-point rounding.
+
+        The persisted commission workflow has its own 4-decimal accounting model.
+        This calculator intentionally rounds only its final customer-facing amounts
+        to currency minor units, with the brokerage share receiving the remainder.
+        """
+        try:
+            sale_price = Decimal(str(property_sale_price))
+            commission_rate = Decimal(str(gross_commission_rate_pct))
+            agent_split = Decimal(str(agent_split_pct))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("Commission inputs must be valid decimal values") from exc
+
+        if sale_price <= 0:
+            raise ValueError("Property sale price must be positive")
+        if not Decimal("0") <= commission_rate <= Decimal("100"):
+            raise ValueError("Gross commission rate must be between 0 and 100")
+        if not Decimal("0") <= agent_split <= Decimal("100"):
+            raise ValueError("Agent split must be between 0 and 100")
+
+        minor_unit = Decimal("0.01")
+        total_gci = (sale_price * commission_rate / Decimal("100")).quantize(
+            minor_unit, rounding=ROUND_HALF_UP
+        )
+        agent_net = (total_gci * agent_split / Decimal("100")).quantize(
+            minor_unit, rounding=ROUND_HALF_UP
+        )
+        brokerage_net = total_gci - agent_net
 
         return CommissionBreakdown(
-            property_sale_price=property_sale_price,
-            gross_commission_rate_pct=gross_commission_rate_pct,
+            property_sale_price=sale_price,
+            gross_commission_rate_pct=commission_rate,
             total_gci=total_gci,
-            brokerage_split_pct=round(100.0 - agent_split_pct, 2),
-            agent_split_pct=agent_split_pct,
+            brokerage_split_pct=Decimal("100") - agent_split,
+            agent_split_pct=agent_split,
             brokerage_commission=brokerage_net,
             agent_net_commission=agent_net
         )

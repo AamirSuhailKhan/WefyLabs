@@ -526,7 +526,7 @@ class TestCredentialLeakageAudit:
     def _get_source_files(self):
         """Returns all production Python source files (excluding tests)."""
         api_root = os.path.join(
-            os.path.dirname(__file__), ".."
+            os.path.dirname(__file__), "..", "app"
         )
         source_files = []
         for root, dirs, files in os.walk(api_root):
@@ -743,12 +743,48 @@ class TestAuthenticationSecurity:
             "Router must document that organization_id comes from authenticated context only"
         )
 
-        # organization_id must come from broker.id, not from request parameter
-        # Look for any Query() parameter named organization_id
-        org_id_query = re.findall(r'organization_id.*=.*Query\(', content)
-        assert not org_id_query, (
-            f"organization_id must not be a Query parameter in autonomous loop router: {org_id_query}"
+        # organization_id must come from authenticated context, not from request Query parameter
+        # Disallow both parameter name and alias targeting organization_id
+        violations = self._scan_query_org_violations(content)
+        assert not violations, (
+            f"organization_id must not be a Query parameter (or alias) in autonomous loop router: {violations}"
         )
+
+    @staticmethod
+    def _scan_query_org_violations(source_code: str) -> list:
+        """Detects any Query() parameter named organization_id, org_id, or using an alias for them."""
+        violations = []
+        # Pattern 1: parameter named organization_id / org_id with Query(
+        named_matches = re.findall(r'(\b(?:organization_id|org_id|target_org)\b\s*:\s*[^=]+=\s*Query\([^)]*\))', source_code)
+        violations.extend(named_matches)
+        # Pattern 2: any Query parameter with alias="organization_id" or alias="org_id"
+        alias_matches = re.findall(r'(\w+\s*:\s*[^=]+=\s*Query\([^)]*alias\s*=\s*[\'"](?:organization_id|org_id)[\'"][^)]*\))', source_code)
+        violations.extend(alias_matches)
+        return violations
+
+    def test_scanner_detects_deliberately_vulnerable_and_safe_fixtures(self):
+        """Proves the scanner detects evasion attempts and permits legitimate safe patterns."""
+        vulnerable_fixture_1 = '''
+        @router.get("/items")
+        async def get_items(organization_id: str = Query(...)):
+            pass
+        '''
+        vulnerable_fixture_2 = '''
+        @router.get("/items")
+        async def get_items(target_param: Optional[str] = Query(None, alias="organization_id")):
+            pass
+        '''
+        safe_fixture = '''
+        @router.get("/items")
+        async def get_items(
+            x_org: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
+            broker = Depends(get_current_broker),
+        ):
+            pass
+        '''
+        assert len(self._scan_query_org_violations(vulnerable_fixture_1)) >= 1, "Must flag explicit parameter named organization_id"
+        assert len(self._scan_query_org_violations(vulnerable_fixture_2)) >= 1, "Must flag evasive alias='organization_id' parameter"
+        assert len(self._scan_query_org_violations(safe_fixture)) == 0, "Must permit safe header-based tenant resolution"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

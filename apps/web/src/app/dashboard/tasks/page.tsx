@@ -18,7 +18,7 @@ import {
   Tag as TagIcon,
   RefreshCw
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { Lead } from '@/types';
 
@@ -563,11 +563,7 @@ export default function TasksPage() {
   }, [tasks, activeTab]);
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      <DashboardNav />
-
-      <div className="pt-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <PageContainer className="max-w-4xl">
 
           {/* ── Page Header ── */}
           <div className="py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8]">
@@ -703,8 +699,6 @@ export default function TasksPage() {
               </AnimatePresence>
             )}
           </div>
-        </div>
-      </div>
 
       {/* ── New / Edit Task Modal ── */}
       <AnimatePresence>
@@ -957,6 +951,6 @@ export default function TasksPage() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </PageContainer>
   );
 }

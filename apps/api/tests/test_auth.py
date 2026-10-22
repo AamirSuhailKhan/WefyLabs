@@ -219,34 +219,38 @@ async def test_google_oauth_url_and_exchange(db_session: AsyncSession):
         yield db_session
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # 1. Unconfigured placeholder rejected in development mode
-        settings.ENV = "development"
+    clear_rate_limits()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            # 1. Unconfigured placeholder rejected in development mode
+            settings.ENV = "development"
+            settings.GOOGLE_CLIENT_ID = "google-client-id-placeholder"
+            res_unconfigured = await ac.get("/api/v1/auth/google/url")
+            assert res_unconfigured.status_code == 503
+            assert "Google OAuth 2.0 is not configured" in res_unconfigured.json()["detail"]
+
+            # 2. Configured valid Google Client ID generates well-formed authorization URL
+            settings.GOOGLE_CLIENT_ID = "1234567890-testabc.apps.googleusercontent.com"
+            res_valid = await ac.get("/api/v1/auth/google/url?redirect_uri=http://localhost:3000/auth/callback")
+            assert res_valid.status_code == 200
+            url_data = res_valid.json()
+            assert "accounts.google.com" in url_data["auth_url"]
+            assert "client_id=1234567890-testabc.apps.googleusercontent.com" in url_data["auth_url"]
+            assert "redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback" in url_data["auth_url"]
+            assert "state=" in url_data["auth_url"]
+
+            # 3. Exchange with the legacy mock identity path is rejected: state is
+            # mandatory and caller identity is not accepted (Phase 0 P0.1).
+            clear_rate_limits()
+            exchange_res = await ac.post("/api/v1/auth/google/exchange", json={
+                "code": "test_code_oauthbroker",
+                "redirect_uri": "http://localhost:3000/auth/callback"
+            })
+            assert exchange_res.status_code == 422
+    finally:
+        # Reset environment to testing
+        settings.ENV = "testing"
         settings.GOOGLE_CLIENT_ID = "google-client-id-placeholder"
-        res_unconfigured = await ac.get("/api/v1/auth/google/url")
-        assert res_unconfigured.status_code == 503
-        assert "Google OAuth 2.0 is not configured" in res_unconfigured.json()["detail"]
-
-        # 2. Configured valid Google Client ID generates well-formed authorization URL
-        settings.GOOGLE_CLIENT_ID = "1234567890-testabc.apps.googleusercontent.com"
-        res_valid = await ac.get("/api/v1/auth/google/url?redirect_uri=http://localhost:3000/auth/callback")
-        assert res_valid.status_code == 200
-        url_data = res_valid.json()
-        assert "accounts.google.com" in url_data["auth_url"]
-        assert "client_id=1234567890-testabc.apps.googleusercontent.com" in url_data["auth_url"]
-        assert "redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback" in url_data["auth_url"]
-        assert "state=" in url_data["auth_url"]
-
-        # 3. Exchange with the legacy mock identity path is rejected: state is
-        # mandatory and caller identity is not accepted (Phase 0 P0.1).
-        exchange_res = await ac.post("/api/v1/auth/google/exchange", json={
-            "code": "test_code_oauthbroker",
-            "redirect_uri": "http://localhost:3000/auth/callback"
-        })
-        assert exchange_res.status_code == 422
-
-    # Reset environment to testing
-    settings.ENV = "testing"
-    settings.GOOGLE_CLIENT_ID = "google-client-id-placeholder"
-    app.dependency_overrides.clear()
+        clear_rate_limits()
+        app.dependency_overrides.clear()
 

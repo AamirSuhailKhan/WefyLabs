@@ -102,7 +102,8 @@ def _validate_tool_call(tool_name: str, arguments: Any, context: Dict[str, Any])
         }
         p2_act = _TOOL_TO_PHASE2.get(tool_name)
         if p2_act:
-            decision = get_policy_engine().evaluate(str(org_id), p2_act)
+            has_approval = bool(context.get("has_human_approval") or context.get("confirmed_action"))
+            decision = get_policy_engine().evaluate(str(org_id), p2_act, has_human_approval=has_approval)
             if not decision.is_permitted:
                 return f"Phase 2 Governance blocked tool {tool_name}: {decision.block_reason}"
 

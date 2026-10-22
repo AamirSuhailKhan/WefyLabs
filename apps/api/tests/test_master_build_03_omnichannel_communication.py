@@ -559,6 +559,7 @@ async def test_12_outbound_dispatch_zero_fake_success(db_session: AsyncSession, 
         channel="whatsapp",
         recipient_identifier="+919876500000",
         sender_type=CanonicalSenderType.AI_AGENT,
+        has_human_approval=True,
     )
 
     assert msg.delivery_status == "failed"
@@ -589,6 +590,7 @@ async def test_13_outbound_transactional_outbox(db_session: AsyncSession, broker
         channel="whatsapp",
         recipient_identifier="+919876511111",
         sender_type=CanonicalSenderType.AI_AGENT,
+        has_human_approval=True,
     )
 
     # Check OutboxEvent was written in the same transaction

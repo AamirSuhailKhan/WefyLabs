@@ -89,7 +89,8 @@ async def resolve_organization_id_for_broker(
 
     ambient = get_ambient_tenant()
     if requested_organization_id is None and ambient is not None:
-        requested_organization_id = ambient.organization_id
+        if as_organization_uuid(ambient.organization_id) is not None:
+            requested_organization_id = ambient.organization_id
 
     result = await db.execute(
         select(OrganizationMember.organization_id).where(
@@ -100,8 +101,23 @@ async def resolve_organization_id_for_broker(
     membership_ids = {str(value) for value in memberships}
 
     if not membership_ids:
+        if requested_organization_id is not None:
+            selected = as_organization_uuid(requested_organization_id)
+            if selected is None:
+                raise TenantIsolationError(
+                    "INVALID_ORGANIZATION_CONTEXT",
+                    "The organization context must be a valid UUID.",
+                    http_status=400,
+                )
+            if allow_fallback and selected == broker_id:
+                return broker_id
+            raise TenantIsolationError(
+                "ORGANIZATION_ACCESS_DENIED",
+                "You do not belong to the selected organization.",
+                http_status=403,
+            )
         if allow_fallback:
-            return as_organization_uuid(requested_organization_id) or broker_id
+            return broker_id
         raise TenantIsolationError(
             "ORGANIZATION_MEMBERSHIP_REQUIRED",
             "No organization membership is available for this account.",

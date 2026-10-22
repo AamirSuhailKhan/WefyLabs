@@ -4,7 +4,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'lime' | 'secondary' | 'outline' | 'danger' | 'ghost';
+  variant?: 'primary' | 'lime' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'ai';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   isLoading?: boolean;
   loadingText?: string;
@@ -45,6 +45,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         'bg-[#FEF2F2] text-[#991B1B] hover:bg-[#FEE2E2] border border-[#FECACA]',
       ghost:
         'bg-transparent text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-[#EBE6E0] border border-transparent',
+      ai:
+        'bg-teal-50 text-[#0F766E] hover:bg-teal-100 border border-teal-200 shadow-2xs',
     };
 
     const sizes: Record<string, string> = {

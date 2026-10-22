@@ -13,6 +13,7 @@ from sqlalchemy import select, and_, or_, desc, asc, func
 
 from app.models.lead import Lead
 from app.models.broker import Broker
+from app.models.organization import Organization
 from app.models.crm_models import Activity, Task
 from app.models.audit_log import AuditLog
 from app.infrastructure.events.event_bus import event_bus, DomainEvent
@@ -85,6 +86,17 @@ class CRMLeadService:
         broker = broker_res.scalars().first()
         broker_name = broker.name if broker else "Assigned Agent"
 
+        org_curr = "INR"
+        if organization_id:
+            try:
+                org_val = uuid.UUID(str(organization_id))
+                org_res = await self.db.execute(select(Organization.currency_code).where(Organization.id == org_val))
+                fetched_curr = org_res.scalar_one_or_none()
+                if fetched_curr:
+                    org_curr = fetched_curr
+            except Exception:
+                pass
+
         items = [
             LeadCRMListItem(
                 id=str(l.id),
@@ -98,7 +110,7 @@ class CRMLeadService:
                 pipeline_stage=l.pipeline_stage,
                 budget_min=l.budget_min,
                 budget_max=l.budget_max,
-                budget_currency=l.budget_currency or "AED",
+                budget_currency=l.budget_currency or org_curr,
                 preferred_locations=l.preferred_locations or [],
                 property_type=l.property_type,
                 owner_id=str(l.broker_id),

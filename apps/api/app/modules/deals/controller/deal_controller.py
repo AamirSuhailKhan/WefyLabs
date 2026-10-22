@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.database import get_db
-from app.dependencies import get_current_broker
+from app.dependencies import get_current_broker, get_current_tenant
 from app.models.broker import Broker
 from app.models.lead import Lead
 from app.models.property_models import PropertyListing
@@ -33,11 +33,12 @@ from app.modules.deals.dto.deal_schemas import (
     DealCreateRequest, DealStageAdvanceRequest, DealSummaryResponse,
     DealDetailResponse, OfferSubmitRequest, OfferResponseRequest,
     ReservationCreateRequest, BookingConfirmRequest, BookingApproveRequest,
-    CommissionRecordRequest, ClosingCreateRequest, PostSaleRecordRequest,
+    CommissionRecordRequest, CommissionSettleRequest, CommissionDisputeRequest,
+    CommissionReverseRequest, ClosingCreateRequest, PostSaleRecordRequest,
     DocumentUploadRequest, DealPipelineSummary, CommercialAuditLogEntry
 )
 
-router = APIRouter(prefix="/deals", tags=["Deal, Booking & Transaction OS"])
+router = APIRouter(prefix="/deals", tags=["Deal, Booking & Transaction OS"], dependencies=[Depends(get_current_tenant)])
 
 
 def _to_summary_dict(d, lead_map=None, prop_map=None) -> Dict[str, Any]:
@@ -166,6 +167,7 @@ async def create_deal(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Deal Detail & Stage Advance
 # ─────────────────────────────────────────────────────────────────────────────
@@ -254,16 +256,44 @@ async def get_deal(
     comm_data = None
     if deal.commission_record:
         c = deal.commission_record
+        splits = c.commission_splits or []
+        first_split = splits[0] if (isinstance(splits, list) and len(splits) > 0 and isinstance(splits[0], dict)) else {}
+        tax_rule_id = first_split.get("tax_rule_id")
+        split_basis = first_split.get("split_basis", "GROSS")
+        vat_amount = first_split.get("vat_amount", 0.0)
+        total_invoiced = first_split.get("total_invoiced_amount", float(c.gross_commission) + float(vat_amount))
+        statutory_disclaimer = first_split.get("statutory_disclaimer")
+        provenance = "MANUAL_UNVERIFIED"
+        if first_split.get("settlement_provenance"):
+            provenance = first_split["settlement_provenance"]
+        elif c.payment_mode:
+            if "[" in c.payment_mode and "]" in c.payment_mode:
+                provenance = c.payment_mode.split("[")[1].split("]")[0]
+            elif "CONFIRMED" in c.payment_mode or "GATEWAY" in c.payment_mode or "WEBHOOK" in c.payment_mode:
+                provenance = "PROVIDER_CONFIRMED"
+
         comm_data = {
             "id": str(c.id),
             "transaction_price": float(c.transaction_price),
             "currency": c.currency,
             "commission_percentage": float(c.commission_percentage),
             "gross_commission": float(c.gross_commission),
+            "tax_deducted": float(c.tax_deducted) if c.tax_deducted else None,
             "net_commission": float(c.net_commission) if c.net_commission else None,
+            "tax_rule_id": tax_rule_id,
+            "split_basis": split_basis,
+            "vat_amount": vat_amount,
+            "total_invoiced_amount": total_invoiced,
+            "statutory_disclaimer": statutory_disclaimer,
+            "provenance": provenance,
             "commission_splits": c.commission_splits or [],
             "status": c.status,
             "invoice_reference": c.invoice_reference,
+            "paid_at": c.paid_at.isoformat() if c.paid_at else None,
+            "payment_reference": c.payment_reference,
+            "payment_mode": c.payment_mode,
+            "disputed_at": c.disputed_at.isoformat() if c.disputed_at else None,
+            "dispute_reason": c.dispute_reason,
         }
 
     closing_data = None
@@ -538,16 +568,125 @@ async def record_commission(
             transaction_price=payload.transaction_price,
             currency=payload.currency,
             commission_percentage=payload.commission_percentage,
+            tax_rate_percentage=payload.tax_rate_percentage,
             tax_deducted=payload.tax_deducted,
+            split_basis=payload.split_basis or "GROSS",
+            other_deductions=payload.other_deductions,
+            broker_split_percentage=payload.broker_split_percentage,
+            agency_split_percentage=payload.agency_split_percentage,
             commission_splits=payload.commission_splits,
             invoice_reference=payload.invoice_reference,
-            idempotency_key=payload.idempotency_key
+            idempotency_key=payload.idempotency_key,
         )
         return {
             "status": "success",
             "commission_id": str(comm.id),
             "gross_commission": float(comm.gross_commission),
-            "net_commission": float(comm.net_commission) if comm.net_commission else None
+            "tax_deducted": float(comm.tax_deducted) if comm.tax_deducted else 0.0,
+            "net_commission": float(comm.net_commission) if comm.net_commission else None,
+            "commission_splits": comm.commission_splits
+        }
+    except DealServiceError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{deal_id}/commissions/settle")
+async def settle_commission(
+    deal_id: str,
+    payload: CommissionSettleRequest,
+    db: AsyncSession = Depends(get_db),
+    broker: Broker = Depends(get_current_broker)
+):
+    """Settle commission upon verified receipt with manual audit tagging and revenue recognition."""
+    org_id = str(broker.organization_id or broker.id)
+    service = DealService(db)
+    try:
+        comm = await service.settle_commission(
+            deal_id=deal_id,
+            organization_id=org_id,
+            actor_id=str(broker.id),
+            settled_amount=payload.settled_amount,
+            payment_reference=payload.payment_reference,
+            payment_mode=payload.payment_mode,
+            provenance=payload.provenance or "MANUAL_UNVERIFIED",
+            currency=payload.currency,
+            settled_at=payload.settled_at,
+            notes=payload.notes,
+            settlement_evidence_url=payload.settlement_evidence_url,
+            idempotency_key=payload.idempotency_key
+        )
+        return {
+            "status": "success",
+            "commission_id": str(comm.id),
+            "deal_id": deal_id,
+            "commission_status": comm.status,
+            "settled_amount": float(comm.net_commission) if comm.net_commission else float(comm.gross_commission),
+            "payment_reference": comm.payment_reference,
+            "payment_mode": comm.payment_mode,
+            "provenance": getattr(comm, "_provenance", "MANUAL_UNVERIFIED"),
+            "paid_at": comm.paid_at.isoformat() if comm.paid_at else None
+        }
+    except DealServiceError as e:
+        msg = str(e)
+        if "Unauthorized reviewer" in msg or "forbidden" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+
+@router.post("/{deal_id}/commissions/dispute")
+async def dispute_commission(
+    deal_id: str,
+    payload: CommissionDisputeRequest,
+    db: AsyncSession = Depends(get_db),
+    broker: Broker = Depends(get_current_broker)
+):
+    """Mark a commission record as disputed with audit reasoning."""
+    org_id = str(broker.organization_id or broker.id)
+    service = DealService(db)
+    try:
+        comm = await service.dispute_commission(
+            deal_id=deal_id,
+            organization_id=org_id,
+            actor_id=str(broker.id),
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key or ""
+        )
+        return {
+            "status": "success",
+            "commission_id": str(comm.id),
+            "deal_id": deal_id,
+            "commission_status": comm.status,
+            "dispute_reason": comm.dispute_reason,
+            "disputed_at": comm.disputed_at.isoformat() if comm.disputed_at else None
+        }
+    except DealServiceError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{deal_id}/commissions/reverse")
+async def reverse_settlement(
+    deal_id: str,
+    payload: CommissionReverseRequest,
+    db: AsyncSession = Depends(get_db),
+    broker: Broker = Depends(get_current_broker)
+):
+    """Reverse a settled commission and issue a revenue refund event."""
+    org_id = str(broker.organization_id or broker.id)
+    service = DealService(db)
+    try:
+        comm = await service.reverse_settlement(
+            deal_id=deal_id,
+            organization_id=org_id,
+            actor_id=str(broker.id),
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key or ""
+        )
+        return {
+            "status": "success",
+            "commission_id": str(comm.id),
+            "deal_id": deal_id,
+            "commission_status": comm.status,
+            "reversal_reason": payload.reason
         }
     except DealServiceError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

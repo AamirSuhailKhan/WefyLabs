@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, Phone, MessageSquare, Edit3, Plus, X } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { Lead } from '@/types';
 
@@ -175,11 +175,7 @@ export default function LeadsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      <DashboardNav />
-
-      <div className="pt-16">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+    <PageContainer>
 
           {/* ── Page Header ── */}
           <div className="py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8]">
@@ -341,8 +337,6 @@ export default function LeadsPage() {
               )}
             </div>
           </div>
-        </div>
-      </div>
 
       {/* ── Add New Lead Modal ── */}
       <AnimatePresence>
@@ -447,6 +441,6 @@ export default function LeadsPage() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </PageContainer>
   );
 }

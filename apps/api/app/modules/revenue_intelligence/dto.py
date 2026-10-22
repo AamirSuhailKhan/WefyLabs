@@ -214,6 +214,7 @@ class SnapshotListDTO(BaseModel):
 
 class RevenueOverviewDTO(BaseModel):
     organization_id: str
+    currency: Optional[str] = Field("INR", description="Organization currency code (e.g. INR, AED, USD)")
     realized_revenue: Optional[float] = Field(None, description="Confirmed revenue from closed transactions.")
     current_pipeline_estimate: Optional[float] = Field(None, description="Sum of budget_max for active qualified+ leads.")
     revenue_at_risk_estimate: Optional[float] = Field(None, description="Value of stalled or explicitly lost opportunities.")

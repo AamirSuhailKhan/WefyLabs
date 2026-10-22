@@ -32,19 +32,26 @@ globalThis.describe = function(name, fn) {
   }
 };
 
-globalThis.it = async function(name, fn) {
+const pendingTests = [];
+
+globalThis.it = function(name, fn) {
   totalTests++;
-  try {
-    const res = fn();
-    if (res instanceof Promise) {
-      await res;
+  const suiteName = currentSuite;
+  const p = Promise.resolve().then(async () => {
+    try {
+      const res = fn();
+      if (res instanceof Promise) {
+        await res;
+      }
+      passedTests++;
+    } catch (err) {
+      failedTests++;
+      console.error(`  FAIL: [${suiteName}] > ${name}`);
+      console.error(`    ${err.message}`);
     }
-    passedTests++;
-  } catch (err) {
-    failedTests++;
-    console.error(`  FAIL: [${currentSuite}] > ${name}`);
-    console.error(`    ${err.message}`);
-  }
+  });
+  pendingTests.push(p);
+  return p;
 };
 
 globalThis.expect = function(actual) {
@@ -170,6 +177,8 @@ for (const file of specFiles) {
     console.error(`Error loading ${rel}:`, err);
   }
 }
+
+await Promise.all(pendingTests);
 
 console.log(`\n============================================================`);
 console.log(`FRONTEND SPEC EXECUTION COMPLETE`);

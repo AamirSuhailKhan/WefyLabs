@@ -12,6 +12,7 @@ Secure token-based password reset workflow:
 import secrets
 import hashlib
 import logging
+from urllib.parse import urlsplit
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from uuid import UUID
@@ -31,6 +32,35 @@ logger = logging.getLogger("beetlelabs.auth.password_reset")
 GENERIC_RESET_RESPONSE = {
     "message": "If this email address is registered, password reset instructions have been sent."
 }
+
+
+def _trusted_frontend_base_url(candidate: Optional[str]) -> str:
+    """Resolve the configured public app URL; request headers are never trusted."""
+    configured = candidate or getattr(settings, "FRONTEND_URL", None) or getattr(settings, "APP_URL", None)
+    production = settings.ENV.lower() in {"production", "prod", "staging"}
+    if not configured:
+        if production:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password reset is unavailable because the public frontend URL is not configured.",
+            )
+        configured = "http://localhost:3000"
+
+    parsed = urlsplit(configured)
+    if (
+        parsed.scheme not in ("https", "http")
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or (production and parsed.scheme != "https")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset is unavailable because the public frontend URL is invalid.",
+        )
+    return configured.rstrip("/")
 
 
 def _ensure_utc(dt: datetime) -> datetime:
@@ -58,6 +88,7 @@ class PasswordResetService:
         Initiates password reset flow.
         Always returns generic response regardless of whether account exists.
         """
+        base_url = _trusted_frontend_base_url(frontend_base_url)
         normalized_email = email.strip().lower()
         if not normalized_email:
             return GENERIC_RESET_RESPONSE
@@ -99,7 +130,6 @@ class PasswordResetService:
         await db.commit()
 
         # Build reset link and asset URL
-        base_url = (frontend_base_url or getattr(settings, "APP_URL", "http://localhost:3000")).rstrip("/")
         reset_link = f"{base_url}/reset-password?token={raw_token}"
         asset_url = getattr(settings, "ASSET_URL", None) or f"{base_url}/branding/wefylabs-mark.png"
 
@@ -211,6 +241,7 @@ class PasswordResetService:
             )
 
         broker.password_hash = new_hash
+        broker.auth_version = int(getattr(broker, "auth_version", 0) or 0) + 1
         broker.updated_at = now
 
         # Synchronize User model if present

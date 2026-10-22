@@ -483,7 +483,7 @@ class RevenueActionPolicyEngine:
             return TenantAutonomyConfig(
                 organization_id=organization_id or "UNKNOWN",
                 execution_mode=Phase2ExecutionMode.SHADOW,
-                default_level_low_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
+                default_level_low_risk=Phase2AutonomyLevel.AUTONOMOUS_GOVERNED,
                 default_level_medium_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
                 default_level_high_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
                 default_level_financial=Phase2AutonomyLevel.OBSERVE_ONLY,
@@ -493,7 +493,7 @@ class RevenueActionPolicyEngine:
             TenantAutonomyConfig(
                 organization_id=organization_id,
                 execution_mode=Phase2ExecutionMode.SHADOW,
-                default_level_low_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
+                default_level_low_risk=Phase2AutonomyLevel.AUTONOMOUS_GOVERNED,
                 default_level_medium_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
                 default_level_high_risk=Phase2AutonomyLevel.OBSERVE_ONLY,
                 default_level_financial=Phase2AutonomyLevel.OBSERVE_ONLY,

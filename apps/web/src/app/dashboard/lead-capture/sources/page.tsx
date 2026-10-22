@@ -16,10 +16,9 @@ import {
   Share2, 
   CheckCircle2, 
   AlertTriangle, 
-  XCircle,
   ExternalLink
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import LeadCaptureNav from '@/components/lead-capture/LeadCaptureNav';
 import { api } from '@/lib/api-client';
 
@@ -138,49 +137,44 @@ export default function LeadCaptureSourcesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-gray-900 pb-16">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto pt-20 px-4 sm:px-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-6 border-b border-gray-200">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest bg-gray-900 text-white">
-                Part 26
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900">
-                Source Management
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-gray-500">
-              Configure and test lead capture endpoints, rotate public tokens, and copy website embed code.
-            </p>
+    <PageContainer className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-6 border-b border-[#D4D0C8]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-widest bg-[#1A1A1A] text-white">
+              Part 26
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1A1A1A]">
+              Source Management
+            </h1>
           </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={fetchSources}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-sm"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <button
-              onClick={() => setCreateModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-xs font-semibold hover:bg-gray-800 transition shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Source
-            </button>
-          </div>
+          <p className="text-xs sm:text-sm text-[#6B6B6B]">
+            Configure and test lead capture endpoints, rotate public tokens, and copy website embed code.
+          </p>
         </div>
 
-        {/* Lead Capture Sub Navigation */}
-        <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-          <LeadCaptureNav />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchSources}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl text-xs font-semibold text-[#1A1A1A] hover:bg-white transition shadow-2xs cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#2C4BFB]' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={() => setCreateModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#1A1A1A] text-white rounded-xl text-xs font-semibold hover:bg-black transition shadow-xs cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Source
+          </button>
         </div>
+      </div>
+
+      {/* Lead Capture Sub Navigation */}
+      <LeadCaptureNav activeTab="sources" />
 
         {/* Toast */}
         {toastMessage && (
@@ -418,7 +412,6 @@ export default function LeadCaptureSourcesPage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+    </PageContainer>
   );
 }

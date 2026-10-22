@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.dependencies import get_db
-from app.services.conversation_service import process_incoming_whatsapp_message
-
 from app.modules.communication.canonical_service import canonical_communication_service
 
 logger = logging.getLogger("wefylabs.whatsapp")
@@ -73,13 +71,17 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     try:
         data = await request.json()
     except Exception:
-        return {"status": "ok", "detail": "Invalid or empty JSON body"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook body must contain valid JSON.",
+        )
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Webhook JSON body must be an object.",
+        )
 
     try:
-        if "messages" in data and "entry" not in data:
-            result = await process_incoming_whatsapp_message(db, data)
-            return {"status": "ok", "result": result}
-
         result = await canonical_communication_service.ingest_inbound_webhook(
             db=db,
             provider_name="whatsapp_cloud",
@@ -93,5 +95,8 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
         raise
     except Exception as e:
         logger.error(f"[WhatsApp Webhook Error] {type(e).__name__}: {e}", exc_info=True)
-        return {"status": "ok", "detail": "Internal processing error"}
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="WhatsApp webhook processing failed. The provider may retry delivery.",
+        ) from e
 

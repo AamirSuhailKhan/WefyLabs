@@ -646,12 +646,16 @@ async def test_api_analyze_customer_message(db_session: AsyncSession):
     async def override_get_db():
         yield db_session
 
-    from app.dependencies import get_current_broker
+    from app.dependencies import TenantContext, get_current_broker, get_current_tenant
     async def override_get_broker():
         return broker
 
+    async def override_get_tenant():
+        return TenantContext(organization_id=org_id, broker_id=broker.id, role="ADMIN")
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_broker] = override_get_broker
+    app.dependency_overrides[get_current_tenant] = override_get_tenant
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -682,12 +686,16 @@ async def test_api_generate_and_approve_draft_reply(db_session: AsyncSession):
     async def override_get_db():
         yield db_session
 
-    from app.dependencies import get_current_broker
+    from app.dependencies import TenantContext, get_current_broker, get_current_tenant
     async def override_get_broker():
         return broker
 
+    async def override_get_tenant():
+        return TenantContext(organization_id=org_id, broker_id=broker.id, role="ADMIN")
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_broker] = override_get_broker
+    app.dependency_overrides[get_current_tenant] = override_get_tenant
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

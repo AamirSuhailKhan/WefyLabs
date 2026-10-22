@@ -200,6 +200,7 @@ async def test_enrichment_service_full_pipeline(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_enrichment_api_endpoints(db_session: AsyncSession):
+    from app.dependencies import get_current_tenant, TenantContext
     # Override get_db dependency to use the active SQLite test session
     async def _get_test_db():
         yield db_session
@@ -228,6 +229,9 @@ async def test_enrichment_api_endpoints(db_session: AsyncSession):
     )
     db_session.add(lead)
     await db_session.commit()
+
+    test_tenant = TenantContext(organization_id=str(broker.id), broker_id=broker.id, role="ADMIN")
+    app.dependency_overrides[get_current_tenant] = lambda: test_tenant
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

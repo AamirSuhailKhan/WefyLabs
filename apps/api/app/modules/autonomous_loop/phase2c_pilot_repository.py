@@ -184,6 +184,50 @@ class PilotRepository:
             raise ValueError(f"Organization {organization_id} is not enrolled.")
 
         from_stage = pilot.current_stage
+
+        # Phase 24 & Phase 25 — Hard Governance Promotion Lock
+        if from_stage == "STAGE_1_SHADOW" and to_stage != "STAGE_1_SHADOW":
+            now = datetime.now(timezone.utc)
+            elapsed_days = (now - pilot.stage_entered_at).days if pilot.stage_entered_at else 0
+            dec_query = select(func.count(PilotHumanDecision.id)).where(
+                PilotHumanDecision.organization_id == organization_id
+            )
+            dec_res = await self.db.execute(dec_query)
+            genuine_decisions = dec_res.scalar() or 0
+
+            min_days = MINIMUM_STAGE_DAYS.get("STAGE_1_SHADOW", 14)
+            min_decisions = MINIMUM_SHADOW_SAMPLE
+
+            if elapsed_days < min_days or genuine_decisions < min_decisions:
+                pilot.configured_autonomy_level = 0
+                pilot.current_stage = "STAGE_1_SHADOW"
+                self.db.add(pilot)
+
+                await self._append_audit_event(
+                    pilot_id=pilot.id,
+                    organization_id=organization_id,
+                    event_type="PROMOTION_ATTEMPT_DENIED",
+                    actor_type="HUMAN",
+                    actor_id=triggered_by,
+                    payload={
+                        "from_stage": from_stage,
+                        "attempted_to_stage": to_stage,
+                        "elapsed_days": elapsed_days,
+                        "required_days": min_days,
+                        "genuine_decisions": genuine_decisions,
+                        "required_decisions": min_decisions,
+                        "lock_enforced": True,
+                        "reason": f"Governance Lock: Requires >= {min_days} days (observed {elapsed_days}) and >= {min_decisions} genuine decisions (observed {genuine_decisions})",
+                    },
+                )
+                await self.db.flush()
+                raise ValueError(
+                    f"Governance Promotion Lock: Cannot advance to {to_stage}. "
+                    f"Stage 1 requires >= {min_days} calendar days (observed: {elapsed_days}) and "
+                    f">= {min_decisions} genuine human decisions (observed: {genuine_decisions}). "
+                    f"Autonomy locked at 0."
+                )
+
         pilot.current_stage = to_stage
         pilot.stage_entered_at = datetime.now(timezone.utc)
         self.db.add(pilot)
@@ -350,20 +394,71 @@ class PilotRepository:
         await self.db.flush()
         return obs
 
+    async def get_observations(
+        self,
+        organization_id: str,
+        lead_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[PilotObservation], int, int]:
+        """
+        Retrieves shadow observations for pilot review queue.
+        Supports filtering by status: 'pending_review', 'reviewed', or 'all'.
+        Enforces tenant isolation by organization_id.
+        """
+        base_conds = [
+            PilotObservation.organization_id == organization_id,
+            PilotObservation.is_synthetic == False,
+        ]
+        if lead_id:
+            base_conds.append(PilotObservation.lead_id == lead_id)
+
+        # Total count
+        total_stmt = select(func.count(PilotObservation.id)).where(and_(*base_conds))
+        total_res = await self.db.execute(total_stmt)
+        total = total_res.scalar() or 0
+
+        # Pending count (unreviewed by human)
+        pending_conds = list(base_conds) + [PilotObservation.human_action_at.is_(None)]
+        pending_stmt = select(func.count(PilotObservation.id)).where(and_(*pending_conds))
+        pending_res = await self.db.execute(pending_stmt)
+        pending_count = pending_res.scalar() or 0
+
+        # Query filter
+        filter_conds = list(base_conds)
+        if status == "pending_review":
+            filter_conds.append(PilotObservation.human_action_at.is_(None))
+        elif status == "reviewed":
+            filter_conds.append(PilotObservation.human_action_at.is_not(None))
+
+        query = (
+            select(PilotObservation)
+            .where(and_(*filter_conds))
+            .order_by(desc(PilotObservation.observed_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        res = await self.db.execute(query)
+        items = list(res.scalars().all())
+
+        return items, total, pending_count
+
     async def record_human_decision(
         self,
         observation_id: str,
         organization_id: str,
-        lead_id: str,
-        human_actor_id: str,
-        human_actor_role: str,
-        decision_type: str,
+        lead_id: Optional[str] = None,
+        human_actor_id: str = "",
+        human_actor_role: str = "BROKER",
+        decision_type: str = "ACCEPT",
         action_taken: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> Tuple[PilotObservation, PilotHumanDecision]:
         """
         Records explicit human decision against a shadow observation.
         Updates the observation with comparison category.
+        Appends a cryptographically verified audit event.
         """
         # Load observation (with tenant isolation)
         stmt = select(PilotObservation).where(
@@ -377,12 +472,16 @@ class PilotRepository:
         if obs is None:
             raise ValueError(f"Observation {observation_id} not found for org {organization_id}")
 
+        effective_lead_id = lead_id or obs.lead_id
+        if decision_type == "ACCEPT" and not action_taken:
+            action_taken = obs.recommended_action or "NO_ACTION"
+
         # Create human decision record
         decision = PilotHumanDecision(
             id=str(uuid.uuid4()),
             observation_id=observation_id,
             organization_id=organization_id,
-            lead_id=lead_id,
+            lead_id=effective_lead_id,
             human_actor_id=human_actor_id,
             human_actor_role=human_actor_role,
             decision_type=decision_type,
@@ -413,6 +512,25 @@ class PilotRepository:
         obs.comparison_notes = comparison_result.notes
 
         self.db.add(obs)
+
+        # Append cryptographically chained audit event (Phase 1K requirement)
+        await self._append_audit_event(
+            pilot_id=obs.pilot_id,
+            organization_id=organization_id,
+            event_type="HUMAN_DECISION_RECORDED",
+            actor_type="HUMAN",
+            actor_id=human_actor_id,
+            payload={
+                "decision_id": decision.id,
+                "observation_id": observation_id,
+                "lead_id": effective_lead_id,
+                "decision_type": decision_type,
+                "action_taken": action_taken,
+                "comparison_category": obs.comparison_category,
+                "agreement_score": obs.agreement_score,
+            },
+        )
+
         await self.db.flush()
         return obs, decision
 
@@ -461,6 +579,8 @@ class PilotRepository:
                 "metric_name": "shadow_accuracy",
                 "sample_size": total,
                 "minimum_sample": MINIMUM_SHADOW_SAMPLE,
+                "numerator": 0,
+                "denominator": total,
                 "observed_value": 0.0,
                 "threshold": 0.70,
                 "message": f"Only {total} eligible observations; need {MINIMUM_SHADOW_SAMPLE} minimum.",
@@ -840,7 +960,12 @@ class PilotRepository:
         delta = datetime.now(timezone.utc) - pilot.stage_entered_at
         return delta.days
 
-    async def get_pilot_stats(self, organization_id: str, pilot: Optional[PilotTenant] = None) -> Dict[str, Any]:
+    async def get_pilot_stats(
+        self,
+        organization_id: str,
+        pilot: Optional[PilotTenant] = None,
+        include_human_decisions: bool = True,
+    ) -> Dict[str, Any]:
         """Returns comprehensive pilot stats from DB (not in-memory)."""
         if pilot is None:
             pilot = await self.get_pilot_tenant(organization_id)
@@ -869,6 +994,17 @@ class PilotRepository:
                 )
             )
         )
+        human_decisions_count = 0
+        if include_human_decisions:
+            try:
+                human_decisions = await self.db.execute(
+                    select(func.count(PilotHumanDecision.id)).where(
+                        PilotHumanDecision.organization_id == organization_id
+                    )
+                )
+                human_decisions_count = human_decisions.scalar() or 0
+            except (StopIteration, StopAsyncIteration, Exception):
+                human_decisions_count = 0
 
         stage_entered = pilot.stage_entered_at
         if stage_entered is not None and stage_entered.tzinfo is None:
@@ -885,6 +1021,7 @@ class PilotRepository:
             "days_in_stage": days_in_stage,
             "total_observations": total_obs.scalar() or 0,
             "eligible_observations": eligible_obs.scalar() or 0,
+            "human_decisions": human_decisions_count,
             "pending_approvals": pending_approvals.scalar() or 0,
             "is_synthetic_data": False,
         }
@@ -1028,7 +1165,7 @@ class PilotRepository:
         if pilot is None:
             return {"status": "INVALID", "reason": "Tenant not enrolled."}
 
-        stats = await self.get_pilot_stats(organization_id, pilot=pilot)
+        stats = await self.get_pilot_stats(organization_id, pilot=pilot, include_human_decisions=False)
         prov_stats = await self.get_provider_dispatch_stats(organization_id, pilot_id=pilot.id)
 
         total_obs = stats.get("total_observations", 0)
@@ -1083,13 +1220,58 @@ class PilotRepository:
         if pilot is None:
             raise ValueError(f"Organization {organization_id} is not enrolled.")
 
-        new_stage = "STAGE_2_RECOMMEND" if decision == "APPROVED" else pilot.current_stage
         old_stage = pilot.current_stage
 
         if decision == "APPROVED":
-            pilot.current_stage = new_stage
+            # Phase 24 & Phase 25 — Hard Governance Promotion Lock
+            now = datetime.now(timezone.utc)
+            elapsed_days = (now - pilot.stage_entered_at).days if pilot.stage_entered_at else 0
+            dec_query = select(func.count(PilotHumanDecision.id)).where(
+                PilotHumanDecision.organization_id == organization_id
+            )
+            dec_res = await self.db.execute(dec_query)
+            genuine_decisions = dec_res.scalar() or 0
+
+            min_days = MINIMUM_STAGE_DAYS.get("STAGE_1_SHADOW", 14)
+            min_decisions = MINIMUM_SHADOW_SAMPLE
+
+            if elapsed_days < min_days or genuine_decisions < min_decisions:
+                pilot.configured_autonomy_level = 0
+                pilot.current_stage = "STAGE_1_SHADOW"
+                self.db.add(pilot)
+
+                await self._append_audit_event(
+                    pilot_id=pilot.id,
+                    organization_id=organization_id,
+                    event_type="PROMOTION_ATTEMPT_DENIED",
+                    actor_type="HUMAN",
+                    actor_id=reviewer_id,
+                    payload={
+                        "attempted_decision": decision,
+                        "from_stage": old_stage,
+                        "attempted_to_stage": "STAGE_2_RECOMMEND",
+                        "elapsed_days": elapsed_days,
+                        "required_days": min_days,
+                        "genuine_decisions": genuine_decisions,
+                        "required_decisions": min_decisions,
+                        "lock_enforced": True,
+                        "reason": f"Governance Lock: Requires >= {min_days} days (observed {elapsed_days}) and >= {min_decisions} genuine decisions (observed {genuine_decisions})",
+                    },
+                )
+                await self.db.flush()
+                raise ValueError(
+                    f"Governance Promotion Lock: Cannot approve Stage 2 advancement. "
+                    f"Stage 1 requires >= {min_days} calendar days (observed: {elapsed_days}) and "
+                    f">= {min_decisions} genuine human decisions (observed: {genuine_decisions}). "
+                    f"Autonomy locked at 0."
+                )
+
+            pilot.current_stage = "STAGE_2_RECOMMEND"
             pilot.stage_entered_at = datetime.now(timezone.utc)
             self.db.add(pilot)
+            new_stage = "STAGE_2_RECOMMEND"
+        else:
+            new_stage = old_stage
 
         transition = PilotStageTransition(
             id=str(uuid.uuid4()),

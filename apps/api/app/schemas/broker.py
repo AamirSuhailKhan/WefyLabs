@@ -5,6 +5,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, computed_field
 
 INDIAN_PHONE_REGEX = re.compile(r"^(\+91)?([6-9]\d{9})$")
+INTERNATIONAL_PHONE_REGEX = re.compile(r"^\+[1-9]\d{6,14}$")
 
 def validate_and_normalize_indian_phone(v: Optional[str]) -> Optional[str]:
     if v is None:
@@ -17,13 +18,17 @@ def validate_and_normalize_indian_phone(v: Optional[str]) -> Optional[str]:
     if not cleaned:
         return None
     
-    # Handle leading 0 (e.g. 09876543210 -> 9876543210)
+    # Check E.164 international phone number format (e.g. +971501234567, +14155552671)
+    if cleaned.startswith("+") and INTERNATIONAL_PHONE_REGEX.match(cleaned):
+        return cleaned
+
+    # Handle leading 0 for Indian numbers (e.g. 09876543210 -> 9876543210)
     if cleaned.startswith("0") and len(cleaned) == 11 and cleaned[1] in "6789":
         cleaned = cleaned[1:]
         
     match = INDIAN_PHONE_REGEX.match(cleaned)
     if not match:
-        raise ValueError("Invalid phone number format. Please enter a valid 10-digit Indian phone number (e.g. +91 98765 43210 or 9876543210).")
+        raise ValueError("Invalid phone number format. Please enter a valid phone number (e.g. +91 98765 43210 or +971 50 123 4567).")
     ten_digit = match.group(2)
     return f"+91{ten_digit}"
 

@@ -86,6 +86,13 @@ class TestWebhookHMACSignatureAndReplay:
 
         assert svc.check_replay_attack(fresh_timestamp, max_skew_seconds=300) is True
 
+    def test_malformed_or_non_finite_timestamp_rejected(self):
+        svc = GenericWebhookEngineService()
+
+        assert svc.check_replay_attack("not-a-timestamp") is False
+        assert svc.check_replay_attack("NaN") is False
+        assert svc.check_replay_attack("Infinity") is False
+
     @pytest.mark.asyncio
     async def test_replay_attack_raises_http_400(self):
         svc = GenericWebhookEngineService()
@@ -115,6 +122,24 @@ class TestWebhookHMACSignatureAndReplay:
             await svc.ingest_webhook(dto, b'{"text":"hello"}', {})
         assert exc_info.value.status_code == 401
         assert "signature" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_caller_supplied_organization_header_is_not_trusted(self):
+        secret = "secret_key_32_characters_long_entropy!"
+        svc = GenericWebhookEngineService(secrets={"custom": secret})
+        raw_body = b'{"event":"safe"}'
+        signature = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        dto = WebhookPayloadDTO(
+            provider="custom",
+            event_type="message",
+            payload={"event": "safe"},
+            signature=signature,
+        )
+
+        with patch("app.modules.webhooks.service.webhook_service.event_bus.publish", new_callable=AsyncMock) as publish:
+            await svc.ingest_webhook(dto, raw_body, {"x-organization-id": "attacker-org"})
+
+        assert publish.await_args.args[0].organization_id == "global"
 
 
 class TestProductionWebhookSecretValidation:

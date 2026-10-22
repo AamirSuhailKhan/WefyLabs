@@ -57,7 +57,17 @@ class LeadEnrichmentService:
         lead_id = str(lead_dto.get("id"))
         org_id = str(lead_dto.get("organization_id") or lead_dto.get("broker_id") or "default_org")
 
-        logger.info(f"[ENRICHMENT_PIPELINE] Starting enrichment for Lead ID: {lead_id} (Trigger: {trigger_source})")
+        # Resolve authoritative organization_id from DB entity if lead exists
+        try:
+            db_lead_stmt = select(Lead).where(Lead.id == uuid.UUID(lead_id))
+            db_lead_res = await self.db.execute(db_lead_stmt)
+            db_lead = db_lead_res.scalar_one_or_none()
+            if db_lead:
+                org_id = str(db_lead.organization_id or db_lead.broker_id)
+        except Exception:
+            pass
+
+        logger.info(f"[ENRICHMENT_PIPELINE] Starting enrichment for Lead ID: {lead_id} (Trigger: {trigger_source}, Org: {org_id})")
 
         # 0. Emit Event: LeadEnrichmentStarted
         await self.event_publisher.publish("lead_events", LeadEnrichmentStarted(

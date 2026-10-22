@@ -39,6 +39,28 @@ logger = logging.getLogger("beetlelabs.revenue_autopilot.engine")
 
 SCORING_VERSION = "v1"
 
+
+def _safe_org_uuid(broker: Broker) -> uuid.UUID:
+    raw = getattr(broker, "organization_id", None)
+    if raw:
+        if isinstance(raw, uuid.UUID):
+            return raw
+        try:
+            return uuid.UUID(str(raw))
+        except (ValueError, TypeError):
+            pass
+    broker_id = getattr(broker, "id", None)
+    if broker_id:
+        if isinstance(broker_id, uuid.UUID):
+            return broker_id
+        try:
+            return uuid.UUID(str(broker_id))
+        except (ValueError, TypeError):
+            pass
+    if raw:
+        return uuid.uuid5(uuid.NAMESPACE_DNS, str(raw))
+    return uuid.uuid4()
+
 # Scoring factor weights (Transparent & Deterministic)
 SCORING_WEIGHTS = {
     "match_fit": 0.35,
@@ -393,7 +415,7 @@ class RevenueAutopilotEngine:
         generating deduplicated revenue opportunities across all categories.
         """
         broker_uuid = uuid.UUID(str(broker.id))
-        org_uuid = uuid.UUID(str(getattr(broker, "organization_id", None) or broker.id))
+        org_uuid = _safe_org_uuid(broker)
         now = datetime.now(timezone.utc)
 
         # Invalidate stale ones first

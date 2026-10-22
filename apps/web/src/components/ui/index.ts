@@ -2,6 +2,7 @@ export * from './Button';
 export * from './Card';
 export * from './StatusBadge';
 export * from './PageHeader';
+export * from './PageContainer';
 export * from './ConfirmDialog';
 export * from './KpiCard';
 export * from './EmptyState';

@@ -175,6 +175,7 @@ class CommandCenterResponseDTO(BaseModel):
     broker_id: str
     broker_name: str
     timezone: str = "Asia/Kolkata"
+    currency: str = "INR"
     summary: CommandCenterSummaryDTO
     daily_briefing: DailyBriefingDTO
     priorities: List[PriorityItemDTO]

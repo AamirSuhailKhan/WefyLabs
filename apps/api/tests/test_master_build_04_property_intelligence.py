@@ -33,6 +33,7 @@ from fastapi import HTTPException
 
 from app.models.broker import Broker
 from app.models.lead import Lead
+from app.models.organization import Organization, OrganizationMember
 from app.models.inventory_models import (
     RealEstateDeveloper, RealEstateProject, ProjectPhase, ProjectBuilding,
     ProjectFloor, ProjectUnit, ProjectUnitStatusLog, UnitInventoryStatus
@@ -301,7 +302,9 @@ async def test_05_price_truth_and_history_logging(db_session: AsyncSession):
     broker_id = uuid.uuid4()
     org_id = uuid.uuid4()
     broker = Broker(id=broker_id, name="Agent Sharma", email=f"sharma_{uuid.uuid4().hex[:6]}@realty.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="Sharma Realty", slug=f"sharma-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)
@@ -357,7 +360,9 @@ async def test_06_availability_truth_and_status_logs(db_session: AsyncSession):
     # Link with commercial listing
     commercial_svc = CommercialPropertyService(db_session)
     broker = Broker(id=broker_id, name="Test Agent", email=f"agent_{uuid.uuid4().hex[:6]}@test.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="Test Realty", slug=f"realty-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     prop = await commercial_svc.create_property(broker, {
@@ -401,7 +406,9 @@ async def test_07_source_trust_and_conflict_resolution(db_session: AsyncSession)
     org_id = uuid.uuid4()
     broker_id = uuid.uuid4()
     broker = Broker(id=broker_id, name="Conflict Agent", email=f"conflict_{uuid.uuid4().hex[:6]}@agent.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="Conflict Realty", slug=f"conflict-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)
@@ -493,7 +500,9 @@ async def test_09_deterministic_7_stage_search(db_session: AsyncSession):
     org_id = uuid.uuid4()
     broker_id = uuid.uuid4()
     broker = Broker(id=broker_id, name="Search Agent", email=f"search_{uuid.uuid4().hex[:6]}@agent.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="Search Realty", slug=f"search-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)
@@ -630,7 +639,9 @@ async def test_12_csv_import_pipeline_idempotency_and_dry_run(db_session: AsyncS
     org_id = uuid.uuid4()
     broker_id = uuid.uuid4()
     broker = Broker(id=broker_id, name="Import Agent", email=f"import_{uuid.uuid4().hex[:6]}@agent.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="Import Realty", slug=f"import-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)
@@ -677,7 +688,9 @@ async def test_13_fail_closed_tenant_isolation(db_session: AsyncSession):
     org_a = uuid.uuid4()
     org_b = uuid.uuid4()
     broker_a = Broker(id=uuid.uuid4(), name="Agent A", email=f"a_{uuid.uuid4().hex[:6]}@tenant.com")
-    db_session.add(broker_a)
+    org_a_obj = Organization(id=org_a, name="Tenant A Org", slug=f"tenant-a-{uuid.uuid4().hex[:6]}")
+    mem_a = OrganizationMember(organization_id=org_a, broker_id=broker_a.id, role="owner")
+    db_session.add_all([broker_a, org_a_obj, mem_a])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)
@@ -867,7 +880,9 @@ async def test_16_ai_property_tools_and_prompt_injection_defense(db_session: Asy
     org_id = uuid.uuid4()
     broker_id = uuid.uuid4()
     broker = Broker(id=broker_id, name="AI Agent", email=f"ai_{uuid.uuid4().hex[:6]}@agent.com")
-    db_session.add(broker)
+    org = Organization(id=org_id, name="AI Realty", slug=f"ai-{uuid.uuid4().hex[:6]}")
+    mem = OrganizationMember(organization_id=org_id, broker_id=broker_id, role="owner")
+    db_session.add_all([broker, org, mem])
     await db_session.flush()
 
     commercial_svc = CommercialPropertyService(db_session)

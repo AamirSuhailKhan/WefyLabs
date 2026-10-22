@@ -42,6 +42,9 @@ class EnterpriseSettings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     ENV: str = "development"
+    # Canonical browser origin used when generating authentication links.
+    # Never derive password reset links from an incoming Host header.
+    FRONTEND_URL: Optional[str] = None
 
     # Database & Cache
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore"

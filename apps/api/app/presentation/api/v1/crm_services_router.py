@@ -21,7 +21,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
@@ -40,6 +40,7 @@ from app.models.organization import RoleModel, PermissionModel, OrganizationMemb
 from app.services.rbac_service import RBACPermissionEvaluator
 from app.services.audit_service import AuditLogService, NotificationService
 from app.infrastructure.events.event_bus import event_bus, DomainEvent
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker, tenant_lead_filter
 
 router = APIRouter(prefix="/crm/services", tags=["CRM Services"])
 
@@ -245,14 +246,17 @@ class NoteResponse(BaseModel):
 async def create_lead(
     req: LeadCreateRequest,
     request: Request,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Create a new CRM lead with tenant isolation, RBAC check, audit log, and domain event."""
     await RBACPermissionEvaluator.enforce_permission(db, current_broker, "leads:create")
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
 
     lead = Lead(
         broker_id=current_broker.id,
+        organization_id=org_id,
         phone=req.phone,
         name=req.name,
         source=req.source or "manual",
@@ -275,7 +279,7 @@ async def create_lead(
 
     await event_bus.publish(DomainEvent(
         event_type="LeadCreated",
-        organization_id=str(getattr(current_broker, "organization_id", "global")),
+        organization_id=str(org_id or getattr(current_broker, "organization_id", "global")),
         user_id=str(current_broker.id),
         payload={"lead_id": str(lead.id), "name": req.name, "phone": req.phone}
     ))
@@ -291,13 +295,18 @@ async def list_leads(
     offset: int = Query(0, ge=0),
     score: Optional[str] = Query(None),
     pipeline_stage: Optional[str] = Query(None),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """List leads for the authenticated broker with optional filtering and pagination."""
     await RBACPermissionEvaluator.enforce_permission(db, current_broker, "leads:read")
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
 
-    stmt = select(Lead).where(Lead.broker_id == current_broker.id, Lead.deleted_at.is_(None))
+    stmt = select(Lead).where(
+        tenant_lead_filter(org_id, current_broker.id),
+        Lead.deleted_at.is_(None)
+    )
     if score:
         stmt = stmt.where(Lead.score == score)
     if pipeline_stage:
@@ -324,6 +333,7 @@ def _to_uuid(val: Any) -> Optional[uuid.UUID]:
 @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(
     req: TaskCreateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -332,6 +342,18 @@ async def create_task(
 
     broker_uuid = _to_uuid(current_broker.id)
     lead_uuid = _to_uuid(req.lead_id) if req.lead_id else None
+
+    if lead_uuid:
+        org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+        lead_check = await db.execute(
+            select(Lead).where(
+                Lead.id == lead_uuid,
+                tenant_lead_filter(org_id, current_broker.id),
+                Lead.deleted_at.is_(None)
+            )
+        )
+        if not lead_check.scalars().first():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
     task = Task(
         broker_id=broker_uuid,
@@ -390,6 +412,7 @@ async def list_tasks(
 async def update_task(
     task_id: str,
     req: TaskUpdateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -411,7 +434,19 @@ async def update_task(
     if req.priority is not None:
         task.priority = req.priority
     if req.lead_id is not None:
-        task.lead_id = _to_uuid(req.lead_id) if req.lead_id else None
+        new_lead_uuid = _to_uuid(req.lead_id) if req.lead_id else None
+        if new_lead_uuid:
+            org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+            lead_check = await db.execute(
+                select(Lead).where(
+                    Lead.id == new_lead_uuid,
+                    tenant_lead_filter(org_id, current_broker.id),
+                    Lead.deleted_at.is_(None)
+                )
+            )
+            if not lead_check.scalars().first():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+        task.lead_id = new_lead_uuid
     if req.status is not None:
         task.status = req.status
         if req.status == "completed":
@@ -483,10 +518,25 @@ async def delete_task(
 @router.post("/meetings", response_model=MeetingResponse, status_code=status.HTTP_201_CREATED)
 async def book_meeting(
     req: MeetingCreateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Book a client meeting / site visit with MeetingBooked event emission."""
+    if req.lead_id:
+        l_uuid = _to_uuid(req.lead_id)
+        if l_uuid:
+            org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+            lead_check = await db.execute(
+                select(Lead).where(
+                    Lead.id == l_uuid,
+                    tenant_lead_filter(org_id, current_broker.id),
+                    Lead.deleted_at.is_(None)
+                )
+            )
+            if not lead_check.scalars().first():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+
     meeting = Meeting(
         broker_id=str(current_broker.id),
         lead_id=req.lead_id,
@@ -702,6 +752,7 @@ async def get_pipeline_stages(
 async def update_lead_stage_endpoint(
     lead_id: str,
     req: StageUpdateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -711,7 +762,12 @@ async def update_lead_stage_endpoint(
     if not lead_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
-    stmt = select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker_uuid)
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+    stmt = select(Lead).where(
+        Lead.id == lead_uuid,
+        tenant_lead_filter(org_id, current_broker.id),
+        Lead.deleted_at.is_(None)
+    )
     res = await db.execute(stmt)
     lead = res.scalars().first()
     if not lead:
@@ -788,6 +844,7 @@ async def create_tag(
 async def assign_tag_to_lead(
     lead_id: str,
     tag_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -797,7 +854,14 @@ async def assign_tag_to_lead(
     if not lead_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
-    lead_res = await db.execute(select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker_uuid))
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+    lead_res = await db.execute(
+        select(Lead).where(
+            Lead.id == lead_uuid,
+            tenant_lead_filter(org_id, current_broker.id),
+            Lead.deleted_at.is_(None)
+        )
+    )
     lead = lead_res.scalars().first()
     tag_res = await db.execute(select(LeadTag).where(LeadTag.id == tag_id, LeadTag.broker_id == broker_uuid))
     tag = tag_res.scalars().first()
@@ -821,17 +885,19 @@ async def assign_tag_to_lead(
 async def assign_tag_to_lead_body(
     lead_id: str,
     req: TagAssignRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
     """Assign a tag to a lead using request body."""
-    return await assign_tag_to_lead(lead_id, req.tag_id, db, current_broker)
+    return await assign_tag_to_lead(lead_id, req.tag_id, x_organization_id, db, current_broker)
 
 
 @router.delete("/leads/{lead_id}/tags/{tag_id}")
 async def remove_tag_from_lead(
     lead_id: str,
     tag_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -841,7 +907,14 @@ async def remove_tag_from_lead(
     if not lead_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
-    lead_res = await db.execute(select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker_uuid))
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+    lead_res = await db.execute(
+        select(Lead).where(
+            Lead.id == lead_uuid,
+            tenant_lead_filter(org_id, current_broker.id),
+            Lead.deleted_at.is_(None)
+        )
+    )
     lead = lead_res.scalars().first()
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
@@ -862,6 +935,7 @@ async def remove_tag_from_lead(
 @router.get("/leads/{lead_id}/notes", response_model=List[NoteResponse])
 async def list_lead_notes(
     lead_id: str,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -871,9 +945,19 @@ async def list_lead_notes(
     if not lead_uuid:
         return []
 
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+    lead_res = await db.execute(
+        select(Lead).where(
+            Lead.id == lead_uuid,
+            tenant_lead_filter(org_id, current_broker.id),
+            Lead.deleted_at.is_(None)
+        )
+    )
+    if not lead_res.scalars().first():
+        return []
+
     stmt = select(LeadNote).where(
-        LeadNote.lead_id == lead_uuid,
-        LeadNote.broker_id == broker_uuid
+        LeadNote.lead_id == lead_uuid
     ).order_by(LeadNote.created_at.desc())
     res = await db.execute(stmt)
     return list(res.scalars().all())
@@ -883,6 +967,7 @@ async def list_lead_notes(
 async def create_lead_note(
     lead_id: str,
     req: NoteCreateRequest,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker)
 ):
@@ -892,7 +977,14 @@ async def create_lead_note(
     if not lead_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
-    lead_res = await db.execute(select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker_uuid))
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
+    lead_res = await db.execute(
+        select(Lead).where(
+            Lead.id == lead_uuid,
+            tenant_lead_filter(org_id, current_broker.id),
+            Lead.deleted_at.is_(None)
+        )
+    )
     lead = lead_res.scalars().first()
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")

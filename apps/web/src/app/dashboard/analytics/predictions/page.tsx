@@ -12,7 +12,7 @@ import {
   Sparkles, BarChart3, Shield, TrendingUp, AlertTriangle, CheckCircle2,
   RefreshCw, Database, Target, Info, ChevronRight, Activity, Clock,
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { PageHeader, Button } from '@/components/ui';
 import {
   getDataSufficiencyAudit,
@@ -205,10 +205,7 @@ export default function PredictiveIntelligencePage() {
   const totalCount = audit?.summary.total_targets ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] flex flex-col pt-16">
-      <DashboardNav />
-
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         <PageHeader
           title="PREDICTIVE INTELLIGENCE"
           description="Model registry, data sufficiency validation, statistical baseline heuristics, and propensity target catalog."
@@ -309,7 +306,6 @@ export default function PredictiveIntelligencePage() {
           <span>Last automated audit: {new Date(audit.audit_timestamp).toLocaleString()}</span>
         </div>
       )}
-      </main>
-    </div>
+    </PageContainer>
   );
 }

@@ -411,7 +411,7 @@ class TestEnrollmentApiAndSecurityGates:
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                res = await client.get(f"/api/v1/autonomous-loop/pilot/readiness?organization_id={org_b}")
+                res = await client.get("/api/v1/autonomous-loop/pilot/readiness", headers={"X-WefyLabs-Organization-Id": str(org_b)})
                 assert res.status_code == 403
                 assert res.json()["detail"]["code"] == "ORGANIZATION_ACCESS_DENIED"
         finally:
@@ -436,7 +436,7 @@ class TestEnrollmentApiAndSecurityGates:
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                r_readiness = await client.get(f"/api/v1/autonomous-loop/pilot/readiness?organization_id={org.id}")
+                r_readiness = await client.get("/api/v1/autonomous-loop/pilot/readiness", headers={"X-WefyLabs-Organization-Id": str(org.id)})
                 assert r_readiness.status_code == 200
                 data = r_readiness.json()["data"]
                 assert data["overall_ready"] is False
@@ -546,7 +546,7 @@ class TestEnrollmentValidationAndStatus:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 # 1. Before enrollment -> NOT_ENROLLED
-                s1 = await client.get(f"/api/v1/autonomous-loop/pilot/status?organization_id={org.id}")
+                s1 = await client.get("/api/v1/autonomous-loop/pilot/status", headers={"X-WefyLabs-Organization-Id": str(org.id)})
                 assert s1.status_code == 200
                 assert s1.json()["data"]["status"] == "NOT_ENROLLED"
 
@@ -555,7 +555,7 @@ class TestEnrollmentValidationAndStatus:
                 assert e.status_code == 201
 
                 # 3. After enrollment -> ACTIVE
-                s2 = await client.get(f"/api/v1/autonomous-loop/pilot/status?organization_id={org.id}")
+                s2 = await client.get("/api/v1/autonomous-loop/pilot/status", headers={"X-WefyLabs-Organization-Id": str(org.id)})
                 assert s2.status_code == 200
                 d2 = s2.json()["data"]
                 assert d2["status"] == "ACTIVE"

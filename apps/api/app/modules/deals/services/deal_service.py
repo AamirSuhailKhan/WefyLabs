@@ -14,6 +14,7 @@ from app.models.deal_models import (
     DealDocument, DealApprovalRequest, DealCommercialAuditLog,
 )
 from app.models.lead import Lead
+from app.models.organization import Organization
 from app.models.outbox_models import OutboxEvent
 from app.common.redis.distributed_lock import RedisDistributedLock
 
@@ -289,28 +290,464 @@ class DealService:
         await self.db.refresh(booking)
         return booking
 
-    async def record_commission(self, deal_id, organization_id, broker_id, actor_id, transaction_price, currency, commission_percentage, tax_deducted=None, commission_splits=None, invoice_reference=None, idempotency_key=""):
+    async def record_commission(
+        self,
+        deal_id,
+        organization_id,
+        broker_id,
+        actor_id,
+        transaction_price,
+        currency,
+        commission_percentage,
+        tax_deducted=None,
+        tax_rate_percentage=None,
+        split_basis="GROSS",
+        other_deductions=None,
+        broker_split_percentage=None,
+        agency_split_percentage=None,
+        commission_splits=None,
+        invoice_reference=None,
+        idempotency_key="",
+    ):
         deal = await self._get_deal_or_raise(deal_id, organization_id)
+        if deal.currency and currency.upper() != deal.currency.upper():
+            raise DealServiceError(f"Currency mismatch: deal is denominated in {deal.currency}, but commission specified {currency}")
+
         ex = await self.db.execute(select(DealCommission).where(DealCommission.deal_id == deal.id))
-        if ex.scalars().first():
+        existing_comm = ex.scalars().first()
+        if existing_comm:
+            if idempotency_key or (invoice_reference and existing_comm.invoice_reference == invoice_reference):
+                return existing_comm
             raise DealServiceError("Commission already recorded for this deal")
-        gross = (transaction_price * commission_percentage / Decimal("100")).quantize(Decimal("0.0001"))
-        net = (gross - (tax_deducted or Decimal("0"))).quantize(Decimal("0.0001"))
+
+        # Exact Decimal commission arithmetic
+        t_price = Decimal(str(transaction_price))
+        c_pct = Decimal(str(commission_percentage))
+        gross = (t_price * c_pct / Decimal("100")).quantize(Decimal("0.0001"))
+
+        # Deductions & Tax calculation
+        if tax_deducted is not None:
+            tax = Decimal(str(tax_deducted)).quantize(Decimal("0.0001"))
+        elif tax_rate_percentage is not None:
+            tax = (gross * Decimal(str(tax_rate_percentage)) / Decimal("100")).quantize(Decimal("0.0001"))
+        else:
+            tax = Decimal("0")
+
+        other = Decimal(str(other_deductions or "0")).quantize(Decimal("0.0001"))
+        net = (gross - tax - other).quantize(Decimal("0.0001"))
+        if net < Decimal("0"):
+            raise DealServiceError(f"Total deductions ({tax + other}) cannot exceed gross commission ({gross})")
+
+        # Commission Splits
+        if not commission_splits:
+            broker_pct = Decimal(str(broker_split_percentage)) if broker_split_percentage is not None else Decimal("70.0")
+            agency_pct = Decimal(str(agency_split_percentage)) if agency_split_percentage is not None else (Decimal("100.0") - broker_pct)
+            b_gross = (gross * broker_pct / Decimal("100")).quantize(Decimal("0.0001"))
+            a_gross = (gross - b_gross).quantize(Decimal("0.0001"))
+            b_net = (net * broker_pct / Decimal("100")).quantize(Decimal("0.0001"))
+            a_net = (net - b_net).quantize(Decimal("0.0001"))
+            commission_splits = [
+                {
+                    "recipient_role": "PRIMARY_BROKER",
+                    "recipient_id": str(broker_id),
+                    "split_percentage": float(broker_pct),
+                    "gross_amount": float(b_gross),
+                    "net_amount": float(b_net),
+                    "amount": float(b_gross)
+                },
+                {
+                    "recipient_role": "AGENCY_POOL",
+                    "recipient_id": "AGENCY",
+                    "split_percentage": float(agency_pct),
+                    "gross_amount": float(a_gross),
+                    "net_amount": float(a_net),
+                    "amount": float(a_gross)
+                }
+            ]
+
+
         now = datetime.now(timezone.utc)
-        commission = DealCommission(deal_id=deal.id, organization_id=deal.organization_id, broker_id=uuid.UUID(broker_id), transaction_price=transaction_price, currency=currency, commission_percentage=commission_percentage, gross_commission=gross, tax_deducted=tax_deducted, net_commission=net, commission_splits=commission_splits or [], status="PENDING", invoice_reference=invoice_reference)
+        commission = DealCommission(
+            deal_id=deal.id,
+            organization_id=deal.organization_id,
+            broker_id=uuid.UUID(broker_id),
+            transaction_price=t_price,
+            currency=currency.upper(),
+            commission_percentage=c_pct,
+            gross_commission=gross,
+            tax_deducted=tax,
+            net_commission=net,
+            commission_splits=commission_splits,
+            status="PENDING",
+            invoice_reference=invoice_reference
+        )
         self.db.add(commission)
-        deal.commission_percentage = commission_percentage
+        deal.commission_percentage = c_pct
         deal.commission_amount = gross
-        deal.final_transaction_price = transaction_price
+        deal.final_transaction_price = t_price
         deal.updated_at = now
-        self._write_audit(deal, "commission.recorded", actor_id, "HUMAN", "DealCommission", str(deal.id), new_state={"gross_commission": str(gross), "net_commission": str(net), "status": "PENDING"}, change_summary=f"Commission recorded: {currency} {gross} gross", idempotency_key=idempotency_key)
-        self._write_outbox(deal, "deal.commission.recorded", {"deal_id": str(deal.id), "gross_commission": str(gross), "net_commission": str(net), "actor_id": actor_id, "timestamp": now.isoformat()}, idempotency_key=idempotency_key)
+        self._write_audit(
+            deal, "commission.recorded", actor_id, "HUMAN", "DealCommission", str(deal.id),
+            new_state={
+                "gross_commission": str(gross),
+                "net_commission": str(net),
+                "tax_deducted": str(tax),
+                "split_basis": split_basis,
+                "status": "PENDING"
+            },
+            change_summary=f"Commission recorded: {currency} {gross} gross, {tax} tax withheld, {net} net",
+            idempotency_key=idempotency_key
+        )
+        self._write_outbox(
+            deal, "deal.commission.recorded",
+            {
+                "deal_id": str(deal.id),
+                "gross_commission": str(gross),
+                "net_commission": str(net),
+                "tax_deducted": str(tax),
+                "actor_id": actor_id,
+                "timestamp": now.isoformat()
+            },
+            idempotency_key=idempotency_key
+        )
         await self.db.commit()
         await self.db.refresh(commission)
         return commission
 
+    async def _get_actor_role(self, organization_id, actor_id) -> Optional[str]:
+        if not actor_id or not organization_id:
+            return None
+        from app.models.organization import OrganizationMember
+        try:
+            b_uuid = uuid.UUID(str(actor_id))
+            o_uuid = uuid.UUID(str(organization_id))
+        except (ValueError, TypeError):
+            return None
+        stmt = select(OrganizationMember.role).where(
+            OrganizationMember.organization_id == o_uuid,
+            OrganizationMember.broker_id == b_uuid
+        )
+        res = await self.db.execute(stmt)
+        role = res.scalars().first()
+        if role:
+            return str(role).lower()
+        from app.models.broker import Broker
+        b_res = await self.db.execute(select(Broker.role).where(Broker.id == b_uuid))
+        b_role = b_res.scalars().first()
+        return str(b_role).lower() if b_role else None
+
+    async def settle_commission(
+        self,
+        deal_id,
+        organization_id,
+        actor_id,
+        amount_received=None,
+        settled_amount=None,
+        payment_reference=None,
+        payment_mode="MANUAL_BANK_TRANSFER",
+        provenance="MANUAL_UNVERIFIED",
+        currency=None,
+        settled_at=None,
+        notes=None,
+        settlement_evidence_url=None,
+        idempotency_key=""
+    ):
+        deal = await self._get_deal_or_raise(deal_id, organization_id)
+        ex = await self.db.execute(
+            select(DealCommission).where(
+                DealCommission.deal_id == deal.id,
+                DealCommission.organization_id == deal.organization_id
+            )
+        )
+        comm = ex.scalars().first()
+        if not comm:
+            raise DealServiceError("No commission record found for this deal. Commission must be recorded before settlement.")
+
+        if currency and currency.upper() != comm.currency.upper():
+            raise DealServiceError(f"Currency mismatch: commission is denominated in {comm.currency}, but settlement specified {currency}")
+
+        target_amount = settled_amount if settled_amount is not None else amount_received
+        if target_amount is None:
+            raise DealServiceError("Settlement amount is required")
+
+        # Idempotency / Double-Settlement guard
+        received = Decimal(str(target_amount)).quantize(Decimal("0.0001"))
+        if comm.status in ("PAID", "RECORDED_UNVERIFIED"):
+            if comm.payment_reference == payment_reference and (comm.net_commission == received or comm.gross_commission == received):
+                return comm
+            raise DealServiceError(f"Commission for deal {deal_id} is already settled (Ref: {comm.payment_reference})")
+
+        # Anti-replay guard: Ensure the payment reference is not already used across the organization
+        if payment_reference:
+            existing_ref_stmt = select(DealCommission).where(
+                DealCommission.organization_id == deal.organization_id,
+                DealCommission.payment_reference == payment_reference,
+                DealCommission.id != comm.id,
+                DealCommission.status.in_(["PAID", "RECORDED_UNVERIFIED"])
+            )
+            ex_ref = (await self.db.execute(existing_ref_stmt)).scalars().first()
+            if ex_ref:
+                raise DealServiceError(
+                    f"Payment reference '{payment_reference}' has already been used in another settlement. Duplicate settlement is prohibited."
+                )
+
+        if comm.status in ("CANCELLED", "DISPUTED"):
+            raise DealServiceError(f"Commission cannot be settled while in status {comm.status}")
+
+        if received <= Decimal("0"):
+            raise DealServiceError("Settlement amount must be positive")
+
+        expected = (comm.net_commission if comm.net_commission is not None else comm.gross_commission).quantize(Decimal("0.0001"))
+        if received > expected:
+            raise DealServiceError(f"Settlement amount ({received}) cannot exceed expected net commission ({expected})")
+        if received != expected:
+            raise DealServiceError(
+                f"Partial settlement is not supported. Record the full outstanding amount ({expected}) in {comm.currency}."
+            )
+
+        # Provenance truthfulness and authorized reviewer workflow enforcement
+        raw_mode = payment_mode.upper() if payment_mode else "MANUAL_BANK_TRANSFER"
+        requested_prov = (provenance or "MANUAL_UNVERIFIED").upper()
+        is_automated_provider = (
+            raw_mode.startswith("GATEWAY_") or
+            raw_mode.startswith("WEBHOOK_") or
+            raw_mode in ("RAZORPAY", "STRIPE")
+        )
+        has_audit_evidence = bool(
+            (notes and any(k in notes.upper() for k in ("VERIF", "REVIEW", "AUDIT", "STATEMENT"))) or
+            settlement_evidence_url
+        )
+
+        actor_role = await self._get_actor_role(deal.organization_id, actor_id)
+        authorized_financial_roles = {"owner", "admin", "finance", "manager", "accountant", "financial_controller", "super_admin"}
+
+        if requested_prov == "PROVIDER_CONFIRMED":
+            if not is_automated_provider:
+                raise DealServiceError(
+                    "Cannot self-assert PROVIDER_CONFIRMED: Automated gateway or webhook confirmation payload is required for provider confirmation."
+                )
+            prov = "PROVIDER_CONFIRMED"
+        elif requested_prov == "MANUAL_REVIEWED":
+            # Actor must possess financial reviewer authorization
+            if actor_role and actor_role not in authorized_financial_roles:
+                raise DealServiceError(
+                    f"Unauthorized reviewer: Role '{actor_role}' lacks financial reviewer authorization to certify manual settlement receipts."
+                )
+            # Supporting evidence must be provided
+            if not has_audit_evidence:
+                raise DealServiceError(
+                    "Missing settlement evidence: MANUAL_REVIEWED requires supporting document URL or verified bank statement notes."
+                )
+            prov = "MANUAL_REVIEWED"
+        else:
+            # If authorized reviewer workflow provides verified audit evidence, classify as MANUAL_REVIEWED;
+            # otherwise manual receipts remain strictly MANUAL_UNVERIFIED / RECORDED_UNVERIFIED.
+            if actor_role in authorized_financial_roles and has_audit_evidence:
+                prov = "MANUAL_REVIEWED"
+            else:
+                prov = "MANUAL_UNVERIFIED"
+
+        mode = raw_mode
+
+        # Enforce truthful distinction between verified receipt (PAID) and unverified manual entry (RECORDED_UNVERIFIED)
+        comm_status = "PAID" if prov in ("MANUAL_REVIEWED", "PROVIDER_CONFIRMED") else "RECORDED_UNVERIFIED"
+
+        now = settled_at or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        reviewed_by_id = actor_id if prov == "MANUAL_REVIEWED" else None
+        reviewed_at = now if prov == "MANUAL_REVIEWED" else None
+
+        comm.status = comm_status
+        comm.paid_at = now
+        comm.payment_reference = payment_reference
+        comm.payment_mode = mode
+        comm.updated_at = now
+        deal.updated_at = now
+        comm._provenance = prov
+
+        # Persist provenance, evidence URL, and reviewer identity into commission splits for audit lineage
+        if comm.commission_splits and isinstance(comm.commission_splits, list):
+            updated_splits = []
+            for s in comm.commission_splits:
+                if isinstance(s, dict):
+                    sc = dict(s)
+                    sc["settlement_provenance"] = prov
+                    sc["settlement_evidence_url"] = settlement_evidence_url
+                    sc["reviewed_by_id"] = reviewed_by_id
+                    sc["reviewed_at"] = reviewed_at.isoformat() if reviewed_at else None
+                    updated_splits.append(sc)
+                else:
+                    updated_splits.append(s)
+            comm.commission_splits = updated_splits
+
+        action_name = "commission.settled" if comm_status == "PAID" else "commission.recorded_unverified"
+        self._write_audit(
+            deal, action_name, actor_id, "HUMAN", "DealCommission", str(comm.id),
+            new_state={
+                "status": comm_status,
+                "paid_at": now.isoformat(),
+                "payment_reference": payment_reference,
+                "payment_mode": mode,
+                "provenance": prov,
+                "amount_received": str(received),
+                "settlement_evidence_url": settlement_evidence_url,
+                "reviewed_by_id": reviewed_by_id,
+                "reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
+                "notes": notes
+            },
+            change_summary=f"Commission {comm_status.lower()}: {comm.currency} {received} via {mode} (Ref: {payment_reference}, Provenance: {prov})",
+            idempotency_key=idempotency_key
+        )
+        self._write_outbox(
+            deal, f"deal.{action_name}",
+            {
+                "deal_id": str(deal.id),
+                "commission_id": str(comm.id),
+                "status": comm_status,
+                "amount_received": str(received),
+                "currency": comm.currency,
+                "payment_reference": payment_reference,
+                "payment_mode": mode,
+                "provenance": prov,
+                "settlement_evidence_url": settlement_evidence_url,
+                "reviewed_by_id": reviewed_by_id,
+                "reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
+                "actor_id": actor_id,
+                "timestamp": now.isoformat()
+            },
+            idempotency_key=idempotency_key
+        )
+
+        from app.models.sales_pipeline_models import RevenueEvent, RevenueEventType
+        is_confirmed = (comm_status == "PAID")
+        rev_event = RevenueEvent(
+            organization_id=deal.organization_id,
+            event_type=RevenueEventType.PAYMENT_RECEIVED,
+            lead_id=deal.lead_id,
+            opportunity_id=deal.id,
+            amount=received,
+            currency=comm.currency,
+            source=mode,
+            actor_id=actor_id,
+            actor_type="HUMAN",
+            payload={
+                "commission_id": str(comm.id),
+                "deal_id": str(deal.id),
+                "payment_reference": payment_reference,
+                "payment_mode": mode,
+                "provenance": prov,
+                "is_confirmed": is_confirmed,
+                "requires_audit_review": not is_confirmed,
+                "settlement_evidence_url": settlement_evidence_url,
+                "reviewed_by_id": reviewed_by_id,
+                "reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
+                "notes": notes
+            },
+            occurred_at=now
+        )
+        self.db.add(rev_event)
+
+        await self.db.commit()
+        await self.db.refresh(comm)
+        return comm
+
+    async def dispute_commission(self, deal_id, organization_id, actor_id, reason, idempotency_key=""):
+        deal = await self._get_deal_or_raise(deal_id, organization_id)
+        ex = await self.db.execute(
+            select(DealCommission).where(
+                DealCommission.deal_id == deal.id,
+                DealCommission.organization_id == deal.organization_id
+            )
+        )
+        comm = ex.scalars().first()
+        if not comm:
+            raise DealServiceError("No commission record found for this deal")
+
+        now = datetime.now(timezone.utc)
+        comm.status = "DISPUTED"
+        comm.disputed_at = now
+        comm.dispute_reason = reason
+        comm.updated_at = now
+        deal.updated_at = now
+
+        self._write_audit(
+            deal, "commission.disputed", actor_id, "HUMAN", "DealCommission", str(comm.id),
+            new_state={"status": "DISPUTED", "dispute_reason": reason, "disputed_at": now.isoformat()},
+            change_summary=f"Commission disputed: {reason}",
+            idempotency_key=idempotency_key
+        )
+        self._write_outbox(
+            deal, "deal.commission.disputed",
+            {"deal_id": str(deal.id), "commission_id": str(comm.id), "reason": reason, "timestamp": now.isoformat()},
+            idempotency_key=idempotency_key
+        )
+        await self.db.commit()
+        await self.db.refresh(comm)
+        return comm
+
+    async def reverse_settlement(self, deal_id, organization_id, actor_id, reason, idempotency_key=""):
+        deal = await self._get_deal_or_raise(deal_id, organization_id)
+        ex = await self.db.execute(
+            select(DealCommission).where(
+                DealCommission.deal_id == deal.id,
+                DealCommission.organization_id == deal.organization_id
+            )
+        )
+        comm = ex.scalars().first()
+        if not comm:
+            raise DealServiceError("No commission record found for this deal")
+
+        if comm.status not in ("PAID", "RECORDED_UNVERIFIED"):
+            raise DealServiceError(f"Cannot reverse commission with status {comm.status}. Only settled or unverified recorded commissions can be reversed.")
+
+        now = datetime.now(timezone.utc)
+        prior_ref = comm.payment_reference
+        comm.status = "PENDING"
+        comm.paid_at = None
+        comm.payment_reference = None
+        comm.updated_at = now
+        deal.updated_at = now
+
+        self._write_audit(
+            deal, "commission.settlement_reversed", actor_id, "HUMAN", "DealCommission", str(comm.id),
+            new_state={"status": "PENDING", "reversal_reason": reason, "prior_reference": prior_ref},
+            change_summary=f"Commission settlement reversed: {reason}",
+            idempotency_key=idempotency_key
+        )
+        self._write_outbox(
+            deal, "deal.commission.settlement_reversed",
+            {"deal_id": str(deal.id), "commission_id": str(comm.id), "reason": reason, "timestamp": now.isoformat()},
+            idempotency_key=idempotency_key
+        )
+        from app.models.sales_pipeline_models import RevenueEvent, RevenueEventType
+        rev_event = RevenueEvent(
+            organization_id=deal.organization_id,
+            event_type=RevenueEventType.REFUND_ISSUED,
+            lead_id=deal.lead_id,
+            opportunity_id=deal.id,
+            amount=comm.net_commission or comm.gross_commission,
+            currency=comm.currency,
+            source="SETTLEMENT_REVERSAL",
+            actor_id=actor_id,
+            actor_type="HUMAN",
+            payload={"commission_id": str(comm.id), "reason": reason, "prior_reference": prior_ref},
+            occurred_at=now
+        )
+        self.db.add(rev_event)
+
+        await self.db.commit()
+        await self.db.refresh(comm)
+        return comm
+
+
     async def create_closing(self, deal_id, organization_id, actor_id, registration_authority=None, registration_number=None, registration_date=None, title_deed_number=None, handover_date=None):
         deal = await self._get_deal_or_raise(deal_id, organization_id)
+        ex = await self.db.execute(select(DealClosing).where(DealClosing.deal_id == deal.id))
+        existing_closing = ex.scalars().first()
+        if existing_closing:
+            return existing_closing
         now = datetime.now(timezone.utc)
         default_checklist = [{"item": "Registration Authority Fee Paid", "completed": False}, {"item": "Title Deed Issued", "completed": bool(title_deed_number)}, {"item": "Land Registration Complete", "completed": bool(registration_number)}, {"item": "Keys Handed to Buyer", "completed": False}, {"item": "Commission Invoice Raised", "completed": False}]
         closing = DealClosing(deal_id=deal.id, organization_id=deal.organization_id, closing_checklist=default_checklist, registration_authority=registration_authority, registration_number=registration_number, registration_date=registration_date, title_deed_number=title_deed_number, handover_date=handover_date, status="IN_PROGRESS")
@@ -342,6 +779,10 @@ class DealService:
 
     async def record_post_sale(self, deal_id, organization_id, actor_id, customer_satisfaction_score=None, nps_score=None, feedback_text=None, referral_given=False, success_factors=None, obstacle_factors=None, ai_recommendation_followed=None):
         deal = await self._get_deal_or_raise(deal_id, organization_id)
+        ex = await self.db.execute(select(DealPostSale).where(DealPostSale.deal_id == deal.id))
+        existing_ps = ex.scalars().first()
+        if existing_ps:
+            return existing_ps
         now = datetime.now(timezone.utc)
         created = deal.created_at
         if created.tzinfo is None:
@@ -373,11 +814,67 @@ class DealService:
         pipeline_value = float(val_res.scalar() or 0)
         apr_res = await self.db.execute(select(func.count()).select_from(DealApprovalRequest).join(Deal, DealApprovalRequest.deal_id == Deal.id).where(Deal.organization_id == org_uuid, DealApprovalRequest.status == "PENDING"))
         pending_approvals = apr_res.scalar() or 0
-        comm_res = await self.db.execute(select(func.sum(DealCommission.gross_commission)).join(Deal, DealCommission.deal_id == Deal.id).where(Deal.organization_id == org_uuid, DealCommission.status == "PENDING"))
+
+        # Authoritative commission queries strictly scoped to organization
+        comm_res = await self.db.execute(
+            select(func.sum(func.coalesce(DealCommission.net_commission, DealCommission.gross_commission)))
+            .where(DealCommission.organization_id == org_uuid, DealCommission.status == "PENDING")
+        )
         commission_pending = float(comm_res.scalar() or 0)
-        comm_paid_res = await self.db.execute(select(func.sum(DealCommission.net_commission)).join(Deal, DealCommission.deal_id == Deal.id).where(Deal.organization_id == org_uuid, DealCommission.status == "PAID"))
+
+        comm_paid_res = await self.db.execute(
+            select(func.sum(func.coalesce(DealCommission.net_commission, DealCommission.gross_commission)))
+            .where(DealCommission.organization_id == org_uuid, DealCommission.status.in_(["PAID", "SETTLED"]))
+        )
         commission_earned = float(comm_paid_res.scalar() or 0)
-        return {"total_active_deals": sum(stage_dist.values()), "total_pipeline_value": pipeline_value, "currency": "AED", "deals_by_stage": stage_dist, "pending_approvals": pending_approvals, "stalled_deals": 0, "commission_pending": commission_pending, "commission_earned": commission_earned}
+
+        comm_unver_res = await self.db.execute(
+            select(func.sum(func.coalesce(DealCommission.net_commission, DealCommission.gross_commission)))
+            .where(DealCommission.organization_id == org_uuid, DealCommission.status == "RECORDED_UNVERIFIED")
+        )
+        commission_unverified = float(comm_unver_res.scalar() or 0)
+
+        comm_disp_res = await self.db.execute(
+            select(func.sum(func.coalesce(DealCommission.net_commission, DealCommission.gross_commission)))
+            .where(DealCommission.organization_id == org_uuid, DealCommission.status == "DISPUTED")
+        )
+        commission_disputed = float(comm_disp_res.scalar() or 0)
+
+        # Distinct Booked Value & Token Collected
+        booked_res = await self.db.execute(
+            select(func.sum(DealBooking.booked_price))
+            .where(DealBooking.organization_id == org_uuid, DealBooking.status == "CONFIRMED")
+        )
+        booked_value = float(booked_res.scalar() or 0)
+
+        token_res = await self.db.execute(
+            select(func.sum(DealBooking.token_amount))
+            .where(DealBooking.organization_id == org_uuid, DealBooking.status == "CONFIRMED")
+        )
+        token_collected = float(token_res.scalar() or 0)
+
+        org_res = await self.db.execute(select(Organization.currency_code).where(Organization.id == org_uuid))
+        org_curr = org_res.scalar()
+        if org_curr:
+            currency = org_curr.upper()
+        else:
+            curr_res = await self.db.execute(select(Deal.currency).where(Deal.organization_id == org_uuid, Deal.status == "ACTIVE").limit(1))
+            currency = curr_res.scalar() or "INR"
+
+        return {
+            "total_active_deals": sum(stage_dist.values()),
+            "total_pipeline_value": pipeline_value,
+            "booked_value": booked_value,
+            "token_collected": token_collected,
+            "currency": currency,
+            "deals_by_stage": stage_dist,
+            "pending_approvals": pending_approvals,
+            "stalled_deals": 0,
+            "commission_pending": commission_pending,
+            "commission_earned": commission_earned,
+            "commission_unverified": commission_unverified,
+            "commission_disputed": commission_disputed
+        }
 
     async def _check_approval(self, deal, action_type):
         res = await self.db.execute(select(DealApprovalRequest).where(DealApprovalRequest.deal_id == deal.id, DealApprovalRequest.action_type == action_type, DealApprovalRequest.status == "APPROVED"))

@@ -39,14 +39,26 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
 
-  const inFlightRef = React.useRef<boolean>(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
-  const formatMoney = (amount?: number | null, fallback = 'AED 0') => {
-    if (amount === undefined || amount === null) return fallback;
-    if (amount >= 10000000) return `AED ${(amount / 10000000).toFixed(2)} Cr`;
-    if (amount >= 100000) return `AED ${(amount / 100000).toFixed(1)}L`;
-    return `AED ${amount.toLocaleString()}`;
+  const formatMoney = (amount?: number | null, fallback?: string) => {
+    const activeCurrency = data?.currency || revenueOverview?.currency || 'INR';
+    const effectiveFallback = fallback !== undefined ? fallback : `${activeCurrency} 0`;
+    if (amount === undefined || amount === null) return effectiveFallback;
+    if (activeCurrency === 'INR') {
+      if (amount >= 10000000) return `₹ ${(amount / 10000000).toFixed(2)} Cr`;
+      if (amount >= 100000) return `₹ ${(amount / 100000).toFixed(1)}L`;
+      return `₹ ${amount.toLocaleString('en-IN')}`;
+    }
+    if (activeCurrency === 'AED') {
+      if (amount >= 1000000) return `AED ${(amount / 1000000).toFixed(2)}M`;
+      return `AED ${amount.toLocaleString('en-AE')}`;
+    }
+    if (activeCurrency === 'USD') {
+      if (amount >= 1000000) return `$${(amount / 1000000).toFixed(2)}M`;
+      return `$${amount.toLocaleString('en-US')}`;
+    }
+    return `${activeCurrency} ${amount.toLocaleString()}`;
   };
   
   // Start My Day Modal State
@@ -59,24 +71,26 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
   const [activeSnoozeKey, setActiveSnoozeKey] = useState<string | null>(null);
 
   const fetchCommandCenter = async () => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setIsRetrying(true);
-    setLoading(true);
-    setError(null);
-
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    setIsRetrying(true);
+    setLoading(true);
+    setError(null);
+
     try {
       const [ccRes, revRes, funnelRes] = await Promise.allSettled([
         api.commandCenter.getData(undefined, controller.signal),
-        api.revenueIntelligence.getOverview(),
-        api.revenueIntelligence.getFunnel(),
+        api.revenueIntelligence.getOverview(undefined, controller.signal),
+        api.revenueIntelligence.getFunnel(undefined, controller.signal),
       ]);
+
+      if (controller.signal.aborted) {
+        return;
+      }
 
       if (ccRes.status === 'fulfilled') {
         const payload = (ccRes.value as any)?.data ?? ccRes.value;
@@ -89,6 +103,63 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
             category: 'SERVER',
             title: 'Command Center Temporarily Unavailable',
             message: 'Received an incomplete operational queue response. Please try again.',
+            canRetry: true
+          });
+        }
+      } else {
+        const err = ccRes.reason;
+        if (err?.name === 'AbortError' || controller.signal.aborted) {
+          return;
+        }
+        console.error('[CommandCenterView] Error loading command center:', err);
+        const status = err?.status;
+        const code = err?.data?.error?.code || err?.data?.detail?.code || err?.code;
+        const msg = (err?.message || '').toLowerCase();
+
+        if (status === 401) {
+          setError({
+            category: 'AUTH',
+            title: 'Session Expired',
+            message: 'Your session has expired or you are not signed in. Please sign in to access your Command Center.',
+            actionText: 'Sign In Again',
+            actionHref: '/login',
+            canRetry: false
+          });
+        } else if (status === 402 || (status === 403 && (code === 'TRIAL_EXPIRED' || code === 'SUBSCRIPTION_INACTIVE' || msg.includes('trial')))) {
+          setError({
+            category: 'PLAN',
+            title: 'Active Plan Required',
+            message: 'Your 7-day trial has expired. Upgrade your plan to access operational intelligence and lead qualification.',
+            actionText: 'View Upgrade Plans',
+            actionHref: '/dashboard/settings',
+            canRetry: false
+          });
+        } else if (status === 403) {
+          setError({
+            category: 'PERMISSION',
+            title: 'Access Restricted',
+            message: 'You do not have permission to access this Command Center.',
+            canRetry: false
+          });
+        } else if (status === 429) {
+          setError({
+            category: 'RATE_LIMIT',
+            title: 'Rate Limit Reached',
+            message: 'Too many requests were sent to the Command Center API. Please wait a moment.',
+            canRetry: true
+          });
+        } else if (err?.name === 'TypeError' || msg.includes('fetch') || msg.includes('network') || msg.includes('unavailable')) {
+          setError({
+            category: 'NETWORK',
+            title: 'Network Connection Issue',
+            message: 'Could not connect to the API server. Please verify your connection and try again.',
+            canRetry: true
+          });
+        } else {
+          setError({
+            category: 'SERVER',
+            title: 'Command Center Unavailable',
+            message: err?.message || 'An error occurred while assembling dashboard metrics. Please retry.',
             canRetry: true
           });
         }
@@ -156,17 +227,38 @@ export default function CommandCenterView({ onOpenLead, onRefresh }: CommandCent
         });
       }
     } finally {
-      inFlightRef.current = false;
-      setIsRetrying(false);
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setIsRetrying(false);
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchCommandCenter();
+
+    const handleOrgChange = () => {
+      fetchCommandCenter();
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'wefylabs_org_id' || e.key === 'beetlelabs_org_id') {
+        fetchCommandCenter();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('wefylabs:org_changed', handleOrgChange);
+      window.addEventListener('storage', handleStorageChange);
+    }
+
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('wefylabs:org_changed', handleOrgChange);
+        window.removeEventListener('storage', handleStorageChange);
       }
     };
   }, []);

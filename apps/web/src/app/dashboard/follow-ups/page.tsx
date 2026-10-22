@@ -7,7 +7,7 @@ import {
   Plus, Play, Pause, Square, RefreshCw, Filter, ArrowRight, User, Phone,
   Check, SlidersHorizontal, MessageSquare, AlertCircle, ChevronRight, X
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 
 export type FollowUpTab = 'today' | 'upcoming' | 'rules' | 'analytics';
@@ -177,10 +177,7 @@ export default function FollowUpsPage() {
     .map((c) => c.channel);
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         {/* Header Title & Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E4DC] pb-6">
           <div>
@@ -651,7 +648,6 @@ export default function FollowUpsPage() {
             </div>
           </div>
         )}
-      </main>
 
       {/* Snooze Modal */}
       <AnimatePresence>
@@ -838,6 +834,6 @@ export default function FollowUpsPage() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </PageContainer>
   );
 }

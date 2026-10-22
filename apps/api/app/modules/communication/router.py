@@ -672,11 +672,40 @@ async def websocket_chat(
     websocket: WebSocket,
     org_id: str,
     conversation_id: str,
+    token: Optional[str] = Query(default=None, description="Bearer token for browser WS auth"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Real-time WebSocket endpoint for web chat widget.
-    Receives messages from customer, routes through communication pipeline.
+    Real-time WebSocket endpoint for communication chat.
+    Enforces JWT authentication and verifies tenant access to prevent unauthorized eavesdropping / injection.
     """
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.dependencies import get_current_broker
+    try:
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        broker = await get_current_broker(credentials=creds, db=db)
+    except HTTPException:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    # Validate that caller belongs to this organization
+    from sqlalchemy import select as sa_select
+    from app.models.organization import OrganizationMember
+    result = await db.execute(
+        sa_select(OrganizationMember.organization_id).where(
+            OrganizationMember.broker_id == broker.id,
+            OrganizationMember.organization_id == org_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        if str(getattr(broker, "organization_id", "")) != org_id and str(broker.id) != org_id:
+            await websocket.close(code=4003, reason="Organization access denied")
+            return
+
     await websocket.accept()
     from app.modules.communication.provider_adapters.webchat_provider import WebChatProvider
     WebChatProvider.register_session(conversation_id, websocket)
@@ -686,7 +715,7 @@ async def websocket_chat(
             data = await websocket.receive_json()
             # Normalize and process inbound message
             content = data.get("content", "")
-            sender_name = data.get("sender_name", "Visitor")
+            sender_name = data.get("sender_name", broker.name or "Agent")
 
             # Echo confirmation back to client
             await websocket.send_json({
@@ -786,7 +815,7 @@ async def inbound_webhook(
     try:
         payload = await request.json()
     except Exception:
-        return Response(content="ok", status_code=200, media_type="text/plain")
+        raise HTTPException(status_code=400, detail="Webhook body must contain valid JSON.")
 
     # 3. Handle Delivery Status updates if present (e.g. WhatsApp status updates)
     if hasattr(provider, "parse_delivery_status"):
@@ -811,7 +840,7 @@ async def inbound_webhook(
             raw_body=raw_body,
             headers=headers,
             parsed_payload=payload,
-            enforce_signature=False,
+            enforce_signature=True,
         )
 
     # 5. Compute idempotency key from payload for other channels

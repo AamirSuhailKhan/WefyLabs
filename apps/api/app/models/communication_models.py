@@ -713,7 +713,7 @@ class InboundQueue(Base):
     __tablename__ = "inbound_queue"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
-    organization_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
 
     # Unique key to prevent duplicate webhook replay
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
@@ -895,6 +895,26 @@ class RawCommunicationEvent(Base):
         Index("ix_raw_comm_provider_event", "provider", "provider_event_id"),
         Index("ix_raw_comm_org_status", "organization_id", "processing_status"),
         Index("ix_raw_comm_payload_hash", "payload_hash"),
+    )
+
+
+class WebhookEventClaim(Base):
+    """Atomic idempotency claim for provider deliveries with stable event IDs."""
+    __tablename__ = "webhook_event_claims"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    organization_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "organization_id", "provider_event_id",
+            name="uq_webhook_event_claim_provider_org_event",
+        ),
     )
 
 

@@ -1,0 +1,320 @@
+[
+  {
+    "endpoint": "/api/v1/auth/me",
+    "method": "GET",
+    "status_code": 200,
+    "response": {
+      "email": "aamir.fresh@bmu.edu.in",
+      "phone": "+919876500000",
+      "name": "Aamir Suhail",
+      "agency_name": "",
+      "city": "Bengaluru",
+      "whatsapp_number": "+919876500000",
+      "id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "subscription_status": "trial",
+      "onboarding_status": "ONBOARDED",
+      "trial_ends_at": "2026-09-22T12:36:26.150118Z",
+      "subscription_plan": null,
+      "razorpay_customer_id": null,
+      "razorpay_subscription_id": null,
+      "created_at": "2026-09-15T12:36:26.566903Z",
+      "updated_at": "2026-09-15T12:36:26.566972Z",
+      "trial_days_remaining": 0
+    }
+  },
+  {
+    "endpoint": "/api/v1/leads",
+    "method": "GET",
+    "status_code": 200,
+    "response": {
+      "data": [
+        {
+          "phone": "+919111122222",
+          "name": "Amit Sharma",
+          "source": "manual",
+          "score": "pending",
+          "score_confidence": 0.0,
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "property_type": "2bhk",
+          "transaction_type": "buy",
+          "preferred_locations": [
+            "Indiranagar"
+          ],
+          "timeline": "1_month",
+          "loan_status": "in_process",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "id": "2434cac9-3b94-49fb-a377-789f4ad785f6",
+          "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+          "notes": [],
+          "last_message_at": null,
+          "qualified_at": null,
+          "created_at": "2026-09-16T18:39:27.955903Z",
+          "updated_at": "2026-09-16T18:39:27.955919Z",
+          "conversations": [],
+          "scores": [],
+          "follow_ups": [],
+          "conversation_count": 0,
+          "latest_score": null
+        },
+        {
+          "phone": "+919988776655",
+          "name": "Vikram Malhotra",
+          "source": "manual",
+          "score": "pending",
+          "score_confidence": 0.0,
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "property_type": "3bhk",
+          "transaction_type": "buy",
+          "preferred_locations": [
+            "Indiranagar"
+          ],
+          "timeline": "1_month",
+          "loan_status": "in_process",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "id": "47d1dc97-2458-4dec-980f-a0d3afa24601",
+          "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+          "notes": [
+            {
+              "id": "628ea795-e8d7-4155-879a-5c3faad41b3d",
+              "content": "Urgent buyer looking for 3BHK penthouse in Indiranagar under 3 Cr",
+              "color_tag": "blue",
+              "created_at": "2026-09-16T15:34:59.637027+00:00"
+            }
+          ],
+          "last_message_at": null,
+          "qualified_at": null,
+          "created_at": "2026-09-16T15:34:59.786832Z",
+          "updated_at": "2026-09-16T15:34:59.786854Z",
+          "conversations": [],
+          "scores": [],
+          "follow_ups": [],
+          "conversation_count": 0,
+          "latest_score": null
+        },
+        {
+          "phone": "+919876543210",
+          "name": "Rajesh Kumar",
+          "source": "manual",
+          "score": "pending",
+          "score_confidence": 0.0,
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "property_type": "2bhk",
+          "transaction_type": "buy",
+          "preferred_locations": [
+            "Indiranagar"
+          ],
+          "timeline": "1_month",
+          "loan_status": "in_process",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "id": "1d3d636e-1460-4507-bc3c-2ac0f19f7250",
+          "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+          "notes": [
+            {
+              "id": "de23d46c-ef60-47fa-8211-4924bafafb7c",
+              "content": "Urgent buyer looking for 3BHK apartment in Whitefield within 1.5 Cr, ready to site visit immediately",
+              "color_tag": "blue",
+              "created_at": "2026-09-16T15:26:16.862603+00:00"
+            }
+          ],
+          "last_message_at": null,
+          "qualified_at": null,
+          "created_at": "2026-09-16T15:26:17.274022Z",
+          "updated_at": "2026-09-16T15:26:17.274033Z",
+          "conversations": [],
+          "scores": [],
+          "follow_ups": [],
+          "conversation_count": 0,
+          "latest_score": null
+        }
+      ],
+      "total": 3,
+      "page": 1,
+      "pages": 1
+    }
+  },
+  {
+    "endpoint": "/api/v1/property-listings",
+    "method": "GET",
+    "status_code": 404,
+    "response": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Not Found",
+        "request_id": "req-e41ab434fd39",
+        "timestamp": "2026-10-06T09:04:07.049662+00:00",
+        "path": "/api/v1/property-listings"
+      },
+      "detail": "Not Found"
+    }
+  },
+  {
+    "endpoint": "/api/v1/deals",
+    "method": "GET",
+    "status_code": 200,
+    "response": []
+  },
+  {
+    "endpoint": "/api/v1/site-visits",
+    "method": "GET",
+    "status_code": 405,
+    "response": {
+      "error": {
+        "code": "HTTP_ERROR",
+        "message": "Method Not Allowed",
+        "request_id": "req-04dff7a6aaec",
+        "timestamp": "2026-10-06T09:04:07.491061+00:00",
+        "path": "/api/v1/site-visits"
+      },
+      "detail": "Method Not Allowed"
+    }
+  },
+  {
+    "endpoint": "/api/v1/tasks",
+    "method": "GET",
+    "status_code": 200,
+    "response": [
+      {
+        "id": "3481d68f-4148-4cb9-942b-85f56093af18",
+        "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "lead_id": "2434cac9-3b94-49fb-a377-789f4ad785f6",
+        "title": "Re-engage Amit Sharma",
+        "description": "Lead Amit Sharma (+919111122222) inactive for >7 days. Share new property options or market update.",
+        "status": "pending",
+        "priority": "normal",
+        "due_at": "2026-10-04T04:29:14.360548Z",
+        "completed_at": null,
+        "lead": {
+          "id": "2434cac9-3b94-49fb-a377-789f4ad785f6",
+          "phone": "+919111122222",
+          "name": "Amit Sharma",
+          "email": null,
+          "source": "manual",
+          "score": "pending",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "created_at": "2026-09-16T18:39:27.955903Z"
+        },
+        "created_at": "2026-10-03T04:29:22.446957Z",
+        "updated_at": "2026-10-03T04:29:22.446965Z"
+      },
+      {
+        "id": "49458fa0-a138-4052-99cc-c87626a790a0",
+        "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "lead_id": "47d1dc97-2458-4dec-980f-a0d3afa24601",
+        "title": "Re-engage Vikram Malhotra",
+        "description": "Lead Vikram Malhotra (+919988776655) inactive for >7 days. Share new property options or market update.",
+        "status": "pending",
+        "priority": "normal",
+        "due_at": "2026-10-04T04:29:14.360548Z",
+        "completed_at": null,
+        "lead": {
+          "id": "47d1dc97-2458-4dec-980f-a0d3afa24601",
+          "phone": "+919988776655",
+          "name": "Vikram Malhotra",
+          "email": null,
+          "source": "manual",
+          "score": "pending",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "created_at": "2026-09-16T15:34:59.786832Z"
+        },
+        "created_at": "2026-10-03T04:29:21.162941Z",
+        "updated_at": "2026-10-03T04:29:21.162947Z"
+      },
+      {
+        "id": "133a1b8b-3560-4f3b-bd87-bb7fa4f4657e",
+        "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "lead_id": "1d3d636e-1460-4507-bc3c-2ac0f19f7250",
+        "title": "Re-engage Rajesh Kumar",
+        "description": "Lead Rajesh Kumar (+919876543210) inactive for >7 days. Share new property options or market update.",
+        "status": "pending",
+        "priority": "normal",
+        "due_at": "2026-10-04T04:29:14.360548Z",
+        "completed_at": null,
+        "lead": {
+          "id": "1d3d636e-1460-4507-bc3c-2ac0f19f7250",
+          "phone": "+919876543210",
+          "name": "Rajesh Kumar",
+          "email": null,
+          "source": "manual",
+          "score": "pending",
+          "status": "pending",
+          "pipeline_stage": "new",
+          "budget_min": 4000000,
+          "budget_max": 6000000,
+          "created_at": "2026-09-16T15:26:17.274022Z"
+        },
+        "created_at": "2026-10-03T04:29:19.904025Z",
+        "updated_at": "2026-10-03T04:29:19.904032Z"
+      }
+    ]
+  },
+  {
+    "endpoint": "/api/v1/revenue-intelligence/overview",
+    "method": "GET",
+    "status_code": 200,
+    "response": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "realized_revenue": null,
+      "current_pipeline_estimate": null,
+      "revenue_at_risk_estimate": 18000000.0,
+      "active_opportunities": 0,
+      "total_leads": 3,
+      "attributed_revenue": null,
+      "unattributed_revenue": null,
+      "attribution_coverage_pct": 100.0,
+      "forecast_status": "FORECAST_NOT_AVAILABLE",
+      "forecast_disclaimer": "Forecast is not available because validated ML forecasting models are not enabled. Projections rely strictly on deterministic pipeline values."
+    }
+  },
+  {
+    "endpoint": "/api/v1/command-center/summary",
+    "method": "GET",
+    "status_code": 200,
+    "response": {
+      "critical_actions_count": 3,
+      "high_actions_count": 3,
+      "medium_actions_count": 0,
+      "total_priority_actions": 6,
+      "overdue_followups_count": 3,
+      "sla_breaches_count": 3,
+      "meetings_today_count": 0,
+      "site_visits_today_count": 0,
+      "hot_leads_count": 0,
+      "strong_matches_count": 0,
+      "stale_leads_count": 3,
+      "inventory_gaps_count": 1
+    }
+  },
+  {
+    "endpoint": "/api/v1/communication/v2/inbox",
+    "method": "GET",
+    "status_code": "ERROR",
+    "response": "(sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column omnichannel_conversations.identity_id does not exist\n[SQL: SELECT count(*) AS count_1 \nFROM (SELECT omnichannel_conversations.id AS id, omnichannel_conversations.organization_id AS organization_id, omnichannel_conversations.lead_id AS lead_id, omnichannel_conversations.identity_id AS identity_id, omnichannel_conversations.external_conversation_id AS external_conversation_id, omnichannel_conversations.control_mode AS control_mode, omnichannel_conversations.assigned_agent_id AS assigned_agent_id, omnichannel_conversations.preferred_channel AS preferred_channel, omnichannel_conversations.total_messages AS total_messages, omnichannel_conversations.unread_count AS unread_count, omnichannel_conversations.last_message_at AS last_message_at, omnichannel_conversations.last_channel AS last_channel, omnichannel_conversations.last_message_preview AS last_message_preview, omnichannel_conversations.ai_sentiment AS ai_sentiment, omnichannel_conversations.ai_urgency_score AS ai_urgency_score, omnichannel_conversations.ai_summary AS ai_summary, omnichannel_conversations.ai_next_best_action AS ai_next_best_action, omnichannel_conversations.status AS status, omnichannel_conversations.tags AS tags, omnichannel_conversations.metadata AS metadata, omnichannel_conversations.created_at AS created_at, omnichannel_conversations.updated_at AS updated_at \nFROM omnichannel_conversations \nWHERE omnichannel_conversations.organization_id = $1::VARCHAR) AS anon_1]\n[parameters: ('c193be18-4a6a-4030-9089-f94c42119189',)]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+  },
+  {
+    "endpoint": "/api/v1/matching/units",
+    "method": "GET",
+    "status_code": 404,
+    "response": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Not Found",
+        "request_id": "req-b55aa2a40600",
+        "timestamp": "2026-10-06T09:04:10.536872+00:00",
+        "path": "/api/v1/matching/units"
+      },
+      "detail": "Not Found"
+    }
+  }
+]

@@ -306,14 +306,19 @@ class IdentityResolutionService:
         self,
         merge_operation_id: str,
         undone_by: Optional[str] = None,
+        organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Undo a completed merge operation."""
-        result = await self.merge_reverter.undo_merge(merge_operation_id, undone_by)
+        result = await self.merge_reverter.undo_merge(
+            merge_operation_id,
+            undone_by,
+            organization_id=organization_id,
+        )
         await self.event_publisher.publish(MergeReverted(
             merge_operation_id=merge_operation_id,
             source_identity_id=result["source_identity_id"],
             target_identity_id=result["target_identity_id"],
-            organization_id="",  # Will be populated from MergeOperation in production
+            organization_id=result.get("organization_id", ""),
             undone_by=undone_by,
         ))
         return result

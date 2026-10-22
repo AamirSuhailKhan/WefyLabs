@@ -36,15 +36,18 @@ def refresh_active_lead_predictions():
             logger.info("[PREDICTIVE_TASK] Refreshing active lead conversion predictions...")
             from sqlalchemy import select
             from app.models.lead import Lead
-            stmt = select(Lead.id).where(Lead.deleted_at == None).limit(50)
+            from app.dependencies import TenantContext
+            stmt = select(Lead.id, Lead.organization_id, Lead.broker_id).where(Lead.deleted_at == None).limit(50)
             res = await session.execute(stmt)
-            lead_ids = res.scalars().all()
+            leads = res.all()
 
             service = PredictiveEngineService(session)
             count = 0
-            for lid in lead_ids:
+            for lid, org_id, broker_id in leads:
+                effective_org = str(org_id or broker_id or "system")
+                TenantContext.for_background_task(organization_id=effective_org)
                 try:
-                    await service.predict_lead_conversion(str(lid), "org_default", force_refresh=True)
+                    await service.predict_lead_conversion(str(lid), effective_org, force_refresh=True)
                     count += 1
                 except Exception as e:
                     logger.error(f"[PREDICTIVE_TASK] Failed to predict lead {lid}: {e}")
@@ -56,15 +59,29 @@ def refresh_active_lead_predictions():
 
 @celery_app.task(name="app.modules.predictive.workers.predictive_tasks.recalculate_pipeline_revenue_forecasts", queue="forecast")
 def recalculate_pipeline_revenue_forecasts():
-    """Recalculates multi-horizon revenue forecasts (runs every 30 mins)."""
+    """Recalculates multi-horizon revenue forecasts for active organizations (runs every 30 mins)."""
     async def _runner():
         async with async_session_factory() as session:
             logger.info("[PREDICTIVE_TASK] Recalculating multi-horizon pipeline forecasts...")
+            from sqlalchemy import select
+            from app.models.organization import Organization
+            from app.dependencies import TenantContext
             service = PredictiveEngineService(session)
-            f30 = await service.forecast_revenue("org_default", "30_DAYS")
-            fq = await service.forecast_revenue("org_default", "QUARTER")
-            logger.info(f"[PREDICTIVE_TASK] 30D Forecast: {f30.expected_revenue:,.2f} AED | Quarter: {fq.expected_revenue:,.2f} AED.")
-            return {"status": "SUCCESS", "forecast_30d": f30.expected_revenue, "forecast_quarter": fq.expected_revenue}
+            org_res = await session.execute(select(Organization.id))
+            org_ids = [str(o) for o in org_res.scalars().all()]
+            if not org_ids:
+                org_ids = ["org_default"]
+
+            results = {}
+            for org_id in org_ids:
+                TenantContext.for_background_task(organization_id=org_id)
+                try:
+                    f30 = await service.forecast_revenue(org_id, "30_DAYS")
+                    fq = await service.forecast_revenue(org_id, "QUARTER")
+                    results[org_id] = {"forecast_30d": f30.expected_revenue, "forecast_quarter": fq.expected_revenue}
+                except Exception as e:
+                    logger.error(f"[PREDICTIVE_TASK] Forecast failed for org {org_id}: {e}")
+            return {"status": "SUCCESS", "results": results}
 
     return _run_async(_runner())
 

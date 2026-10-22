@@ -1,4 +1,4 @@
-﻿"""
+"""
 Part 18 — Deal OS DTOs / Schemas
 =================================
 Pydantic v2 request/response schemas for the full deal lifecycle:
@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,9 +155,49 @@ class CommissionRecordRequest(BaseModel):
     currency: str = Field("AED", max_length=3)
     commission_percentage: Decimal = Field(..., ge=0, le=100)
     tax_deducted: Optional[Decimal] = None
+    tax_rate_percentage: Optional[Decimal] = None
+    split_basis: Optional[str] = Field("GROSS", description="GROSS or NET basis for split allocation")
+    other_deductions: Optional[Decimal] = None
+    broker_split_percentage: Optional[Decimal] = None
+    agency_split_percentage: Optional[Decimal] = None
     commission_splits: Optional[List[Dict[str, Any]]] = None
     invoice_reference: Optional[str] = None
-    idempotency_key: str
+    idempotency_key: Optional[str] = None
+
+
+
+class CommissionSettleRequest(BaseModel):
+    amount_received: Optional[Decimal] = None
+    settled_amount: Optional[Decimal] = None
+    payment_reference: str = Field(..., min_length=2, max_length=100)
+    payment_mode: str = Field("MANUAL_BANK_TRANSFER", max_length=50)
+    provenance: Optional[str] = Field("MANUAL_UNVERIFIED", max_length=50)
+    currency: Optional[str] = Field(None, max_length=3)
+    settled_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    settlement_evidence_url: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_amount(self):
+        amt = self.settled_amount if self.settled_amount is not None else self.amount_received
+        if amt is None:
+            raise ValueError("settled_amount or amount_received is required")
+        if amt <= Decimal("0"):
+            raise ValueError("settled_amount must be greater than 0")
+        self.settled_amount = amt
+        self.amount_received = amt
+        return self
+
+
+class CommissionDisputeRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    idempotency_key: Optional[str] = ""
+
+
+class CommissionReverseRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    idempotency_key: Optional[str] = ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -228,3 +268,7 @@ class DealPipelineSummary(BaseModel):
     stalled_deals: int
     commission_pending: float
     commission_earned: float
+    commission_unverified: Optional[float] = 0.0
+    booked_value: Optional[float] = 0.0
+    token_collected: Optional[float] = 0.0
+    commission_disputed: Optional[float] = 0.0

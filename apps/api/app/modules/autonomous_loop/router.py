@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Path, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, status, Path, Body
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -365,7 +365,7 @@ async def ingest_event(
     Manually ingests a domain event into the autonomous sales loop.
     organization_id is always from the authenticated broker — never from payload.
     """
-    organization_id = str(broker.id)
+    organization_id, _ = await _resolve_caller_org_and_role(db, broker)
     svc = AutonomousSalesLoopService(db)
     event_dto = SalesLoopEventDTO(
         event_type=event_type,
@@ -380,11 +380,31 @@ async def ingest_event(
     result = await svc.process_event(event_dto)
     await db.commit()
 
+    # Phase 2C Bridge hook: route to shadow pilot observation pipeline
+    pilot_obs_result = None
+    try:
+        from app.modules.autonomous_loop.phase2c_event_bridge import Phase2CEventBridge
+        bridge = Phase2CEventBridge(db)
+        raw_event_type = event_type.value if hasattr(event_type, "value") else str(event_type)
+        pilot_obs_result = await bridge.route_event(
+            event_type=raw_event_type,
+            organization_id=organization_id,
+            lead_id=lead_id,
+            event_id=result.event_id,
+            correlation_id=str(getattr(result, "correlation_id", "") or ""),
+            payload=payload,
+        )
+        if pilot_obs_result:
+            await db.commit()
+    except Exception as bridge_exc:
+        logger.warning(f"[INGEST_API] Phase 2C bridge hook error: {bridge_exc}")
+
     return create_success_response(data={
         "event_id": result.event_id,
         "processing_state": result.processing_state.value,
         "action_type": result.action_type,
         "decision_reason": result.decision_reason,
+        "pilot_observation": pilot_obs_result,
     })
 
 
@@ -556,6 +576,77 @@ async def get_pilot_health(
     return create_success_response(data=health_data)
 
 
+@router.get(
+    "/pilot/observations",
+    summary="List shadow observations for pilot review queue",
+    response_model=APIResponse,
+)
+async def list_pilot_observations(
+    status: Optional[str] = Query(None, description="pending_review, reviewed, or all"),
+    lead_id: Optional[str] = Query(None, description="Optional lead UUID"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    broker=Depends(get_current_broker),
+) -> APIResponse:
+    """
+    Returns paginated shadow observations for the caller's organization.
+    Supports filtering by status ('pending_review', 'reviewed', 'all').
+    Allows brokers to inspect observations and submit human decisions.
+    """
+    from app.modules.autonomous_loop.phase2c_pilot_repository import PilotRepository
+    organization_id, _ = await _resolve_caller_org_and_role(db, broker)
+    repo = PilotRepository(db)
+
+    items, total, pending_count = await repo.get_observations(
+        organization_id=organization_id,
+        lead_id=lead_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+
+    serialized = []
+    for obs in items:
+        serialized.append({
+            "id": obs.id,
+            "pilot_id": obs.pilot_id,
+            "organization_id": obs.organization_id,
+            "lead_id": obs.lead_id,
+            "agent_id": obs.agent_id,
+            "agent_domain": obs.agent_domain,
+            "agent_version": obs.agent_version,
+            "execution_id": obs.execution_id,
+            "source_event_id": obs.source_event_id,
+            "source_event_type": obs.source_event_type,
+            "recommended_action": obs.recommended_action,
+            "recommended_action_reasoning": obs.recommended_action_reasoning,
+            "agent_confidence": obs.agent_confidence,
+            "policy_decision": obs.policy_decision,
+            "human_action": obs.human_action,
+            "human_action_at": obs.human_action_at.isoformat() if obs.human_action_at else None,
+            "human_actor_id": obs.human_actor_id,
+            "human_notes": obs.human_notes,
+            "comparison_category": obs.comparison_category,
+            "agreement_score": obs.agreement_score,
+            "comparison_notes": obs.comparison_notes,
+            "pilot_stage": obs.pilot_stage,
+            "execution_mode": obs.execution_mode,
+            "is_eligible_for_shadow_accuracy": obs.is_eligible_for_shadow_accuracy,
+            "is_synthetic": obs.is_synthetic,
+            "observed_at": obs.observed_at.isoformat() if obs.observed_at else None,
+            "created_at": obs.created_at.isoformat() if obs.created_at else None,
+        })
+
+    return create_success_response(data={
+        "items": serialized,
+        "total": total,
+        "pending_count": pending_count,
+        "limit": limit,
+        "offset": offset,
+    })
+
+
 @router.post(
     "/pilot/observations/{observation_id}/human-decision",
     summary="Record explicit human decision for a shadow observation",
@@ -583,7 +674,7 @@ async def record_human_decision_endpoint(
         obs, decision = await repo.record_human_decision(
             observation_id=observation_id,
             organization_id=organization_id,
-            lead_id=lead_id or getattr(broker, "lead_id", ""),
+            lead_id=lead_id,
             human_actor_id=str(broker.id),
             human_actor_role="BROKER",
             decision_type=decision_type.upper(),
@@ -714,7 +805,7 @@ async def _resolve_caller_org_and_role(
     response_model=APIResponse,
 )
 async def get_pilot_readiness(
-    organization_id: Optional[str] = Query(None, description="Target organization UUID"),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     broker: Broker = Depends(get_current_broker),
 ) -> APIResponse:
@@ -722,7 +813,7 @@ async def get_pilot_readiness(
     Evaluates production pilot readiness for the organization.
     Fail-closed: Returns ready=False if any mandatory dependency is unknown or unproven.
     """
-    target_org_id, role = await _resolve_caller_org_and_role(db, broker, organization_id)
+    target_org_id, role = await _resolve_caller_org_and_role(db, broker, x_organization_id)
     service = Phase2C3AReadinessService(db)
     report = await service.evaluate_readiness(
         organization_id=target_org_id,
@@ -869,14 +960,14 @@ async def enroll_pilot_tenant(
     response_model=APIResponse,
 )
 async def get_pilot_status(
-    organization_id: Optional[str] = Query(None, description="Target organization UUID"),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     db: AsyncSession = Depends(get_db),
     broker: Broker = Depends(get_current_broker),
 ) -> APIResponse:
     """
     Returns comprehensive pilot status: NOT_ENROLLED, ACTIVE, PAUSED, etc.
     """
-    target_org_id, _ = await _resolve_caller_org_and_role(db, broker, organization_id)
+    target_org_id, _ = await _resolve_caller_org_and_role(db, broker, x_organization_id)
     from app.modules.autonomous_loop.phase2c_pilot_repository import PilotRepository
     repo = PilotRepository(db)
 

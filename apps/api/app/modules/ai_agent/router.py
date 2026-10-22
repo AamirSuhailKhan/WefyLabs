@@ -1,18 +1,25 @@
 """
 Volume 2 PART 5 — Autonomous AI Sales Agent REST + WebSocket API Router
-========================================================================
+
+P0 Security Hardening (applied):
+- ALL endpoints require authenticated principal via get_current_tenant.
+- organization_id is ALWAYS derived from the JWT principal — never from the request body (IDOR fix).
+- Destructive/control endpoints (execute-action, pause, resume, handoff, prompts, escalate) require MANAGER+.
+- WebSocket chat accepts optional bearer token query param for browser clients.
+- Tenant scoping enforced on all DB queries.
+
 12 Production Endpoints:
 - POST   /ai-agent/v1/message               (REST: Inbound omni-channel messaging, rate-limited)
 - WS     /ai-agent/v1/ws/chat/{org}/{lead}  (WebSocket: Real-time streaming web chat)
 - GET    /ai-agent/v1/sessions/{session_id}
 - GET    /ai-agent/v1/sessions/{session_id}/history
 - GET    /ai-agent/v1/sessions/{session_id}/qualification
-- POST   /ai-agent/v1/sessions/{session_id}/escalate
-- POST   /ai-agent/v1/sessions/{session_id}/human-reply (Human agent sends reply back)
+- POST   /ai-agent/v1/sessions/{session_id}/escalate          [MANAGER+]
+- POST   /ai-agent/v1/sessions/{session_id}/human-reply       [MANAGER+]
 - GET    /ai-agent/v1/escalations
 - GET    /ai-agent/v1/decisions
 - GET    /ai-agent/v1/tools/executions
-- POST   /ai-agent/v1/prompts
+- POST   /ai-agent/v1/prompts                                  [MANAGER+]
 - GET    /ai-agent/v1/monitoring/stats
 - GET    /ai-agent/v1/llm/usage
 - GET    /ai-agent/v1/channels               (List supported channels + config)
@@ -24,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.database import get_db
+from app.dependencies import get_current_tenant, get_current_broker, TenantContext
 from app.models.agent_models import (
     AgentSession, ConversationState, QualificationProfile, Escalation,
     DecisionRecord, ToolExecution, PromptVersion, LLMUsage, AgentConfiguration
@@ -42,17 +50,40 @@ manager = ConversationManager()
 tracker = AgentMonitoringTracker()
 gateway = ChannelGateway()
 
+_MANAGER_ROLES = {"OWNER", "ADMIN", "MANAGER"}
+
+
+def _require_manager(tenant: TenantContext) -> None:
+    """Raise 403 if the caller does not hold a manager-level role."""
+    if not tenant.role or tenant.role.upper() not in _MANAGER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manager or higher role required for this operation."
+        )
+
+
+async def _get_session_for_tenant(session_id: str, tenant: TenantContext, db: AsyncSession) -> AgentSession:
+    """Resolve AgentSession and enforce tenant ownership."""
+    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSession not found")
+    if str(session.organization_id) != tenant.organization_id:
+        # Return 404 not 403 to avoid enumeration
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSession not found")
+    return session
+
 
 # ─── Pydantic DTO Schemas ────────────────────────────────────────────────────
 
 class MessageRequestDTO(BaseModel):
     lead_id: str
-    organization_id: str
     channel: str = Field(default="web", description="whatsapp | telegram | web | email")
     content: str
     sender_phone: Optional[str] = None
     sender_name: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    # organization_id removed — derived from JWT principal
 
 
 class MessageResponseDTO(BaseModel):
@@ -86,9 +117,9 @@ class HumanReplyDTO(BaseModel):
 
 class CreatePromptVersionDTO(BaseModel):
     prompt_key: str = Field(default="sales_agent_v1")
-    organization_id: Optional[str] = None
     system_template: str
     notes: Optional[str] = None
+    # organization_id removed — derived from JWT principal
 
 
 # ─── 1. POST /message (rate-limited) ────────────────────────────────────────
@@ -96,17 +127,19 @@ class CreatePromptVersionDTO(BaseModel):
 @router.post("/message", response_model=MessageResponseDTO)
 async def process_inbound_message(
     dto: MessageRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Process an inbound message from any channel through the autonomous AI Sales Agent.
     Rate limited: 100 msg/min per organization, 30 msg/min per lead.
+    Organization context derived from authenticated JWT principal.
     """
-    check_rate_limit(dto.organization_id, dto.lead_id)
+    check_rate_limit(tenant.organization_id, dto.lead_id)
 
     incoming = IncomingMessage(
         lead_id=dto.lead_id,
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,  # Server-side only
         channel=dto.channel,
         content=dto.content,
         sender_phone=dto.sender_phone,
@@ -140,27 +173,54 @@ async def websocket_chat(
     websocket: WebSocket,
     organization_id: str,
     lead_id: str,
+    token: Optional[str] = Query(default=None, description="Bearer token for browser WS auth"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Real-time WebSocket chat endpoint.
-    Streams agent response tokens as they are generated.
-    Sends tool_start/tool_end events for live UI status indicators.
-    Reconnect-safe: restores session from DB automatically.
+    Authenticates via ?token=<jwt> query parameter (standard for browser WS).
+    Validates that organization_id in path matches the authenticated principal's tenant.
     """
+    # Validate token before accepting connection
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.dependencies import get_current_broker
+    try:
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        broker = await get_current_broker(credentials=creds, db=db)
+    except HTTPException:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    # Validate that the caller's memberships include this organization
+    from sqlalchemy import select as sa_select
+    from app.models.organization import OrganizationMember
+    result = await db.execute(
+        sa_select(OrganizationMember.organization_id).where(
+            OrganizationMember.broker_id == broker.id,
+            OrganizationMember.organization_id == organization_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        await websocket.close(code=4003, reason="Organization access denied")
+        return
+
     await websocket_chat_handler(websocket, organization_id, lead_id, db)
 
 
 # ─── 3. GET /sessions/{session_id} ──────────────────────────────────────────
 
 @router.get("/sessions/{session_id}")
-async def get_session_status(session_id: str, db: AsyncSession = Depends(get_db)):
-    """Retrieve session state, FSM position, buyer profile, and turn count."""
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
-    return session
+async def get_session_status(
+    session_id: str,
+    tenant: TenantContext = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve session state, FSM position, buyer profile, and turn count. Tenant-scoped."""
+    return await _get_session_for_tenant(session_id, tenant, db)
 
 
 # ─── 4. GET /sessions/{session_id}/history ──────────────────────────────────
@@ -169,9 +229,12 @@ async def get_session_status(session_id: str, db: AsyncSession = Depends(get_db)
 async def get_session_history(
     session_id: str,
     limit: int = Query(50, le=200),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Full conversation turn history — customer messages + agent responses + FSM states."""
+    """Full conversation turn history. Validates tenant ownership of session."""
+    await _get_session_for_tenant(session_id, tenant, db)
+
     result = await db.execute(
         select(ConversationState)
         .where(ConversationState.session_id == session_id)
@@ -184,8 +247,14 @@ async def get_session_history(
 # ─── 5. GET /sessions/{session_id}/qualification ────────────────────────────
 
 @router.get("/sessions/{session_id}/qualification")
-async def get_session_qualification(session_id: str, db: AsyncSession = Depends(get_db)):
-    """Live buyer qualification profile with completion percentage."""
+async def get_session_qualification(
+    session_id: str,
+    tenant: TenantContext = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """Live buyer qualification profile with completion percentage. Tenant-scoped."""
+    await _get_session_for_tenant(session_id, tenant, db)
+
     result = await db.execute(
         select(QualificationProfile).where(QualificationProfile.session_id == session_id)
     )
@@ -201,13 +270,12 @@ async def get_session_qualification(session_id: str, db: AsyncSession = Depends(
 async def force_session_escalation(
     session_id: str,
     dto: ForceEscalateDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Manually override: force human handoff for an active session."""
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
+    """Manually override: force human handoff for an active session. MANAGER+ required."""
+    _require_manager(tenant)
+    session = await _get_session_for_tenant(session_id, tenant, db)
 
     ctx = await manager.context_builder.build(db, session)
     escalation = await manager.handoff_service.create_escalation(
@@ -224,20 +292,19 @@ async def force_session_escalation(
 async def human_agent_reply(
     session_id: str,
     dto: HumanReplyDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Human agent sends a message back into an escalated conversation.
+    Human agent sends a message back into an escalated conversation. MANAGER+ required.
     If resolve_escalation=True, closes the escalation and re-enables the AI.
-    Broadcasts the reply to WebSocket if the lead has an active web chat connection.
     """
+    _require_manager(tenant)
+
     from datetime import datetime, timezone
     from sqlalchemy import update
 
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
+    session = await _get_session_for_tenant(session_id, tenant, db)
 
     # Log the human reply as a ConversationState turn
     turn_index = session.turn_count + 1
@@ -260,7 +327,6 @@ async def human_agent_reply(
         .values(turn_count=turn_index, last_message_at=datetime.now(timezone.utc))
     )
 
-    # Optionally resolve the escalation
     if dto.resolve_escalation:
         await db.execute(
             update(Escalation)
@@ -271,13 +337,11 @@ async def human_agent_reply(
                 resolution_notes=dto.resolution_notes,
             )
         )
-        # Re-enable AI for future messages
         session.escalated = False
         session.current_state = "follow_up"
 
     await db.commit()
 
-    # Broadcast to WebSocket if connected
     import hashlib
     ws_key = hashlib.sha256(f"{session.organization_id}:{session.lead_id}".encode()).hexdigest()[:16]
     await ws_manager.send_json(ws_key, {
@@ -299,13 +363,13 @@ async def human_agent_reply(
 
 @router.get("/escalations")
 async def list_escalations(
-    organization_id: str = Query(...),
     status_filter: Optional[str] = Query(None, alias="status"),
     priority: Optional[str] = Query(None),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """List pending/active human handoff briefings for the broker dashboard."""
-    query = select(Escalation).where(Escalation.organization_id == organization_id)
+    """List pending/active human handoff briefings for the broker dashboard. Tenant-scoped."""
+    query = select(Escalation).where(Escalation.organization_id == tenant.organization_id)
     if status_filter:
         query = query.where(Escalation.status == status_filter)
     if priority:
@@ -320,9 +384,12 @@ async def list_escalations(
 @router.get("/decisions")
 async def audit_decisions(
     session_id: str = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Full AI decision reasoning chain — auditable by managers."""
+    """Full AI decision reasoning chain — auditable by managers. Tenant-scoped."""
+    await _get_session_for_tenant(session_id, tenant, db)
+
     result = await db.execute(
         select(DecisionRecord)
         .where(DecisionRecord.session_id == session_id)
@@ -336,9 +403,12 @@ async def audit_decisions(
 @router.get("/tools/executions")
 async def audit_tool_executions(
     session_id: str = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Tool execution audit log with source verification flags."""
+    """Tool execution audit log with source verification flags. Tenant-scoped."""
+    await _get_session_for_tenant(session_id, tenant, db)
+
     result = await db.execute(
         select(ToolExecution)
         .where(ToolExecution.session_id == session_id)
@@ -352,16 +422,18 @@ async def audit_tool_executions(
 @router.post("/prompts")
 async def create_prompt_version(
     dto: CreatePromptVersionDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new versioned system prompt template for A/B testing and rollback."""
-    # Deactivate previous version for this org+key
+    """Create a new versioned system prompt template for A/B testing and rollback. MANAGER+ required."""
+    _require_manager(tenant)
+
     from sqlalchemy import update as sa_update
     await db.execute(
         sa_update(PromptVersion)
         .where(
             PromptVersion.prompt_key == dto.prompt_key,
-            PromptVersion.organization_id == dto.organization_id,
+            PromptVersion.organization_id == tenant.organization_id,
             PromptVersion.is_active == True,
         )
         .values(is_active=False)
@@ -369,7 +441,7 @@ async def create_prompt_version(
 
     pv = PromptVersion(
         prompt_key=dto.prompt_key,
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,  # Server-side only
         system_template=dto.system_template,
         notes=dto.notes,
         is_active=True,
@@ -384,24 +456,24 @@ async def create_prompt_version(
 
 @router.get("/monitoring/stats")
 async def get_agent_kpi_stats(
-    organization_id: str = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """Real-time performance metrics — conversion, escalation, cost, and SLA compliance."""
-    return await tracker.get_summary_stats(db, organization_id)
+    return await tracker.get_summary_stats(db, tenant.organization_id)
 
 
 # ─── 13. GET /llm/usage ─────────────────────────────────────────────────────
 
 @router.get("/llm/usage")
 async def get_llm_usage_dashboard(
-    organization_id: str = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
-    """Token usage and USD financial cost breakdown per provider and model."""
+    """Token usage and USD financial cost breakdown per provider and model. Tenant-scoped."""
     result = await db.execute(
         select(LLMUsage)
-        .where(LLMUsage.organization_id == organization_id)
+        .where(LLMUsage.organization_id == tenant.organization_id)
         .order_by(desc(LLMUsage.created_at))
         .limit(100)
     )
@@ -409,7 +481,7 @@ async def get_llm_usage_dashboard(
     total_cost = sum(r.cost_usd for r in records)
     total_tokens = sum(r.total_tokens for r in records)
     return {
-        "organization_id": organization_id,
+        "organization_id": tenant.organization_id,
         "sample_count": len(records),
         "total_cost_usd": round(total_cost, 4),
         "total_tokens": total_tokens,
@@ -420,8 +492,10 @@ async def get_llm_usage_dashboard(
 # ─── 14. GET /channels ───────────────────────────────────────────────────────
 
 @router.get("/channels")
-async def list_supported_channels():
-    """List all supported channels and their capabilities."""
+async def list_supported_channels(
+    tenant: TenantContext = Depends(get_current_tenant),
+):
+    """List all supported channels and their capabilities. Requires authentication."""
     return {
         "supported_channels": [
             {"name": "web", "type": "REST + WebSocket", "streaming": True, "active": True},
@@ -449,19 +523,17 @@ class AddShortlistDTO(BaseModel):
 async def get_session_shortlist(
     session_id: str,
     status_filter: Optional[str] = Query(None, alias="status"),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get buyer's shortlisted properties for this session."""
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
+    """Get buyer's shortlisted properties for this session. Tenant-scoped."""
+    session = await _get_session_for_tenant(session_id, tenant, db)
 
     from app.modules.ai_agent.tool_executor.services import ShortlistService
     svc = ShortlistService(db)
     return await svc.get(
         lead_id=session.lead_id,
-        organization_id=session.organization_id,
+        organization_id=tenant.organization_id,
         status_filter=status_filter,
     )
 
@@ -470,13 +542,11 @@ async def get_session_shortlist(
 async def add_to_session_shortlist(
     session_id: str,
     dto: AddShortlistDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Add or update a property in the buyer's shortlist."""
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
+    """Add or update a property in the buyer's shortlist. Tenant-scoped."""
+    session = await _get_session_for_tenant(session_id, tenant, db)
 
     from app.modules.ai_agent.tool_executor.services import ShortlistService
     svc = ShortlistService(db)
@@ -484,7 +554,7 @@ async def add_to_session_shortlist(
         lead_id=session.lead_id,
         property_id=dto.property_id,
         status=dto.status,
-        organization_id=session.organization_id,
+        organization_id=tenant.organization_id,
         notes=dto.notes,
     )
     await db.commit()
@@ -497,19 +567,17 @@ async def add_to_session_shortlist(
 async def compare_session_properties(
     session_id: str,
     property_ids: List[str] = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Compare multiple properties side-by-side with verified data."""
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="AgentSession not found")
+    """Compare multiple properties side-by-side with verified data. Tenant-scoped."""
+    session = await _get_session_for_tenant(session_id, tenant, db)
 
     from app.modules.ai_agent.tool_executor.services import ComparisonService
     svc = ComparisonService(db)
     return await svc.compare(
         property_ids=property_ids[:4],  # Hard limit: 4 max
-        organization_id=session.organization_id,
+        organization_id=tenant.organization_id,
     )
 
 
@@ -520,13 +588,17 @@ async def get_viewing_slots(
     organization_id: str,
     property_id: Optional[str] = Query(None),
     days_ahead: int = Query(7, le=30),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get available property viewing time slots (subject to calendar configuration)."""
+    """Get available property viewing time slots. Enforces path org_id matches authenticated tenant."""
+    if organization_id != tenant.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization access denied.")
+
     from app.modules.ai_agent.tool_executor.services import CalendarSlotService
     svc = CalendarSlotService(db)
     return await svc.get_available_slots(
-        organization_id=organization_id,
+        organization_id=tenant.organization_id,
         property_id=property_id,
         days_ahead=days_ahead,
     )
@@ -535,7 +607,6 @@ async def get_viewing_slots(
 # ─── Master Build 06 — Canonical Sales Agent Endpoints ───────────────────────
 
 class AgentTurnRequestDTO(BaseModel):
-    organization_id: str
     lead_id: str
     conversation_id: str
     customer_message: str
@@ -543,52 +614,54 @@ class AgentTurnRequestDTO(BaseModel):
     current_facts: Optional[Dict[str, Any]] = None
     is_human_active: bool = False
     is_paused: bool = False
+    # organization_id removed — derived from JWT principal
 
 
 class ProposeActionRequestDTO(BaseModel):
-    organization_id: str
     lead_id: str
     customer_message: str
     qualification_facts: Optional[Dict[str, Any]] = None
     missing_fields: Optional[List[str]] = None
     is_human_active: bool = False
     is_paused: bool = False
+    # organization_id removed — derived from JWT principal
 
 
 class ExecuteActionRequestDTO(BaseModel):
-    organization_id: str
     actor_id: str
     action_type: str
     parameters: Dict[str, Any]
     authorization_token: Optional[str] = None
     risk_tier: str = "MEDIUM"
+    # organization_id removed — derived from JWT principal
 
 
 class HandoffRequestDTO(BaseModel):
-    organization_id: str
     conversation_id: str
     lead_id: str
     reason: str
     actor_id: Optional[str] = None
+    # organization_id removed — derived from JWT principal
 
 
 class PauseResumeRequestDTO(BaseModel):
-    organization_id: str
     conversation_id: str
     reason: Optional[str] = "Human takeover requested"
     actor_id: Optional[str] = None
+    # organization_id removed — derived from JWT principal
 
 
 @router.post("/agent/turn")
 async def execute_agent_turn(
     dto: AgentTurnRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Executes a single governed sales turn using canonical SalesAgent."""
+    """Executes a single governed sales turn using canonical SalesAgent. Tenant-scoped."""
     from app.modules.ai_agent.sales_agent import SalesAgent
     agent = SalesAgent(db)
     return await agent.process_turn(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         lead_id=dto.lead_id,
         conversation_id=dto.conversation_id,
         customer_message=dto.customer_message,
@@ -602,13 +675,14 @@ async def execute_agent_turn(
 @router.post("/agent/propose-action")
 async def propose_next_action(
     dto: ProposeActionRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Evaluates Next Best Action and returns structured proposal without execution."""
     from app.modules.ai_agent.sales_agent import SalesAgent
     agent = SalesAgent(db)
     proposal = agent.propose_action(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         lead_id=dto.lead_id,
         customer_message=dto.customer_message,
         qualification_facts=dto.qualification_facts or {},
@@ -622,9 +696,12 @@ async def propose_next_action(
 @router.post("/agent/execute-action")
 async def execute_governed_action(
     dto: ExecuteActionRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Executes an authorized action with single-use token verification and replay protection."""
+    """Executes an authorized action with single-use token verification. MANAGER+ required."""
+    _require_manager(tenant)
+
     from app.modules.ai_agent.sales_agent import SalesAgent
     from app.modules.ai_agent.action_policy import ProposedActionDTO, NextBestActionType, ActionRiskTier
     agent = SalesAgent(db)
@@ -647,7 +724,7 @@ async def execute_governed_action(
     )
 
     result = await agent.execute_authorized_action(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         actor_id=dto.actor_id,
         proposal=proposal,
         parameters=dto.parameters,
@@ -659,13 +736,16 @@ async def execute_governed_action(
 @router.post("/agent/handoff")
 async def request_agent_handoff(
     dto: HandoffRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Triggers human escalation and pauses AI autonomous outreach."""
+    """Triggers human escalation and pauses AI autonomous outreach. MANAGER+ required."""
+    _require_manager(tenant)
+
     from app.modules.ai_agent.sales_agent import SalesAgent
     agent = SalesAgent(db)
     return await agent.handoff(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         conversation_id=dto.conversation_id,
         lead_id=dto.lead_id,
         reason=dto.reason,
@@ -676,13 +756,16 @@ async def request_agent_handoff(
 @router.post("/agent/pause")
 async def pause_agent(
     dto: PauseResumeRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Pauses autonomous AI activity on a conversation (human takeover)."""
+    """Pauses autonomous AI activity on a conversation. MANAGER+ required."""
+    _require_manager(tenant)
+
     from app.modules.ai_agent.sales_agent import SalesAgent
     agent = SalesAgent(db)
     return await agent.pause(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         conversation_id=dto.conversation_id,
         reason=dto.reason or "Human takeover",
         actor_id=dto.actor_id,
@@ -692,13 +775,16 @@ async def pause_agent(
 @router.post("/agent/resume")
 async def resume_agent(
     dto: PauseResumeRequestDTO,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Resumes autonomous AI activity after human control is released."""
+    """Resumes autonomous AI activity after human control is released. MANAGER+ required."""
+    _require_manager(tenant)
+
     from app.modules.ai_agent.sales_agent import SalesAgent
     agent = SalesAgent(db)
     return await agent.resume(
-        organization_id=dto.organization_id,
+        organization_id=tenant.organization_id,
         conversation_id=dto.conversation_id,
         actor_id=dto.actor_id,
     )
@@ -706,22 +792,22 @@ async def resume_agent(
 
 @router.get("/agent/state")
 async def get_agent_state(
-    organization_id: str = Query(...),
     conversation_id: str = Query(...),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Returns conversation state, control mode, and active agent status."""
+    """Returns conversation state, control mode, and active agent status. Tenant-scoped."""
     from app.models.communication_models import OmnichannelConversation, ConversationControl
     res = await db.execute(
         select(OmnichannelConversation).where(
             OmnichannelConversation.id == conversation_id,
-            OmnichannelConversation.organization_id == organization_id,
+            OmnichannelConversation.organization_id == tenant.organization_id,  # Tenant-scoped
         )
     )
     conv = res.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     ctrl_res = await db.execute(
         select(ConversationControl).where(
             ConversationControl.conversation_id == conversation_id,
@@ -730,7 +816,7 @@ async def get_agent_state(
     ctrl = ctrl_res.scalar_one_or_none()
     control_mode = ctrl.control_mode if ctrl else "ai"
     return {
-        "organization_id": organization_id,
+        "organization_id": tenant.organization_id,
         "conversation_id": conversation_id,
         "control_mode": control_mode,
         "status": conv.status,
@@ -740,16 +826,15 @@ async def get_agent_state(
 
 @router.get("/agent/trace")
 async def get_agent_traces(
-    organization_id: str = Query(...),
     trace_id: Optional[str] = Query(None),
+    tenant: TenantContext = Depends(get_current_tenant),
 ):
-    """Retrieves immutable agent traces for debugging and governance."""
+    """Retrieves immutable agent traces for debugging and governance. Tenant-scoped."""
     from app.modules.ai_agent.agent_trace import AgentTraceRecorder
     if trace_id:
         trace = AgentTraceRecorder.get_trace_by_id(trace_id)
-        if not trace or trace.organization_id != str(organization_id):
+        if not trace or trace.organization_id != tenant.organization_id:
             raise HTTPException(status_code=404, detail="Trace not found")
         return trace.to_dict()
-    traces = AgentTraceRecorder.get_traces_for_org(organization_id)
+    traces = AgentTraceRecorder.get_traces_for_org(tenant.organization_id)
     return [t.to_dict() for t in traces]
-

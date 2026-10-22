@@ -19,8 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, desc
 
 from app.database import get_db
-from app.dependencies import get_current_broker
-from app.models.broker import Broker
+from app.dependencies import get_current_tenant, TenantContext
 from app.models.lead import Lead
 from app.models.crm_models import Task, Activity, LeadNote
 from app.models.transaction_models import DealTransaction, DealMilestone
@@ -57,13 +56,13 @@ async def list_customers(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """List customer records with search and pagination scoped strictly to authenticated tenant."""
     lead_service = CRMLeadService(db)
     params = LeadCRMFilterParams(search=search, limit=limit, offset=offset)
-    org_id = str(broker.organization_id or broker.id)
-    items, _ = await lead_service.list_leads(broker.id, org_id, params)
+    org_id = tenant.organization_id
+    items, _ = await lead_service.list_leads(tenant.broker_id, org_id, params)
     return items
 
 
@@ -71,13 +70,13 @@ async def list_customers(
 async def get_customer_360(
     customer_id: str,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Fetch the canonical 360-degree customer workspace."""
     service = Customer360Service(db)
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     try:
-        return await service.get_customer_360(customer_id, broker.id, org_id)
+        return await service.get_customer_360(customer_id, tenant.broker_id, org_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -89,11 +88,11 @@ async def get_customer_timeline(
     customer_id: str,
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Fetch unified activity and event timeline with complete provenance."""
     timeline_service = CRMTimelineService(db)
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     return await timeline_service.get_unified_timeline(customer_id, org_id, limit)
 
 
@@ -116,7 +115,7 @@ async def list_crm_leads(
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """High-performance operator table with rich multi-faceted filtering and sorting."""
     lead_service = CRMLeadService(db)
@@ -134,8 +133,8 @@ async def list_crm_leads(
         sort_by=sort_by,
         sort_order=sort_order
     )
-    org_id = str(broker.organization_id or broker.id)
-    items, total = await lead_service.list_leads(broker.id, org_id, params)
+    org_id = tenant.organization_id
+    items, total = await lead_service.list_leads(tenant.broker_id, org_id, params)
     return {
         "items": [item.model_dump() for item in items],
         "total": total,
@@ -148,13 +147,13 @@ async def list_crm_leads(
 async def get_crm_lead_detail(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Detailed CRM lead view with full commercial context."""
     service = Customer360Service(db)
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     try:
-        return await service.get_customer_360(lead_id, broker.id, org_id)
+        return await service.get_customer_360(lead_id, tenant.broker_id, org_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -164,17 +163,17 @@ async def transition_lead_stage(
     lead_id: str,
     payload: LeadStageTransitionRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Execute controlled stage transition with audit logging and Revenue Intelligence event emission."""
     lead_service = CRMLeadService(db)
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     try:
         lead = await lead_service.transition_stage(
             lead_id=lead_id,
             new_stage=payload.new_stage,
             reason=payload.reason,
-            broker_id=broker.id,
+            broker_id=tenant.broker_id,
             organization_id=org_id
         )
         return {
@@ -192,17 +191,17 @@ async def reassign_lead(
     lead_id: str,
     payload: LeadAssignRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Reassign lead ownership to another broker, tracking history and emitting events."""
     lead_service = CRMLeadService(db)
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     try:
         lead = await lead_service.reassign_lead(
             lead_id=lead_id,
             target_broker_id=payload.target_broker_id,
             reason=payload.reason,
-            current_broker_id=broker.id,
+            current_broker_id=tenant.broker_id,
             organization_id=org_id
         )
         return {
@@ -218,12 +217,12 @@ async def reassign_lead(
 async def execute_bulk_leads_operation(
     payload: BulkLeadOperationRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Execute safe bounded bulk operations across targeted leads."""
     lead_service = CRMLeadService(db)
-    org_id = str(broker.organization_id or broker.id)
-    return await lead_service.execute_bulk_operation(payload, broker.id, org_id)
+    org_id = tenant.organization_id
+    return await lead_service.execute_bulk_operation(payload, tenant.broker_id, org_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,12 +233,12 @@ async def execute_bulk_leads_operation(
 async def get_sales_pipeline(
     assigned_to: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Retrieve full Kanban sales pipeline columns, cards, and stage totals."""
     service = CRMPipelineService(db)
-    org_id = str(broker.organization_id or broker.id)
-    return await service.get_pipeline_kanban(broker.id, org_id, assigned_to)
+    org_id = tenant.organization_id
+    return await service.get_pipeline_kanban(tenant.broker_id, org_id, assigned_to)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -250,10 +249,10 @@ async def get_sales_pipeline(
 async def list_opportunities(
     stage: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """List commercial deals and opportunities owned by the authenticated broker."""
-    stmt = select(DealTransaction).where(DealTransaction.broker_id == broker.id)
+    stmt = select(DealTransaction).where(DealTransaction.broker_id == tenant.broker_id)
     if stage:
         stmt = stmt.where(DealTransaction.current_stage == stage.lower())
     res = await db.execute(stmt)
@@ -293,7 +292,7 @@ async def list_opportunities(
 async def create_opportunity(
     payload: OpportunityCreateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Create a new commercial deal linked to a lead and property."""
     lead_uuid = uuid.UUID(payload.lead_id)
@@ -301,7 +300,7 @@ async def create_opportunity(
 
     # Verify lead exists & belongs to broker
     lead_res = await db.execute(
-        select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker.id, Lead.deleted_at.is_(None))
+        select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == tenant.broker_id, Lead.deleted_at.is_(None))
     )
     lead = lead_res.scalars().first()
     if not lead:
@@ -310,7 +309,7 @@ async def create_opportunity(
     comm_amount = (payload.agreed_price * payload.commission_percentage) / 100.0
 
     deal = DealTransaction(
-        broker_id=broker.id,
+        broker_id=tenant.broker_id,
         lead_id=lead_uuid,
         property_id=prop_uuid,
         deal_name=payload.deal_name,
@@ -350,11 +349,11 @@ async def update_opportunity_stage(
     opportunity_id: str,
     payload: OpportunityStageUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Progress or update an opportunity's deal stage."""
     deal_uuid = uuid.UUID(opportunity_id)
-    stmt = select(DealTransaction).where(DealTransaction.id == deal_uuid, DealTransaction.broker_id == broker.id)
+    stmt = select(DealTransaction).where(DealTransaction.id == deal_uuid, DealTransaction.broker_id == tenant.broker_id)
     res = await db.execute(stmt)
     deal = res.scalars().first()
     if not deal:
@@ -383,10 +382,10 @@ async def list_crm_tasks(
     priority: Optional[str] = None,
     lead_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """List CRM tasks for the current broker with overdue evaluation."""
-    stmt = select(Task).where(Task.broker_id == broker.id)
+    stmt = select(Task).where(Task.broker_id == tenant.broker_id)
     if status_filter:
         stmt = stmt.where(Task.status == status_filter.lower())
     if priority:
@@ -424,15 +423,15 @@ async def list_crm_tasks(
 async def create_crm_task(
     payload: CRMTaskCreateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Create a new CRM task."""
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     lead_uuid = uuid.UUID(payload.lead_id) if payload.lead_id else None
-    assigned_uuid = uuid.UUID(payload.assigned_broker_id) if payload.assigned_broker_id else broker.id
+    assigned_uuid = uuid.UUID(payload.assigned_broker_id) if payload.assigned_broker_id else tenant.broker_id
 
     task = Task(
-        broker_id=broker.id,
+        broker_id=tenant.broker_id,
         organization_id=org_id,
         lead_id=lead_uuid,
         assigned_broker_id=assigned_uuid,
@@ -470,10 +469,10 @@ async def update_crm_task(
     task_id: str,
     payload: CRMTaskUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Update task status, priority, due date, or complete a task."""
-    stmt = select(Task).where(Task.id == task_id, Task.broker_id == broker.id)
+    stmt = select(Task).where(Task.id == task_id, Task.broker_id == tenant.broker_id)
     res = await db.execute(stmt)
     task = res.scalars().first()
     if not task:
@@ -520,10 +519,10 @@ async def update_crm_task(
 async def delete_crm_task(
     task_id: str,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Delete a task owned by the current broker."""
-    stmt = select(Task).where(Task.id == task_id, Task.broker_id == broker.id)
+    stmt = select(Task).where(Task.id == task_id, Task.broker_id == tenant.broker_id)
     res = await db.execute(stmt)
     task = res.scalars().first()
     if not task:
@@ -543,12 +542,12 @@ async def list_crm_activities(
     lead_id: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """List chronological activity records."""
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     stmt = select(Activity).where(
-        or_(Activity.actor_id == broker.id, Activity.organization_id == org_id)
+        or_(Activity.actor_id == tenant.broker_id, Activity.organization_id == org_id)
     )
     if lead_id:
         stmt = stmt.where(Activity.lead_id == uuid.UUID(lead_id))
@@ -578,15 +577,15 @@ async def list_crm_activities(
 async def log_crm_activity(
     payload: CRMActivityCreateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Log an interaction activity (call, email, note, site visit, meeting)."""
-    org_id = str(broker.organization_id or broker.id)
+    org_id = tenant.organization_id
     lead_uuid = uuid.UUID(payload.lead_id) if payload.lead_id else None
 
     activity = Activity(
         organization_id=org_id,
-        actor_id=broker.id,
+        actor_id=tenant.broker_id,
         lead_id=lead_uuid,
         activity_type=payload.activity_type,
         title=payload.title,
@@ -615,13 +614,13 @@ async def log_crm_activity(
 async def list_crm_notes(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """List notes for a specific lead."""
     lead_uuid = uuid.UUID(lead_id)
     stmt = select(LeadNote).where(
         LeadNote.lead_id == lead_uuid,
-        LeadNote.broker_id == broker.id
+        LeadNote.broker_id == tenant.broker_id
     ).order_by(LeadNote.created_at.desc())
     res = await db.execute(stmt)
     notes = res.scalars().all()
@@ -644,12 +643,12 @@ async def list_crm_notes(
 async def create_crm_note(
     payload: CRMNoteCreateRequest,
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Create a rich text internal note attached to a lead."""
     lead_uuid = uuid.UUID(payload.lead_id)
     lead_res = await db.execute(
-        select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == broker.id, Lead.deleted_at.is_(None))
+        select(Lead).where(Lead.id == lead_uuid, Lead.broker_id == tenant.broker_id, Lead.deleted_at.is_(None))
     )
     lead = lead_res.scalars().first()
     if not lead:
@@ -657,7 +656,7 @@ async def create_crm_note(
 
     note = LeadNote(
         lead_id=lead_uuid,
-        broker_id=broker.id,
+        broker_id=tenant.broker_id,
         content=payload.content.strip()
     )
     db.add(note)
@@ -684,12 +683,12 @@ async def universal_crm_search(
     q: str = Query(..., min_length=1, description="Search term for names, phone, email, properties, tasks"),
     limit: int = Query(30, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Search universally across Customers, Leads, Opportunities, Properties, and Tasks."""
     search_service = CRMSearchService(db)
-    org_id = str(broker.organization_id or broker.id)
-    return await search_service.search(q, broker.id, org_id, limit)
+    org_id = tenant.organization_id
+    return await search_service.search(q, tenant.broker_id, org_id, limit)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -699,7 +698,7 @@ async def universal_crm_search(
 @router.get("/dashboard", response_model=CRMDashboardMetricsResponse)
 async def get_crm_dashboard_metrics(
     db: AsyncSession = Depends(get_db),
-    broker: Broker = Depends(get_current_broker)
+    tenant: TenantContext = Depends(get_current_tenant)
 ):
     """Provides operational metrics: My Work, Today's Appointments, Pipeline, Revenue, SLA Risks."""
     now = datetime.now(timezone.utc)
@@ -713,7 +712,7 @@ async def get_crm_dashboard_metrics(
 
     # Leads counts
     leads_res = await db.execute(
-        select(Lead).where(Lead.broker_id == broker.id, Lead.deleted_at.is_(None))
+        select(Lead).where(Lead.broker_id == tenant.broker_id, Lead.deleted_at.is_(None))
     )
     all_leads = leads_res.scalars().all()
     my_open_leads = sum(1 for l in all_leads if l.status not in ("converted", "lost"))
@@ -721,7 +720,7 @@ async def get_crm_dashboard_metrics(
 
     # Deals & Pipeline valuation
     deals_res = await db.execute(
-        select(DealTransaction).where(DealTransaction.broker_id == broker.id)
+        select(DealTransaction).where(DealTransaction.broker_id == tenant.broker_id)
     )
     all_deals = deals_res.scalars().all()
     active_opps = sum(1 for d in all_deals if d.current_stage not in ("won", "lost"))
@@ -730,14 +729,14 @@ async def get_crm_dashboard_metrics(
 
     # Tasks counts
     tasks_res = await db.execute(
-        select(Task).where(Task.broker_id == broker.id)
+        select(Task).where(Task.broker_id == tenant.broker_id)
     )
     all_tasks = tasks_res.scalars().all()
     overdue_tasks = sum(1 for t in all_tasks if t.status != "completed" and _ensure_utc(t.due_at) and _ensure_utc(t.due_at) < now)
 
     # Appointments counts
     mtg_res = await db.execute(
-        select(SchedulingMeeting).where(SchedulingMeeting.broker_id == broker.id)
+        select(SchedulingMeeting).where(SchedulingMeeting.broker_id == tenant.broker_id)
     )
     all_mtgs = mtg_res.scalars().all()
     todays_appts = sum(1 for m in all_mtgs if _ensure_utc(m.start_utc) and today_start <= _ensure_utc(m.start_utc) <= today_end)
@@ -749,7 +748,7 @@ async def get_crm_dashboard_metrics(
     # Revenue Opportunities count
     rev_op_res = await db.execute(
         select(func.count(RevenueOpportunity.id)).where(
-            RevenueOpportunity.broker_id == broker.id,
+            RevenueOpportunity.broker_id == tenant.broker_id,
             RevenueOpportunity.status == "OPEN"
         )
     )

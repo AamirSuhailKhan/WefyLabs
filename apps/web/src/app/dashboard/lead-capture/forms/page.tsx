@@ -12,10 +12,10 @@ import {
   RefreshCw, 
   Eye, 
   Code2, 
-  Settings2,
-  CheckCircle2
+  CheckCircle2,
+  Settings2
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import LeadCaptureNav from '@/components/lead-capture/LeadCaptureNav';
 import { api } from '@/lib/api-client';
 
@@ -93,48 +93,43 @@ export default function FormBuilderPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-gray-900 pb-16">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto pt-20 px-4 sm:px-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-6 border-b border-gray-200">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest bg-gray-900 text-white">
-                Part 26
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900">
-                Embeddable Form Builder
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-gray-500">
-              Customize fields, preview in real time, and generate drop-in embed code for client websites.
-            </p>
+    <PageContainer className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-6 border-b border-[#D4D0C8]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-widest bg-[#1A1A1A] text-white">
+              Part 26
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1A1A1A]">
+              Embeddable Form Builder
+            </h1>
           </div>
-
-          {sources.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-500">Source:</span>
-              <select
-                value={selectedSourceId}
-                onChange={(e) => setSelectedSourceId(e.target.value)}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-gray-900"
-              >
-                {sources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.channel})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <p className="text-xs sm:text-sm text-[#6B6B6B]">
+            Customize fields, preview in real time, and generate drop-in embed code for client websites.
+          </p>
         </div>
 
-        {/* Lead Capture Sub Navigation */}
-        <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-          <LeadCaptureNav />
-        </div>
+        {sources.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#6B6B6B]">Source:</span>
+            <select
+              value={selectedSourceId}
+              onChange={(e) => setSelectedSourceId(e.target.value)}
+              className="px-3 py-1.5 border border-[#D4D0C8] rounded-xl text-xs font-semibold bg-[#FAF7F2] text-[#1A1A1A] focus:outline-none focus:ring-2 focus:ring-[#1A1A1A] shadow-2xs cursor-pointer"
+            >
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.channel})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Lead Capture Sub Navigation */}
+      <LeadCaptureNav activeTab="forms" />
 
         {/* Builder Grid: Controls (Left) & Live Preview (Right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
@@ -361,7 +356,6 @@ export default function FormBuilderPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+    </PageContainer>
   );
 }

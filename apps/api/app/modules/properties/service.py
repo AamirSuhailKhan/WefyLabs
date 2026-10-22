@@ -42,8 +42,6 @@ class PropertyService:
         self.db = db
 
     async def _resolve_tenant_org_id(self, broker: Broker, explicit_org_id: Optional[Union[str, uuid.UUID]] = None) -> uuid.UUID:
-        if explicit_org_id is not None:
-            return explicit_org_id if isinstance(explicit_org_id, uuid.UUID) else uuid.UUID(str(explicit_org_id))
         broker_id = broker.id if isinstance(broker.id, uuid.UUID) else uuid.UUID(str(broker.id))
         return await resolve_organization_id_for_broker(self.db, broker_id, requested_organization_id=explicit_org_id, allow_fallback=True)
 
@@ -937,7 +935,7 @@ class PropertyService:
             broker=broker,
             status="VISIT_SCHEDULED",
             notes=f"Site visit booked for {scheduled_at.isoformat()}",
-            organization_id=org_id
+            organization_id=organization_id
         )
 
         # 2. Create Meeting

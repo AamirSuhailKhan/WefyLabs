@@ -6,7 +6,6 @@ Data Protection, Legal Holds, and Security Telemetry.
 """
 from __future__ import annotations
 
-import uuid
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from pydantic import BaseModel, Field
@@ -75,50 +74,18 @@ async def get_security_health(
     tenant: TenantContext = Depends(get_current_tenant),
 ):
     """
-    Returns verified health status across all 10 defense-in-depth security planes.
+    Reports that security-plane runtime health is not currently instrumented.
     """
     return SecurityHealthResponse(
-        overall_status="HEALTHY",
+        overall_status="WARNING",
         components={
-            "authentication": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Supabase JWT validation + NIST PBKDF2 100k rounds + JTI token blacklist active"
-            ),
-            "rbac": SecurityHealthComponent(
-                status="HEALTHY",
-                details="10 canonical roles + fail-closed evaluation + dual-notation permission aliasing"
-            ),
-            "tenant_isolation": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Fail-closed context resolution (UNKNOWN=REJECT) + scoped DB query boundaries"
-            ),
-            "secrets": SecurityHealthComponent(
-                status="HEALTHY",
-                details="AES-256-GCM application encryption + automatic PII/credential scrubbing"
-            ),
-            "webhooks": SecurityHealthComponent(
-                status="HEALTHY",
-                details="HMAC-SHA256 signature verification + 300s replay window defense"
-            ),
-            "storage": SecurityHealthComponent(
-                status="HEALTHY",
-                details="MIME magic byte verification + path traversal defense + signed private URLs"
-            ),
-            "ai_governance": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Approved model allowlist + 4-tier autonomy governance + prompt injection filter"
-            ),
-            "workers": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Strict JSON task serialization (zero pickle) + tenant-bound task contexts"
-            ),
-            "database": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Fully parameterized SQL + async connection pooling + non-root application roles"
-            ),
-            "backups": SecurityHealthComponent(
-                status="HEALTHY",
-                details="Automated backup jobs + verified DR plan (RPO < 15m, RTO < 60m)"
+            name: SecurityHealthComponent(
+                status="UNKNOWN",
+                details="No live runtime health check is wired for this security control.",
+            )
+            for name in (
+                "authentication", "rbac", "tenant_isolation", "secrets", "webhooks",
+                "storage", "ai_governance", "workers", "database", "backups",
             )
         }
     )
@@ -235,29 +202,8 @@ async def request_governed_export(
     broker: Broker = Depends(get_current_broker),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Initiates an authorized, audited, tenant-scoped data export with signed download URL.
-    """
-    export_id = str(uuid.uuid4())
-    signed_download_url = f"/api/v1/security/exports/download/{export_id}?token=exp_{export_id[:8]}"
-
-    await SecurityEventService.record_event(
-        event_type=SecurityEventType.EXPORT_CREATED,
-        organization_id=tenant.organization_id,
-        actor_id=str(broker.id),
-        resource_type=req.export_type,
-        resource_id=export_id,
-        result="SUCCESS",
-        severity=SecuritySeverity.LOW,
-        metadata={"format": req.format, "export_type": req.export_type},
-        db=db
+    """Reject until a real tenant-scoped export and authenticated download flow exists."""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Governed exports are not available yet.",
     )
-
-    return {
-        "export_id": export_id,
-        "status": "completed",
-        "export_type": req.export_type,
-        "format": req.format,
-        "download_url": signed_download_url,
-        "expires_in_seconds": 3600,
-    }

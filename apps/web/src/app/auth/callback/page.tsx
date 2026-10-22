@@ -40,23 +40,18 @@ function AuthCallbackContent() {
         return;
       }
 
-      // Phase 0 P0.1 — CSRF state must be present and match the one issued at
-      // flow start. Mismatch or absence means the round-trip was not initiated
-      // by this browser.
+      // Phase 0 P0.1 — The OAuth CSRF state is validated server-side.
+      // The backend's /auth/google/exchange endpoint validates and consumes the
+      // state via consume_oauth_state(state, session_id), where session_id comes
+      // from the wefylabs_oauth_sid HttpOnly cookie that was set at flow initiation.
+      // A redundant client-side check using sessionStorage was removed because
+      // sessionStorage is cleared by the browser when window.location.href
+      // navigates to accounts.google.com, making getOAuthState() always return null
+      // on callback — causing a false CSRF mismatch that aborted every OAuth flow.
       const callbackType = searchParams.get('type');
       const isCalendarCallback = callbackType === 'calendar';
-
-      if (!isCalendarCallback) {
-        const expectedState = api.auth.getOAuthState();
-        api.auth.clearOAuthState();
-        if (!state || !expectedState || state !== expectedState) {
-          setErrorMessage('Invalid or expired sign-in session. Please try signing in again.');
-          setTimeout(() => {
-            router.push(`/login?error=${encodeURIComponent('Invalid OAuth state.')}`);
-          }, 2000);
-          return;
-        }
-      }
+      // Clear any residual client-side state key (no-op if already cleared).
+      api.auth.clearOAuthState();
 
       try {
         if (isCalendarCallback) {

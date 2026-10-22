@@ -1,5 +1,10 @@
 """
 Volume 2 PART 2 — AI Lead Enrichment REST API Router
+
+P0 Security Hardening (applied):
+- All endpoints require authenticated principal via get_current_tenant.
+- Lead ownership is validated against tenant organization_id before processing.
+- Caller-supplied organization_id is removed; organization context derived from JWT.
 """
 import uuid
 from typing import Dict, Any, Optional
@@ -8,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
+from app.dependencies import get_current_tenant, TenantContext
 from app.models.lead import Lead
 from app.models.enrichment_models import LeadEnrichment, ConfidenceScore
 from app.modules.enrichment.service import LeadEnrichmentService
@@ -16,15 +22,8 @@ from app.modules.enrichment.monitoring import EnrichmentMetricsCollector
 router = APIRouter(prefix="/api/v1/enrichment", tags=["AI Lead Enrichment Engine"])
 
 
-@router.post("/enrich/{lead_id}", status_code=status.HTTP_200_OK)
-async def enrich_lead_endpoint(
-    lead_id: str,
-    trigger_source: str = "ManualRequest",
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Triggers full AI enrichment pipeline on a given lead.
-    """
+async def _get_lead_for_tenant(lead_id: str, tenant: TenantContext, db: AsyncSession) -> Lead:
+    """Resolve lead and enforce tenant ownership. Raises 403/404 appropriately."""
     try:
         lead_uuid = uuid.UUID(lead_id)
     except ValueError:
@@ -35,11 +34,33 @@ async def enrich_lead_endpoint(
     lead = res.scalar_one_or_none()
 
     if not lead:
-        raise HTTPException(status_code=404, detail=f"Lead with ID {lead_id} not found.")
+        # Return 403 not 404 to avoid information leakage about other tenants' leads
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Lead not found or access denied.")
+
+    # Enforce tenant ownership — lead must belong to the authenticated tenant
+    lead_org_id = str(lead.organization_id) if hasattr(lead, "organization_id") and lead.organization_id else str(lead.broker_id)
+    if lead_org_id != tenant.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Lead not found or access denied.")
+
+    return lead
+
+
+@router.post("/enrich/{lead_id}", status_code=status.HTTP_200_OK)
+async def enrich_lead_endpoint(
+    lead_id: str,
+    trigger_source: str = "ManualRequest",
+    tenant: TenantContext = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Triggers full AI enrichment pipeline on a given lead.
+    Requires authentication. Lead must belong to the authenticated tenant's organization.
+    """
+    lead = await _get_lead_for_tenant(lead_id, tenant, db)
 
     lead_dto = {
         "id": str(lead.id),
-        "organization_id": str(lead.broker_id),
+        "organization_id": tenant.organization_id,  # Always use server-side tenant, not client-supplied
         "phone": lead.phone,
         "name": lead.name,
         "source": lead.source,
@@ -58,17 +79,26 @@ async def enrich_lead_endpoint(
 @router.get("/profile/{lead_id}", status_code=status.HTTP_200_OK)
 async def get_enriched_profile(
     lead_id: str,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Fetches the enriched profile and field-level confidence provenance for a lead.
+    Lead must belong to the authenticated tenant's organization.
     """
+    # Validate lead ownership first
+    await _get_lead_for_tenant(lead_id, tenant, db)
+
     stmt = select(LeadEnrichment).where(LeadEnrichment.lead_id == lead_id)
     res = await db.execute(stmt)
     enrichment = res.scalar_one_or_none()
 
     if not enrichment:
         raise HTTPException(status_code=404, detail=f"No enriched profile found for lead {lead_id}")
+
+    # Secondary tenant check on enrichment record itself
+    if str(enrichment.organization_id) != tenant.organization_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Lead not found or access denied.")
 
     # Fetch confidence scores
     c_stmt = select(ConfidenceScore).where(ConfidenceScore.lead_id == lead_id)
@@ -107,17 +137,39 @@ async def get_enriched_profile(
 @router.post("/replay/{lead_id}", status_code=status.HTTP_200_OK)
 async def replay_enrichment(
     lead_id: str,
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Safely replays enrichment without overwriting observed data.
+    Lead must belong to the authenticated tenant's organization.
     """
-    return await enrich_lead_endpoint(lead_id=lead_id, trigger_source="ReplayRequested", db=db)
+    lead = await _get_lead_for_tenant(lead_id, tenant, db)
+
+    lead_dto = {
+        "id": str(lead.id),
+        "organization_id": tenant.organization_id,
+        "phone": lead.phone,
+        "name": lead.name,
+        "source": lead.source,
+        "budget_min": lead.budget_min,
+        "budget_max": lead.budget_max,
+        "property_type": lead.property_type,
+        "timeline": lead.timeline,
+        "notes": lead.notes or []
+    }
+
+    service = LeadEnrichmentService(db=db)
+    result = await service.enrich_lead(lead_dto=lead_dto, trigger_source="ReplayRequested")
+    return result
 
 
 @router.get("/metrics", status_code=status.HTTP_200_OK)
-async def get_enrichment_metrics():
+async def get_enrichment_metrics(
+    tenant: TenantContext = Depends(get_current_tenant),
+):
     """
     Retrieves real-time operational monitoring metrics (latency, token cost, provider health).
+    Requires authenticated principal; metrics are platform-wide operational data.
     """
     return EnrichmentMetricsCollector.get_summary()

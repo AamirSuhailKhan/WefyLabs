@@ -430,9 +430,12 @@ async def verify_acquisition_webhook_challenge(
         if token:
             source = await source_svc.resolve_source_by_webhook_token(token)
 
-        expected_token = verify_token
-        if source and source.configuration:
-            expected_token = source.configuration.get("verify_token") or source.webhook_url_token or verify_token
+        if not source:
+            record_webhook_failure("meta", "challenge_invalid_source_token")
+            raise HTTPException(status_code=403, detail="Invalid or missing webhook source token")
+
+        configured_verify_token = (source.configuration or {}).get("verify_token")
+        expected_token = configured_verify_token or source.webhook_url_token
 
         challenge = connector.handle_verification_challenge(query_params, expected_token)
         if challenge:
@@ -487,11 +490,6 @@ async def receive_acquisition_webhook(
     source: Optional[LeadSource] = None
     if token:
         source = await source_svc.resolve_source_by_webhook_token(token)
-
-    # Fallback: if google provider and not found by token, search by provider within org if source_id given
-    if not source and request.query_params.get("source_id"):
-        # Handled in lookup below
-        source = await source_svc.get_source_by_id(request.query_params["source_id"])
 
     if not source:
         record_webhook_failure(provider, "invalid_token")

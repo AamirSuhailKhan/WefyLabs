@@ -6,7 +6,7 @@ import {
   Users, Target, Calendar, CheckSquare, Activity, DollarSign, 
   Search, Plus, AlertCircle, ArrowUpRight, TrendingUp, Clock, Filter
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { CRMDashboardMetrics, CRMSearchResultItem } from '@/types/crm';
 
@@ -46,10 +46,7 @@ export default function CRMDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-24 pb-16">
+    <PageContainer>
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
@@ -310,7 +307,6 @@ export default function CRMDashboardPage() {
             </p>
           </Link>
         </div>
-      </main>
-    </div>
+      </PageContainer>
   );
 }

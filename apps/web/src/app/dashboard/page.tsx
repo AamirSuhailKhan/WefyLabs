@@ -9,7 +9,7 @@ import LeadTable from '@/components/dashboard/LeadTable';
 import KanbanBoard from '@/components/dashboard/KanbanBoard';
 import NewLeadModal from '@/components/dashboard/NewLeadModal';
 import LeadDrawer from '@/components/leads/LeadDrawer';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import CommandCenterView from '@/components/dashboard/CommandCenterView';
 import RevenueAutopilotView from '@/components/dashboard/RevenueAutopilotView';
 import FollowUpWorkQueueView from '@/components/dashboard/FollowUpWorkQueueView';
@@ -24,6 +24,12 @@ export default function DashboardPage() {
 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleOpenModal = () => setIsModalOpen(true);
+    window.addEventListener('wefylabs:open-add-lead', handleOpenModal);
+    return () => window.removeEventListener('wefylabs:open-add-lead', handleOpenModal);
+  }, []);
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -102,13 +108,7 @@ export default function DashboardPage() {
   const revenueAtRisk = revenueOverview?.revenue_at_risk_estimate;
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      {/* Dashboard-specific nav */}
-      <DashboardNav onAddLead={() => setIsModalOpen(true)} />
-
-      {/* Content — pushed below fixed 64px nav */}
-      <div className="pt-16">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+    <PageContainer>
 
           {/* ── Today's Urgent Layer Banner ── */}
           <div className="mt-6 p-4 bg-[#FAF7F2] border border-[#D4D0C8] rounded-2xl shadow-xs">
@@ -312,9 +312,6 @@ export default function DashboardPage() {
               </>
             )}
           </div>
-        </div>
-      </div>
-
       {/* Lead Detail Drawer */}
       <LeadDrawer
         leadId={selectedLeadId}
@@ -329,6 +326,6 @@ export default function DashboardPage() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchLeads}
       />
-    </div>
+    </PageContainer>
   );
 }

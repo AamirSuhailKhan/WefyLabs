@@ -13,7 +13,7 @@ Endpoints:
 """
 import logging
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -41,6 +41,7 @@ router = APIRouter(prefix="/api/v1/command-center", tags=["AI Agent Daily Comman
     summary="Fetch Operational Command Center Data",
 )
 async def get_command_center_endpoint(
+    request: Request,
     timezone: str = Query("Asia/Kolkata"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
@@ -51,7 +52,12 @@ async def get_command_center_endpoint(
     """
     service = CommandCenterService(db)
     try:
-        return await service.get_command_center_data(broker=current_broker, timezone_str=timezone)
+        org_header = request.headers.get("x-wefylabs-organization-id") or request.headers.get("x-organization-id")
+        return await service.get_command_center_data(
+            broker=current_broker,
+            timezone_str=timezone,
+            requested_org_id=org_header
+        )
     except Exception as exc:
         logger.error(f"[COMMAND_CENTER_ROUTER] get_command_center_data failed: {exc}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
@@ -63,12 +69,14 @@ async def get_command_center_endpoint(
     summary="Fetch Command Center Summary Counters",
 )
 async def get_command_center_summary_endpoint(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
 ):
     """Returns top-level counters for urgent actions, SLA breaches, and meetings."""
     service = CommandCenterService(db)
-    data = await service.get_command_center_data(broker=current_broker)
+    org_header = request.headers.get("x-wefylabs-organization-id") or request.headers.get("x-organization-id")
+    data = await service.get_command_center_data(broker=current_broker, requested_org_id=org_header)
     return data.summary
 
 

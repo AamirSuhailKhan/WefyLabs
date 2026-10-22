@@ -89,6 +89,26 @@ async def book_appointment_endpoint(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Calendar booking failed. Please retry.")
 
 
+@router.get("/bookings", response_model=List[BookingResponseDTO])
+async def list_tenant_bookings_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+    tenant: TenantContext = Depends(get_current_tenant),
+):
+    """
+    List all meetings and site visits belonging to the authenticated tenant.
+    Guarantees strict tenant isolation by organization_id.
+    """
+    stmt = (
+        select(Meeting)
+        .where(Meeting.organization_id == tenant.organization_id)
+        .order_by(Meeting.start_utc.asc())
+    )
+    result = await db.execute(stmt)
+    meetings = result.scalars().all()
+    return [BookingResponseDTO.model_validate(m) for m in meetings]
+
+
 @router.get("/bookings/{meeting_id}", response_model=BookingResponseDTO)
 async def get_booking_details_endpoint(
     meeting_id: str,

@@ -189,14 +189,22 @@ async def test_9_google_callback_replay_rejected(db_session: AsyncSession):
     code = f"unique_replay_code_{uuid.uuid4().hex}"
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        # First use consumes the code and then fails at the provider boundary
-        # (no mock identity in testing) — the exact failure code is irrelevant.
-        res1 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": "state-value-12345678"})
+        # 1. Obtain valid state and session cookie
+        res_url1 = await ac.get("/api/v1/auth/google/url")
+        assert res_url1.status_code == 200
+        state1 = res_url1.json()["state"]
+
+        # First use consumes state1, consumes the code, and then fails at provider boundary
+        res1 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": state1})
         assert res1.status_code in (400, 401, 422, 502)
 
-        # Second exchange with the same code is rejected as a REPLAY before any
-        # provider interaction — this is the distributed one-time guarantee.
-        res2 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": "state-value-12345678"})
+        # 2. Obtain fresh state for second attempt (since state1 was consumed)
+        res_url2 = await ac.get("/api/v1/auth/google/url")
+        assert res_url2.status_code == 200
+        state2 = res_url2.json()["state"]
+
+        # Second exchange with the same code is rejected as an authorization code REPLAY
+        res2 = await ac.post("/api/v1/auth/google/exchange", json={"code": code, "state": state2})
         assert res2.status_code == 400
         assert "consumed" in res2.json()["detail"].lower()
 

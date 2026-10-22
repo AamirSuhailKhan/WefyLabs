@@ -23,12 +23,14 @@ class Broker(Base):
         default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    google_subject: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True, index=True)
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     agency_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     whatsapp_number: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True, index=True)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    auth_version: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
     subscription_status: Mapped[str] = mapped_column(
         String(20),
         default="trial",
@@ -83,6 +85,13 @@ class Broker(Base):
     @property
     def organization_id(self) -> str:
         """Canonical multi-tenant organization ID associated with this broker."""
+        try:
+            from app.dependencies import get_ambient_tenant
+            ambient = get_ambient_tenant()
+            if ambient and ambient.organization_id:
+                return str(ambient.organization_id)
+        except Exception:
+            pass
         return str(self.id)
 
     @property

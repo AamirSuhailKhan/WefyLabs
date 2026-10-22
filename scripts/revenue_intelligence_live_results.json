@@ -1,0 +1,413 @@
+{
+  "/api/v1/revenue-intelligence/overview": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "realized_revenue": null,
+      "current_pipeline_estimate": null,
+      "revenue_at_risk_estimate": 18000000.0,
+      "active_opportunities": 2,
+      "total_leads": 3,
+      "attributed_revenue": null,
+      "unattributed_revenue": null,
+      "attribution_coverage_pct": 100.0,
+      "forecast_status": "FORECAST_NOT_AVAILABLE",
+      "forecast_disclaimer": "Forecast is not available because validated ML forecasting models are not enabled. Projections rely strictly on deterministic pipeline values."
+    }
+  },
+  "/api/v1/revenue-intelligence/funnel": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "date_from": null,
+      "date_to": null,
+      "total_leads": 3,
+      "stages": [
+        {
+          "stage": "new",
+          "count": 3,
+          "conversion_rate_pct": 0.0
+        },
+        {
+          "stage": "contacted",
+          "count": 0,
+          "conversion_rate_pct": null
+        },
+        {
+          "stage": "qualified",
+          "count": 0,
+          "conversion_rate_pct": null
+        },
+        {
+          "stage": "site_visit",
+          "count": 0,
+          "conversion_rate_pct": null
+        },
+        {
+          "stage": "negotiation",
+          "count": 0,
+          "conversion_rate_pct": null
+        },
+        {
+          "stage": "converted",
+          "count": 0,
+          "conversion_rate_pct": null
+        }
+      ],
+      "overall_conversion_rate_pct": 0.0,
+      "active_opportunities": 2,
+      "estimated_pipeline_value_estimate": null,
+      "confirmed_revenue": null
+    }
+  },
+  "/api/v1/revenue-intelligence/leakage": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "date_from": null,
+      "date_to": null,
+      "staleness_threshold_days": 14,
+      "total_leakage_events": 3,
+      "total_estimated_value_at_risk_estimate": 18000000.0,
+      "by_stage": [
+        {
+          "stage": "new",
+          "lost_count": 3,
+          "total_estimated_value_lost_estimate": 18000000.0,
+          "avg_days_in_stage": 19.0,
+          "top_reason": "STALE"
+        }
+      ]
+    }
+  },
+  "/api/v1/revenue-intelligence/leakage/items": {
+    "status": 200,
+    "data": [
+      {
+        "leakage_type": "NEW_LEAD_NO_RESPONSE",
+        "severity": "HIGH",
+        "entity_type": "lead",
+        "entity_id": "1d3d636e-1460-4507-bc3c-2ac0f19f7250",
+        "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "detected_at": "2026-10-06T09:26:17.849517+00:00",
+        "age_days": 19,
+        "evidence": {
+          "stage": "new",
+          "created_at": "2026-09-16T15:26:17.274022+00:00",
+          "score": "pending"
+        },
+        "estimated_impact_estimate": 6000000.0,
+        "recommended_next_action": "Initiate automated first-touch outreach or assign sales agent immediately.",
+        "source_channel": "manual",
+        "status": "ACTIVE"
+      },
+      {
+        "leakage_type": "NEW_LEAD_NO_RESPONSE",
+        "severity": "HIGH",
+        "entity_type": "lead",
+        "entity_id": "47d1dc97-2458-4dec-980f-a0d3afa24601",
+        "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "detected_at": "2026-10-06T09:26:17.849517+00:00",
+        "age_days": 19,
+        "evidence": {
+          "stage": "new",
+          "created_at": "2026-09-16T15:34:59.786832+00:00",
+          "score": "pending"
+        },
+        "estimated_impact_estimate": 6000000.0,
+        "recommended_next_action": "Initiate automated first-touch outreach or assign sales agent immediately.",
+        "source_channel": "manual",
+        "status": "ACTIVE"
+      },
+      {
+        "leakage_type": "NEW_LEAD_NO_RESPONSE",
+        "severity": "HIGH",
+        "entity_type": "lead",
+        "entity_id": "2434cac9-3b94-49fb-a377-789f4ad785f6",
+        "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+        "detected_at": "2026-10-06T09:26:17.849517+00:00",
+        "age_days": 19,
+        "evidence": {
+          "stage": "new",
+          "created_at": "2026-09-16T18:39:27.955903+00:00",
+          "score": "pending"
+        },
+        "estimated_impact_estimate": 6000000.0,
+        "recommended_next_action": "Initiate automated first-touch outreach or assign sales agent immediately.",
+        "source_channel": "manual",
+        "status": "ACTIVE"
+      }
+    ]
+  },
+  "/api/v1/revenue-intelligence/attribution": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "date_from": null,
+      "date_to": null,
+      "total_sources": 1,
+      "by_source": [
+        {
+          "source": "manual",
+          "lead_count": 3,
+          "converted_count": 0,
+          "conversion_rate_pct": 0.0,
+          "estimated_revenue_estimate": null
+        }
+      ],
+      "top_source_by_leads": "manual",
+      "top_source_by_conversion": "manual"
+    }
+  },
+  "/api/v1/revenue-intelligence/outcomes": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "date_from": null,
+      "date_to": null,
+      "total_feedback_records": 0,
+      "win_rate_pct": null,
+      "positive_feedback_count": 0,
+      "negative_feedback_count": 0,
+      "completed_deals": 0,
+      "avg_opportunity_score_at_win": null,
+      "outcome_distribution": []
+    }
+  },
+  "/api/v1/revenue-intelligence/actions": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "date_from": null,
+      "date_to": null,
+      "computation_method": "heuristic_aggregation_v1",
+      "top_opportunity_types": [
+        {
+          "opportunity_type": "NEW_HIGH_VALUE_MATCH",
+          "total_count": 2,
+          "actioned_count": 0,
+          "positive_feedback_count": 0,
+          "action_rate_pct": 0.0,
+          "positive_feedback_rate_pct": 0.0
+        },
+        {
+          "opportunity_type": "NEW_PROPERTY_MATCH",
+          "total_count": 2,
+          "actioned_count": 0,
+          "positive_feedback_count": 0,
+          "action_rate_pct": 0.0,
+          "positive_feedback_rate_pct": 0.0
+        }
+      ],
+      "top_source_by_conversion": "manual",
+      "total_opportunities_evaluated": 4,
+      "total_positive_signals": 0
+    }
+  },
+  "/api/v1/revenue-intelligence/data-quality": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "data_health_score_pct": 100.0,
+      "total_records_audited": 5,
+      "issues": [
+        {
+          "metric": "leads_missing_source",
+          "missing_count": 0,
+          "total_count": 3,
+          "coverage_pct": 100.0,
+          "severity": "LOW",
+          "description": "Leads acquired without identifiable source attribution channel."
+        },
+        {
+          "metric": "leads_missing_budget",
+          "missing_count": 0,
+          "total_count": 3,
+          "coverage_pct": 100.0,
+          "severity": "MEDIUM",
+          "description": "Leads with undefined budget maximum inhibiting pipeline valuation."
+        },
+        {
+          "metric": "leads_missing_timeline",
+          "missing_count": 0,
+          "total_count": 3,
+          "coverage_pct": 100.0,
+          "severity": "LOW",
+          "description": "Leads without recorded purchasing horizon."
+        },
+        {
+          "metric": "deals_missing_commission",
+          "missing_count": 0,
+          "total_count": 2,
+          "coverage_pct": 100.0,
+          "severity": "LOW",
+          "description": "Transactions lacking confirmed commission amount."
+        }
+      ],
+      "audited_at": "2026-10-06T09:26:20.136164+00:00"
+    }
+  },
+  "/api/v1/revenue-intelligence/team": {
+    "status": 200,
+    "data": {
+      "organization_id": "c193be18-4a6a-4030-9089-f94c42119189",
+      "total_agents": 1,
+      "agents": [
+        {
+          "broker_id": "c193be18-4a6a-4030-9089-f94c42119189",
+          "name": "Aamir Suhail",
+          "email": "aamir.fresh@bmu.edu.in",
+          "assigned_leads": 3,
+          "contacted_leads": 0,
+          "qualified_leads": 0,
+          "scheduled_appointments": 0,
+          "completed_site_visits": 0,
+          "active_opportunities": 4,
+          "closed_deals": 0
+        }
+      ]
+    }
+  },
+  "/api/v1/revenue/action-queue?limit=10": {
+    "status": 200,
+    "data": {
+      "items": [
+        {
+          "id": "bea06a79-ff3f-4847-adec-a4fd0db7f2fb",
+          "opportunity_type": "NEW_HIGH_VALUE_MATCH",
+          "priority": "MEDIUM",
+          "urgency": "MEDIUM",
+          "opportunity_score": 55.3,
+          "match_score": 94.5,
+          "confidence": 1.0,
+          "lead_id": "1d3d636e-1460-4507-bc3c-2ac0f19f7250",
+          "lead_name": "Rajesh Kumar",
+          "lead_phone": "+919876543210",
+          "lead_score": "pending",
+          "lead_stage": "new",
+          "property_id": "93a0d570-c0c4-4583-b16d-ed19d25bbd25",
+          "property_title": "Sunny 2BHK Palm Grove Indiranagar",
+          "property_price": 5200000.0,
+          "property_currency": "INR",
+          "property_locality": "Indiranagar",
+          "property_bedrooms": 2,
+          "property_status": "available",
+          "reason": "High-confidence 94% property match for active buyer.",
+          "why_now": "Lead is actively looking for 2bhk in Indiranagar. High compatibility with live inventory.",
+          "why_property": "Matches stated budget (\u20b95,200,000), 2 BHK requirement, and locality (Indiranagar).",
+          "risk_of_inactivity": "Buyer may explore competitor listings if not contacted within 24 hours.",
+          "recommended_action": "CALL_LEAD",
+          "recommended_channel": "CALL",
+          "positive_signals": [
+            "Strong property fit (94% match)",
+            "Ready-to-move inventory available",
+            "Located in prime Indiranagar"
+          ],
+          "negative_signals": [
+            "Inactive for 19 days",
+            "Low immediate urgency due to lead dormancy"
+          ],
+          "data_freshness": {
+            "lead_activity_hours_ago": 474.0,
+            "property_listed_hours_ago": 470.6
+          },
+          "status": "RECOMMENDED",
+          "created_at": "2026-10-06T09:25:04.323420+00:00",
+          "expires_at": "2026-10-13T09:25:03.839716+00:00"
+        },
+        {
+          "id": "bc41e3ec-ffb1-4f91-a8eb-b24f3ee61d1b",
+          "opportunity_type": "NEW_HIGH_VALUE_MATCH",
+          "priority": "MEDIUM",
+          "urgency": "MEDIUM",
+          "opportunity_score": 55.3,
+          "match_score": 94.5,
+          "confidence": 1.0,
+          "lead_id": "2434cac9-3b94-49fb-a377-789f4ad785f6",
+          "lead_name": "Amit Sharma",
+          "lead_phone": "+919111122222",
+          "lead_score": "pending",
+          "lead_stage": "new",
+          "property_id": "93a0d570-c0c4-4583-b16d-ed19d25bbd25",
+          "property_title": "Sunny 2BHK Palm Grove Indiranagar",
+          "property_price": 5200000.0,
+          "property_currency": "INR",
+          "property_locality": "Indiranagar",
+          "property_bedrooms": 2,
+          "property_status": "available",
+          "reason": "High-confidence 94% property match for active buyer.",
+          "why_now": "Lead is actively looking for 2bhk in Indiranagar. High compatibility with live inventory.",
+          "why_property": "Matches stated budget (\u20b95,200,000), 2 BHK requirement, and locality (Indiranagar).",
+          "risk_of_inactivity": "Buyer may explore competitor listings if not contacted within 24 hours.",
+          "recommended_action": "CALL_LEAD",
+          "recommended_channel": "CALL",
+          "positive_signals": [
+            "Strong property fit (94% match)",
+            "Ready-to-move inventory available",
+            "Located in prime Indiranagar"
+          ],
+          "negative_signals": [
+            "Inactive for 19 days",
+            "Low immediate urgency due to lead dormancy"
+          ],
+          "data_freshness": {
+            "lead_activity_hours_ago": 470.8,
+            "property_listed_hours_ago": 470.6
+          },
+          "status": "RECOMMENDED",
+          "created_at": "2026-10-06T09:25:04.323415+00:00",
+          "expires_at": "2026-10-13T09:25:03.839716+00:00"
+        }
+      ],
+      "total_count": 2,
+      "critical_count": 0,
+      "high_count": 0,
+      "briefing_headline": "You have 2 high-value sales actions requiring attention.",
+      "active_leads_count": 3,
+      "active_properties_count": 3,
+      "completed_today_count": 0,
+      "last_scan_at": "2026-10-06T09:26:21.200726+00:00"
+    }
+  },
+  "/api/v1/revenue/briefing": {
+    "status": 200,
+    "data": {
+      "greeting": "Good day, Aamir Suhail.",
+      "headline": "You have 2 actions deserving attention today.",
+      "immediate_actions_count": 2,
+      "critical_actions_count": 0,
+      "hot_leads_count": 2,
+      "top_recommendation_text": "Start with Amit Sharma: High-confidence 94% property match for active buyer. (Call Lead).",
+      "evidence_points": [
+        "2 active revenue opportunities identified.",
+        "0 critical urgency items requiring immediate agent contact.",
+        "2 high-intent buyer actions queued."
+      ],
+      "generated_at": "2026-10-06T09:26:21.917023+00:00"
+    }
+  },
+  "/api/v1/revenue/demand-intelligence": {
+    "status": 200,
+    "data": {
+      "total_active_buyers": 3,
+      "total_available_listings": 3,
+      "top_demand_gaps": [
+        {
+          "segment_id": "indiranagar-2bhk",
+          "locality": "Indiranagar",
+          "bedrooms": 2,
+          "property_type": "Apartment",
+          "budget_band": "Segment Target",
+          "active_buyer_demand_count": 2,
+          "matching_inventory_count": 1,
+          "deficit_count": 1,
+          "urgency": "MEDIUM",
+          "recommended_action": "Acquire 1 more 2BHK properties in Indiranagar to satisfy active buyer demand."
+        }
+      ],
+      "high_demand_localities": [
+        "Indiranagar"
+      ]
+    }
+  }
+}

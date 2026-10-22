@@ -32,7 +32,7 @@ from app.models.property_models import PropertyListing
 from app.models.calendar_models import SchedulingMeeting
 from app.models.revenue_autopilot_models import RevenueOpportunity
 from app.database import get_db
-from app.dependencies import get_current_broker
+from app.dependencies import get_current_broker, get_current_tenant, TenantContext
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -194,8 +194,16 @@ async def client_a(db_session: AsyncSession, seed_data):
     async def override_get_broker():
         return seed_data["broker_a"]
 
+    async def override_get_tenant():
+        return TenantContext(
+            organization_id=TENANT_A_ORG_ID,
+            broker_id=TENANT_A_BROKER_ID,
+            role="ADMIN",
+        )
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_broker] = override_get_broker
+    app.dependency_overrides[get_current_tenant] = override_get_tenant
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
@@ -212,8 +220,16 @@ async def client_b(db_session: AsyncSession, seed_data):
     async def override_get_broker():
         return seed_data["broker_b"]
 
+    async def override_get_tenant():
+        return TenantContext(
+            organization_id=TENANT_B_ORG_ID,
+            broker_id=TENANT_B_BROKER_ID,
+            role="ADMIN",
+        )
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_broker] = override_get_broker
+    app.dependency_overrides[get_current_tenant] = override_get_tenant
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

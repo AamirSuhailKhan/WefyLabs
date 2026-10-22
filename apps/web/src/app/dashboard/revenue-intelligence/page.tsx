@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import {
   RevenueOverviewDTO,
@@ -158,11 +158,7 @@ export default function RevenueIntelligencePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <div className="pt-20 pb-16">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <PageContainer className="space-y-6">
 
           {/* Top Header & Range Selection */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#D4D0C8] pb-6">
@@ -977,8 +973,6 @@ export default function RevenueIntelligencePage() {
             </div>
           )}
 
-        </div>
-      </div>
-    </div>
+    </PageContainer>
   );
 }

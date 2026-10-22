@@ -628,7 +628,7 @@ class DemoModeService:
             actor_id=demo_broker_id,
             organization_id=demo_org_id,
             resource_id=str(demo_org_id),
-            changes={"session_token_prefix": token[:8], "seeded_leads": len(created_leads), "seeded_properties": len(created_properties)},
+            changes={"seeded_leads": len(created_leads), "seeded_properties": len(created_properties)},
             ip_address=client_ip
         )
 
@@ -678,7 +678,7 @@ class DemoModeService:
         await self.db.execute(delete(Broker).where(Broker.id == broker_id))
 
         await self.db.flush()
-        logger.info(f"[DEMO_SERVICE] Safely purged demo session {session_token[:8]} (org={org_id})")
+        logger.info(f"[DEMO_SERVICE] Safely purged demo session for organization {org_id}")
         return True
 
     async def cleanup_expired_demo_sessions(self) -> int:

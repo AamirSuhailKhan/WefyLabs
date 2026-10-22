@@ -125,8 +125,11 @@ class ResponseIntelligenceService:
         org_matches = False
         if hasattr(lead, "organization_id") and lead.organization_id:
             org_matches = str(lead.organization_id) == str(organization_id)
-        elif lead.broker_id:
-            org_matches = (str(lead.broker_id) == str(organization_id))
+        elif lead.broker_id and broker is not None:
+            # Compatibility for unmigrated broker-owned leads is tied to the
+            # authenticated actor, never to an organization value supplied by
+            # a caller or inferred from a stale broker field.
+            org_matches = str(lead.broker_id) == str(broker.id)
 
         if not org_matches:
             raise HTTPException(

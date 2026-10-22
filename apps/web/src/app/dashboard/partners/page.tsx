@@ -7,7 +7,7 @@ import {
   Search, Filter, MapPin, Tag, Check, Award, Building2, Briefcase,
   Share2, ArrowUpRight, BadgePercent, AlertTriangle, ShieldCheck
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 
 const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -232,11 +232,7 @@ export default function ChannelPartnersPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] flex flex-col pt-16">
-      <DashboardNav />
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <PageContainer>
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-zinc-200 dark:border-zinc-800">
           <div>
@@ -456,7 +452,6 @@ export default function ChannelPartnersPage() {
             </table>
           </div>
         </div>
-      </main>
 
       {/* Partner 360 Drawer */}
       {activePartnerId && (
@@ -945,6 +940,6 @@ export default function ChannelPartnersPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

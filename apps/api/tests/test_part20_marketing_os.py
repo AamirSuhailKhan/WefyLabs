@@ -26,6 +26,29 @@ def _org():
 def _id():
     return str(uuid.uuid4())
 
+
+def test_marketing_scope_uses_validated_organization_not_broker_fallback():
+    from app.dependencies import TenantContext
+    from app.modules.marketing.router import _org
+
+    tenant = TenantContext(
+        organization_id="organization-selected-from-membership",
+        broker_id=uuid.uuid4(),
+    )
+    assert _org(tenant) == "organization-selected-from-membership"
+
+
+def test_marketing_data_routes_require_membership_validated_tenant():
+    from app.dependencies import get_current_tenant
+    from app.modules.marketing.router import marketing_router
+
+    protected_routes = [route for route in marketing_router.routes if "/t/" not in route.path]
+    assert protected_routes
+    assert all(
+        any(dependency.call is get_current_tenant for dependency in route.dependant.dependencies)
+        for route in protected_routes
+    )
+
 # ─── Unit Tests — CampaignStatus State Machine ──────────────────────────────
 
 class TestCampaignStatusStateMachine:

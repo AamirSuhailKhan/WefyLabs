@@ -215,6 +215,22 @@ class Phase2CEventBridge:
             last_action = completed_record.actions_taken[-1]
             recommended_action = last_action.get("action")
             reasoning = last_action.get("reasoning", "")
+        elif completed_record.policy_decisions:
+            last_decision = completed_record.policy_decisions[-1]
+            if last_decision.get("is_permitted", False):
+                recommended_action = last_decision.get("action_type")
+                out = getattr(completed_record, "final_output", None) or getattr(completed_record, "result_summary", None)
+                reasoning = out or f"Shadow evaluation permitted {recommended_action}"
+            else:
+                recommended_action = "NO_ACTION"
+                reasoning = last_decision.get("block_reason") or "Abstention required by policy"
+        else:
+            recommended_action = "NO_ACTION"
+            out = getattr(completed_record, "final_output", None) or getattr(completed_record, "result_summary", None)
+            reasoning = out or "Agent completed evaluation without proposed action"
+
+        if not recommended_action:
+            recommended_action = "NO_ACTION"
 
         # Persist observation to DB
         obs = await repo.record_observation(

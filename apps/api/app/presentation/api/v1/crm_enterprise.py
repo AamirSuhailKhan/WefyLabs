@@ -1,6 +1,8 @@
 import uuid
+from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -38,9 +40,9 @@ class RouteLeadResponse(BaseModel):
     next_index: int
 
 class CommissionCalculateRequest(BaseModel):
-    property_sale_price: int = Field(..., gt=0)
-    gross_commission_rate_pct: float = Field(2.0, ge=0.1, le=10.0)
-    agent_split_pct: float = Field(70.0, ge=0.0, le=100.0)
+    property_sale_price: Decimal = Field(..., gt=0)
+    gross_commission_rate_pct: Decimal = Field(Decimal("2.0"), ge=0.1, le=10.0)
+    agent_split_pct: Decimal = Field(Decimal("70.0"), ge=0.0, le=100.0)
 
 class ActivityTimelineItem(BaseModel):
     id: str
@@ -124,11 +126,23 @@ async def calculate_commission_endpoint(
     """
     Calculates Gross Commission Income (GCI), Brokerage split, and Agent Net payout.
     """
-    return CommissionCalculatorService.calculate_deal_commission(
+    quote = CommissionCalculatorService.calculate_deal_commission(
         property_sale_price=req.property_sale_price,
         gross_commission_rate_pct=req.gross_commission_rate_pct,
         agent_split_pct=req.agent_split_pct
     )
+    # Preserve the established JSON-number contract. Decimal arithmetic is kept
+    # through every calculation; conversion happens only at this display-only API
+    # boundary and does not create or persist a financial record.
+    return JSONResponse({
+        "property_sale_price": float(quote.property_sale_price),
+        "gross_commission_rate_pct": float(quote.gross_commission_rate_pct),
+        "total_gci": float(quote.total_gci),
+        "brokerage_split_pct": float(quote.brokerage_split_pct),
+        "agent_split_pct": float(quote.agent_split_pct),
+        "brokerage_commission": float(quote.brokerage_commission),
+        "agent_net_commission": float(quote.agent_net_commission),
+    })
 
 
 @router.get("/leads/{lead_id}/timeline", response_model=TimelineResponse)

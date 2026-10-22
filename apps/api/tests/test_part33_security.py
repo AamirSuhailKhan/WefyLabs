@@ -122,4 +122,4 @@ class TestGuardrailAffirmations:
         }
         resp = await client.post("/api/v1/whatsapp/webhook", json=payload)
         # Should return safe response without throwing unhandled exceptions
-        assert resp.status_code in (200, 401, 403, 404)
+        assert resp.status_code in (400, 401, 403, 404, 503)

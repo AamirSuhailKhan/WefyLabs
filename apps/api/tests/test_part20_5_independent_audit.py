@@ -158,7 +158,7 @@ class TestIndependentTenantIsolation:
         db_mock.execute.return_value = mock_res
 
         executor = ToolExecutor()
-        context = {"organization_id": org_a_id, "broker_id": org_a_id}
+        context = {"organization_id": org_a_id, "broker_id": org_a_id, "has_human_approval": True}
 
         result = await executor.run(
             db=db_mock,

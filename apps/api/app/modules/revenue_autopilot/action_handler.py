@@ -34,6 +34,28 @@ from app.modules.revenue_autopilot.dto import (
 logger = logging.getLogger("beetlelabs.revenue_autopilot.action_handler")
 
 
+def _safe_org_uuid(broker: Broker) -> uuid.UUID:
+    raw = getattr(broker, "organization_id", None)
+    if raw:
+        if isinstance(raw, uuid.UUID):
+            return raw
+        try:
+            return uuid.UUID(str(raw))
+        except (ValueError, TypeError):
+            pass
+    broker_id = getattr(broker, "id", None)
+    if broker_id:
+        if isinstance(broker_id, uuid.UUID):
+            return broker_id
+        try:
+            return uuid.UUID(str(broker_id))
+        except (ValueError, TypeError):
+            pass
+    if raw:
+        return uuid.uuid5(uuid.NAMESPACE_DNS, str(raw))
+    return uuid.uuid4()
+
+
 class RevenueActionHandler:
     """
     Handles lifecycle action approval, dismissal, and feedback submission
@@ -55,7 +77,7 @@ class RevenueActionHandler:
         """
         opp_uuid = uuid.UUID(str(opportunity_id))
         broker_uuid = uuid.UUID(str(broker.id))
-        org_uuid = uuid.UUID(str(getattr(broker, "organization_id", None) or broker.id))
+        org_uuid = _safe_org_uuid(broker)
         now = datetime.now(timezone.utc)
 
         # 1. Fetch opportunity with tenant check
@@ -244,7 +266,7 @@ class RevenueActionHandler:
         """
         opp_uuid = uuid.UUID(str(opportunity_id))
         broker_uuid = uuid.UUID(str(broker.id))
-        org_uuid = uuid.UUID(str(getattr(broker, "organization_id", None) or broker.id))
+        org_uuid = _safe_org_uuid(broker)
         now = datetime.now(timezone.utc)
 
         dismissal_reason = reason or (dto.reason if dto else "Not relevant")
@@ -314,7 +336,7 @@ class RevenueActionHandler:
         """
         opp_uuid = uuid.UUID(str(opportunity_id))
         broker_uuid = uuid.UUID(str(broker.id))
-        org_uuid = uuid.UUID(str(getattr(broker, "organization_id", None) or broker.id))
+        org_uuid = _safe_org_uuid(broker)
         now = datetime.now(timezone.utc)
 
         stmt = select(RevenueOpportunity).where(
@@ -377,7 +399,7 @@ class RevenueActionHandler:
         """
         opp_uuid = uuid.UUID(str(opportunity_id))
         broker_uuid = uuid.UUID(str(broker.id))
-        org_uuid = uuid.UUID(str(getattr(broker, "organization_id", None) or broker.id))
+        org_uuid = _safe_org_uuid(broker)
         now = datetime.now(timezone.utc)
 
         stmt = select(RevenueOpportunity).where(

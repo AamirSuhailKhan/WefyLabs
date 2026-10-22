@@ -1,4 +1,5 @@
 import pytest
+from decimal import Decimal
 import uuid
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,3 +52,19 @@ async def test_crm_enterprise_deduplicate_and_commission(db_session: AsyncSessio
         assert len(data_tl["activities"]) >= 1
 
     app.dependency_overrides.clear()
+
+
+def test_commission_calculator_reconciles_exactly_at_currency_precision():
+    """A displayed quote must not lose or create money through float arithmetic."""
+    from app.services.commission_service import CommissionCalculatorService
+
+    result = CommissionCalculatorService.calculate_deal_commission(
+        property_sale_price="999999.99",
+        gross_commission_rate_pct="2.75",
+        agent_split_pct="33.33",
+    )
+
+    assert result.total_gci == Decimal("27500.00")
+    assert result.agent_net_commission == Decimal("9165.75")
+    assert result.brokerage_commission == Decimal("18334.25")
+    assert result.agent_net_commission + result.brokerage_commission == result.total_gci

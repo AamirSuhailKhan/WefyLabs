@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import { api, getToken } from '@/lib/api-client';
 import { WefyLabsIcon } from '@/components/shared/WefyLabsIcon';
 
+import DashboardNav from '@/components/shared/DashboardNav';
+
 export default function DashboardLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -15,6 +17,7 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
 
   useEffect(() => {
     let active = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function checkAuth() {
       const token = getToken();
@@ -23,9 +26,19 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
         return;
       }
 
+      // Hard timeout: if the session check never resolves (network hang,
+      // backend unavailable), redirect to login after 12 seconds.
+      timeoutId = setTimeout(() => {
+        if (active) {
+          console.warn('[Auth] Session verification timed out — redirecting to login');
+          router.push('/login?error=session_timeout');
+        }
+      }, 12000);
+
       try {
         const broker = await api.auth.me();
         if (!active) return;
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
 
         if (broker.onboarding_status === 'SUSPENDED') {
           setSuspended(true);
@@ -41,6 +54,7 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
         setLoading(false);
       } catch (err) {
         console.error('Auth verification failed', err);
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
         if (active) {
           router.push('/login');
         }
@@ -51,6 +65,7 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
 
     return () => {
       active = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [router, pathname]);
 
@@ -68,11 +83,11 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
             Your broker account has been suspended by the administrator. Please contact support at support@wefylabs.com for resolution.
           </p>
           <button
-            onClick={() => {
-              api.auth.logout();
+            onClick={async () => {
+              await api.auth.logout();
               router.push('/login');
             }}
-            className="w-full py-3 px-4 bg-gray-950 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
+            className="w-full py-3 px-4 bg-gray-950 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors shadow-sm cursor-pointer"
           >
             Return to Login
           </button>
@@ -98,10 +113,15 @@ export default function DashboardLayoutClient({ children }: { children: React.Re
   }
 
   return (
-    <AnimatePresence mode="wait">
-      <PageTransition key={pathname}>
-        {children}
-      </PageTransition>
-    </AnimatePresence>
+    <div className="min-h-screen bg-[#F0EDE8] flex flex-col w-full text-[#1A1A1A] antialiased">
+      <DashboardNav />
+      <main id="main-content" className="flex-1 w-full flex flex-col">
+        <AnimatePresence mode="wait">
+          <PageTransition key={pathname}>
+            {children}
+          </PageTransition>
+        </AnimatePresence>
+      </main>
+    </div>
   );
 }

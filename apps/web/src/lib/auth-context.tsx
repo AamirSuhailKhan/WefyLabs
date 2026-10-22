@@ -71,7 +71,7 @@ interface BrokerContextType {
   initials: string;
   refreshBroker: () => Promise<Broker | null>;
   updateProfile: (data: Partial<Broker>) => Promise<Broker>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const BrokerContext = createContext<BrokerContextType | undefined>(undefined);
@@ -136,8 +136,8 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
     return updated;
   };
 
-  const logout = () => {
-    api.auth.logout();
+  const logout = async () => {
+    await api.auth.logout();
     setBroker(null);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('wefylabs:auth_change'));
@@ -175,7 +175,7 @@ export function useBroker(): BrokerContextType {
       initials: 'U',
       refreshBroker: async () => null,
       updateProfile: async (data: Partial<Broker>) => data as Broker,
-      logout: () => {},
+      logout: async () => {},
     };
   }
   return context;

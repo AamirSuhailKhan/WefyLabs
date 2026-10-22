@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from sqlalchemy import select, and_, or_, desc, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -40,6 +42,7 @@ from app.models.communication_models import (
     DeliveryStatusRecord,
     OutboundQueue,
     RawCommunicationEvent,
+    WebhookEventClaim,
     ConversationMemoryFact,
     MemoryProvenanceEnum,
     CanonicalSenderType,
@@ -48,6 +51,8 @@ from app.models.communication_models import (
     validate_message_status_transition,
 )
 from app.models.conversation import Conversation as LegacyConversation
+from app.models.global_models import ProviderConfiguration
+from app.models.organization import OrganizationMember
 from app.modules.communication.channel_manager.manager import get_channel_manager
 from app.modules.communication.channels.gate import ensure_channel_sendable, ChannelNotSendableError
 from app.modules.communication.channels.enums import Channel
@@ -158,24 +163,31 @@ class CanonicalCommunicationService:
         10. Transactional Outbox Event Emission
         """
         # ── Stage 1: Authentication / Signature Verification ─────────────────
+        trusted_tenant = None
         if enforce_signature and provider_name in ("whatsapp", "whatsapp_cloud", "meta"):
             sig_header = headers.get("X-Hub-Signature-256") or headers.get("x-hub-signature-256")
             app_secret = getattr(settings, "WHATSAPP_APP_SECRET", None)
-            if settings.ENV == "production" or app_secret:
-                if not verify_meta_hmac_signature(raw_body, sig_header, app_secret):
-                    logger.warning("[CanonicalComm] Invalid Meta webhook HMAC signature rejected.")
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid Meta webhook HMAC signature",
-                    )
+            if not app_secret:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="WhatsApp webhook signature verification is not configured.",
+                )
+            if not verify_meta_hmac_signature(raw_body, sig_header, app_secret):
+                logger.warning("[CanonicalComm] Invalid Meta webhook HMAC signature rejected.")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Meta webhook HMAC signature",
+                )
+            trusted_tenant = await self._resolve_provider_tenant(db, parsed_payload)
 
         # ── Stage 2: Immutable Raw Event Preservation (Section 12) ───────────
         payload_hash = hashlib.sha256(raw_body).hexdigest()
-        provider_event_id = self._extract_provider_event_id(parsed_payload)
+        provider_event_id = self._extract_provider_event_id(parsed_payload) or f"payload_{payload_hash}"
 
         raw_event = RawCommunicationEvent(
             provider=provider_name,
             provider_event_id=provider_event_id,
+            organization_id=str(trusted_tenant[0]) if trusted_tenant else None,
             payload_hash=payload_hash,
             raw_payload=parsed_payload,
             processing_status="PENDING",
@@ -184,18 +196,27 @@ class CanonicalCommunicationService:
         db.add(raw_event)
         await db.flush()
 
-        # ── Stage 3: Webhook Idempotency Check (Section 13) ───────────────────
+        # ── Stage 3: Atomic Webhook Idempotency Claim ─────────────────────────
         if provider_event_id:
-            dup_stmt = select(RawCommunicationEvent).where(
-                and_(
-                    RawCommunicationEvent.provider == provider_name,
-                    RawCommunicationEvent.provider_event_id == provider_event_id,
-                    RawCommunicationEvent.processing_status == "PROCESSED",
-                    RawCommunicationEvent.id != raw_event.id,
+            claim_values = {
+                "provider": provider_name,
+                "provider_event_id": provider_event_id,
+                "organization_id": raw_event.organization_id or "global",
+            }
+            dialect_name = db.get_bind().dialect.name
+            if dialect_name == "postgresql":
+                claim_stmt = postgresql_insert(WebhookEventClaim).values(**claim_values).on_conflict_do_nothing(
+                    index_elements=["provider", "organization_id", "provider_event_id"]
                 )
-            )
-            existing_dup = (await db.execute(dup_stmt)).scalars().first()
-            if existing_dup:
+            elif dialect_name == "sqlite":
+                claim_stmt = sqlite_insert(WebhookEventClaim).values(**claim_values).on_conflict_do_nothing(
+                    index_elements=["provider", "organization_id", "provider_event_id"]
+                )
+            else:
+                raise RuntimeError(f"Atomic webhook claims are unsupported for database dialect '{dialect_name}'.")
+
+            claim_result = await db.execute(claim_stmt)
+            if claim_result.rowcount == 0:
                 raw_event.processing_status = "DUPLICATE_IGNORED"
                 raw_event.processed_at = datetime.now(timezone.utc)
                 await db.commit()
@@ -223,6 +244,7 @@ class CanonicalCommunicationService:
                     provider_name=provider_name,
                     raw_event_id=raw_event.id,
                     error_data=errors,
+                    organization_id=str(trusted_tenant[0]) if trusted_tenant else None,
                 )
                 results.append(res)
             raw_event.processing_status = "PROCESSED"
@@ -258,7 +280,7 @@ class CanonicalCommunicationService:
             return {"status": "ok", "detail": "Missing sender phone"}
 
         # ── Stage 5: Tenant Resolution ───────────────────────────────────────
-        org_id, broker = await self._resolve_tenant(db, parsed_payload, from_phone_raw)
+        org_id, broker = trusted_tenant or await self._resolve_tenant(db, parsed_payload, from_phone_raw)
         raw_event.organization_id = org_id
 
         # ── Stage 6: Contact E.164 Normalization & Sanitization ───────────────
@@ -376,6 +398,7 @@ class CanonicalCommunicationService:
         provider_name: str,
         raw_event_id: Optional[str] = None,
         error_data: Optional[Any] = None,
+        organization_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Processes provider delivery events (sent -> delivered -> read | failed).
@@ -394,6 +417,8 @@ class CanonicalCommunicationService:
                 ChannelMessage.provider_message_id == external_message_id,
             )
         )
+        if organization_id is not None:
+            stmt = stmt.where(ChannelMessage.organization_id == organization_id)
         msg = (await db.execute(stmt)).scalars().first()
 
         if not msg:
@@ -484,6 +509,7 @@ class CanonicalCommunicationService:
         sender_agent_id: Optional[str] = None,
         template_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        has_human_approval: bool = False,
     ) -> ChannelMessage:
         """
         Outbound message lifecycle:
@@ -538,7 +564,7 @@ class CanonicalCommunicationService:
             else:
                 p2_act = Phase2ActionType.SEND_WHATSAPP_MESSAGE
 
-            policy_decision = get_policy_engine().evaluate(str(organization_id), p2_act)
+            policy_decision = get_policy_engine().evaluate(str(organization_id), p2_act, has_human_approval=has_human_approval)
             if not policy_decision.is_permitted:
                 logger.warning(
                     f"[CanonicalCommunicationService] Outbound AI message BLOCKED by Phase 2 Governance: {policy_decision.block_reason}"
@@ -1062,6 +1088,65 @@ class CanonicalCommunicationService:
     # ═════════════════════════════════════════════════════════════════════════
     # 7. INTERNAL RESOLUTION HELPERS
     # ═════════════════════════════════════════════════════════════════════════
+
+    async def _resolve_provider_tenant(
+        self, db: AsyncSession, payload: Dict[str, Any]
+    ) -> Tuple[str, Broker]:
+        """Resolve WhatsApp tenant exclusively from signed provider account metadata."""
+        phone_number_ids = set()
+        for entry in payload.get("entry", []) or []:
+            for change in entry.get("changes", []) or []:
+                value = change.get("value", {}) or {}
+                phone_id = (value.get("metadata", {}) or {}).get("phone_number_id")
+                if phone_id:
+                    phone_number_ids.add(str(phone_id))
+        root_phone_id = payload.get("phone_number_id")
+        if root_phone_id:
+            phone_number_ids.add(str(root_phone_id))
+
+        if len(phone_number_ids) != 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook must identify exactly one configured WhatsApp phone number.",
+            )
+        phone_number_id = next(iter(phone_number_ids))
+        configs = (await db.execute(
+            select(ProviderConfiguration).where(
+                ProviderConfiguration.provider_type == "WHATSAPP",
+                ProviderConfiguration.is_active.is_(True),
+            )
+        )).scalars().all()
+        matching_configs = [
+            config for config in configs
+            if isinstance(config.config_json, dict)
+            and str(config.config_json.get("phone_number_id", "")) == phone_number_id
+        ]
+        organization_ids = {str(config.organization_id) for config in matching_configs}
+        if not organization_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="WhatsApp phone number is not associated with an active organization integration.",
+            )
+        if len(organization_ids) != 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="WhatsApp phone number is ambiguously mapped to multiple organizations.",
+            )
+
+        organization_id = uuid.UUID(next(iter(organization_ids)))
+        broker = (await db.execute(
+            select(Broker)
+            .join(OrganizationMember, OrganizationMember.broker_id == Broker.id)
+            .where(OrganizationMember.organization_id == organization_id)
+            .order_by(OrganizationMember.role.asc(), Broker.id.asc())
+            .limit(1)
+        )).scalars().first()
+        if broker is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="WhatsApp organization integration has no broker membership to process messages.",
+            )
+        return str(organization_id), broker
 
     async def _resolve_tenant(
         self, db: AsyncSession, payload: Dict[str, Any], from_phone: str

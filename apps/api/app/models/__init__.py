@@ -28,7 +28,7 @@ from app.models.communication_models import (
     MessageTemplate, TemplateVariable, ProviderCredential,
     OutboundQueue, InboundQueue, TypingEvent, PresenceRecord,
     # Master Build 03 — Canonical Communication OS
-    RawCommunicationEvent, ConversationMemoryFact, MemoryProvenanceEnum,
+    RawCommunicationEvent, WebhookEventClaim, ConversationMemoryFact, MemoryProvenanceEnum,
     CanonicalSenderType, CanonicalMessageType, CanonicalMessageStatus,
     validate_message_status_transition,
 )

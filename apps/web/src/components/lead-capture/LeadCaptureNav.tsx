@@ -20,7 +20,7 @@ export function LeadCaptureNav({ activeTab }: LeadCaptureNavProps = {}) {
   const pathname = usePathname();
 
   return (
-    <div className="flex items-center gap-1 border-b border-[#E5E7EB] dark:border-gray-800 bg-white/70 dark:bg-gray-900/70 backdrop-blur-md px-6 py-2.5 overflow-x-auto">
+    <div className="w-full flex items-center gap-1 p-1 rounded-xl bg-[#FAF7F2] border border-[#D4D0C8] mb-6 overflow-x-auto shadow-2xs">
       {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive =
@@ -34,13 +34,13 @@ export function LeadCaptureNav({ activeTab }: LeadCaptureNavProps = {}) {
           <Link
             key={tab.href}
             href={tab.href}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
               isActive
-                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/60'
+                ? 'bg-[#1A1A1A] text-white shadow-xs'
+                : 'text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-[#F0EDE8]'
             }`}
           >
-            <Icon className="w-3.5 h-3.5" />
+            <Icon className="w-3.5 h-3.5 shrink-0" />
             <span>{tab.label}</span>
           </Link>
         );
@@ -50,4 +50,3 @@ export function LeadCaptureNav({ activeTab }: LeadCaptureNavProps = {}) {
 }
 
 export default LeadCaptureNav;
-

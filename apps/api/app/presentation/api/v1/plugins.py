@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.dependencies import get_current_broker
+from app.dependencies import get_current_broker, require_super_admin
 from app.models.broker import Broker
 from app.core.plugins.plugin_runtime import (
     PluginRuntimeEngine, PluginManifest, PluginState, PluginStatus, PluginSandboxExecutionResult

@@ -6,7 +6,7 @@ import {
   Building2, Plus, RefreshCw, AlertCircle, CheckCircle2,
   ExternalLink, Sparkles, Clock, ChevronRight
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import {
   Button, Card, CardHeader, CardTitle, CardContent,
   PageHeader, KpiCard, StatusBadge, EmptyState, Skeleton
@@ -56,10 +56,7 @@ export default function MarketingListingsPage() {
   const staleCount = listings.filter((l) => l.is_stale).length;
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] flex flex-col pt-16">
-      <DashboardNav />
-
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         <PageHeader
           title="LISTING STUDIO"
           description="Marketing publications backed by Supply OS physical inventory records. Automatically flagged as stale upon unit reservation or price mutation."
@@ -192,7 +189,6 @@ export default function MarketingListingsPage() {
             />
           )}
         </div>
-      </main>
-    </div>
+      </PageContainer>
   );
 }

@@ -80,6 +80,7 @@ async def test_tool_executor_handles_unknown_tool(db_session):
 async def test_get_available_slots_tool_execution(db_session):
     """Verify get_available_slots tool executes cleanly and returns structured slots."""
     executor = ToolExecutor()
+    # 1. Permitted read-only observation: get_available_slots executes cleanly without requiring approval
     res = await executor.run(
         db=db_session,
         session_id="sess-test",
@@ -92,6 +93,18 @@ async def test_get_available_slots_tool_execution(db_session):
     assert "slots" in res.result
     assert res.result["source_verified"] is True
     assert len(res.result["slots"]) > 0
+
+    # 2. Prohibited external action: book_viewing has real side effects and is blocked without customer confirmation/approval
+    res_blocked = await executor.run(
+        db=db_session,
+        session_id="sess-test",
+        turn_index=2,
+        tool_name="book_viewing",
+        arguments={"property_id": "prop-123", "preferred_date": "2026-10-20"},
+        context={"organization_id": "test-org"}
+    )
+    assert res_blocked.success is False
+    assert "requires explicit customer confirmation" in res_blocked.error or "Phase 2 Governance blocked" in res_blocked.error
 
 
 @pytest.mark.asyncio
@@ -182,6 +195,7 @@ async def test_run_parallel_tool_calls(db_session):
         {"name": "get_available_slots", "arguments": {"days_ahead": 2}},
         {"name": "get_shortlist", "arguments": {}},
     ]
+    # 1. Concurrent read tools execute cleanly without requiring human approval
     results = await executor.run_parallel(
         db=db_session,
         session_id="sess-test",
@@ -191,3 +205,19 @@ async def test_run_parallel_tool_calls(db_session):
     )
     assert len(results) == 2
     assert all(r.success for r in results)
+
+    # 2. Parallel invocation including an unapproved side-effecting action blocks the prohibited tool
+    mixed_calls = [
+        {"name": "get_available_slots", "arguments": {"days_ahead": 2}},
+        {"name": "book_viewing", "arguments": {"property_id": "prop-123", "preferred_date": "2026-10-20"}},
+    ]
+    mixed_results = await executor.run_parallel(
+        db=db_session,
+        session_id="sess-test",
+        turn_index=2,
+        tool_calls=mixed_calls,
+        context={"organization_id": "test-org", "session_id": "sess-test"}
+    )
+    assert mixed_results[0].success is True
+    assert mixed_results[1].success is False
+    assert "requires explicit customer confirmation" in mixed_results[1].error or "Phase 2 Governance blocked" in mixed_results[1].error

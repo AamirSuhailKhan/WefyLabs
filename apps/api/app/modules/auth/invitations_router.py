@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_broker, optional_security
+from app.dependencies import get_current_broker, get_optional_broker
 from app.models.broker import Broker
 from app.common.response import APIResponse, create_success_response
 from app.modules.auth.invitation_service import InvitationService
@@ -92,27 +92,13 @@ async def verify_invitation(
 @router.post("/invitations/accept")
 async def accept_invitation(
     dto: AcceptInvitationDTO,
-    request: Request,
     db: AsyncSession = Depends(get_db),
+    current_broker: Optional[Broker] = Depends(get_optional_broker),
 ):
     """
     Accepts an organization invitation.
     Supports either an authenticated session via Bearer token or direct registration.
     """
-    # Check if caller has an active bearer token
-    current_broker = None
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token_str = auth_header.replace("Bearer ", "").strip()
-        try:
-            from app.modules.auth.service import decode_access_token
-            payload = decode_access_token(token_str)
-            broker_id = payload.get("broker_id") or payload.get("sub")
-            if broker_id:
-                current_broker = await db.get(Broker, UUID(broker_id))
-        except Exception:
-            pass
-
     reg_data = {
         "password": dto.password,
         "name": dto.name,

@@ -14,6 +14,7 @@ from sqlalchemy import select, and_, or_, desc
 
 from app.models.lead import Lead
 from app.models.broker import Broker
+from app.models.organization import Organization
 from app.models.crm_models import Task, Activity, LeadNote
 from app.models.property_models import LeadPropertyInterest, PropertyListing
 from app.models.calendar_models import SchedulingMeeting, Viewing, MeetingOutcome
@@ -62,10 +63,21 @@ class Customer360Service:
         broker_name = broker.name if broker else "Assigned Agent"
 
         # 3. Preferences DTO
+        org_curr = "INR"
+        if organization_id:
+            try:
+                org_val = uuid.UUID(str(organization_id))
+                org_res = await self.db.execute(select(Organization.currency_code).where(Organization.id == org_val))
+                fetched_curr = org_res.scalar_one_or_none()
+                if fetched_curr:
+                    org_curr = fetched_curr
+            except Exception:
+                pass
+
         preferences = CustomerPreferencesDTO(
             budget_min=lead.budget_min,
             budget_max=lead.budget_max,
-            budget_currency=lead.budget_currency or "AED",
+            budget_currency=lead.budget_currency or org_curr,
             property_type=lead.property_type,
             transaction_type=lead.transaction_type,
             preferred_locations=lead.preferred_locations or [],

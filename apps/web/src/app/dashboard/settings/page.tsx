@@ -6,7 +6,7 @@ import { Settings, CreditCard, MessageSquare, CheckCircle2, Copy, Calendar } fro
 import { api } from '@/lib/api-client';
 import { useBroker } from '@/lib/auth-context';
 import { Broker } from '@/types';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import RazorpayCheckoutModal from '@/components/billing/RazorpayCheckoutModal';
 
 export default function SettingsPage() {
@@ -121,11 +121,7 @@ export default function SettingsPage() {
   const inputClass = "w-full bg-white border border-[#D4D0C8] rounded-xl h-12 px-4 text-[14px] text-[#1A1A1A] placeholder:text-[#A0A0A0] focus:outline-none focus:border-[#1A1A1A] transition-colors";
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      <DashboardNav />
-
-      <div className="pt-16">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
+    <PageContainer>
 
           {/* Page Header */}
           <div className="py-8 border-b border-[#D4D0C8]">
@@ -434,18 +430,6 @@ export default function SettingsPage() {
 
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* In-App Razorpay Checkout Modal */}
-      <RazorpayCheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        initialPlanId={checkoutPlanId}
-        onSuccess={() => {
-          api.billing.getStatus().then((st) => setBillingStatus(st));
-        }}
-      />
-    </div>
+    </PageContainer>
   );
 }

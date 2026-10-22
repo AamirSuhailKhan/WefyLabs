@@ -274,3 +274,35 @@ async def test_accept_invitation_unauthenticated(
     )
     assert reuse_resp.status_code == 400
     assert "already been accepted" in reuse_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_authenticated_invitation_must_match_broker_email(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_broker: Broker,
+    agent_broker: Broker,
+):
+    with patch("app.tasks.queue_workers.process_email_dispatch.delay") as mock_email:
+        create_resp = await client.post(
+            "/api/v1/organizations/invitations",
+            json={"email": "intended@example.com", "role": "agent"},
+            headers=get_auth_headers(admin_broker),
+        )
+    assert create_resp.status_code == 200
+    raw_token = mock_email.call_args[0][0]["content"].split("token=")[1].strip()
+
+    accept_resp = await client.post(
+        "/api/v1/invitations/accept",
+        json={"token": raw_token},
+        headers=get_auth_headers(agent_broker),
+    )
+    assert accept_resp.status_code == 403
+    assert "different email" in accept_resp.json()["detail"]
+
+    invitation = (await db_session.execute(
+        select(OrganizationInvitation).where(
+            OrganizationInvitation.token_hash == InvitationService._hash_token(raw_token)
+        )
+    )).scalars().first()
+    assert invitation.status == "pending"

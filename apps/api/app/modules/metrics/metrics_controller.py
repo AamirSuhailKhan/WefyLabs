@@ -1,12 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
 
+from app.dependencies import require_super_admin
 from app.modules.metrics.prometheus_collector import metrics
 
 router = APIRouter(tags=["Prometheus Metrics"])
 
 
 @router.get("/v1/metrics", response_class=PlainTextResponse)
-async def export_prometheus_metrics():
+async def export_prometheus_metrics(_operator=Depends(require_super_admin)):
     """Exports metrics in standard Prometheus exposition format."""
     return PlainTextResponse(content=metrics.export_prometheus_text(), media_type="text/plain")

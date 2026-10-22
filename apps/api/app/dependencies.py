@@ -80,6 +80,7 @@ async def get_current_broker(
         sub_identifier: str = payload.get("email") or payload.get("sub")
         if not sub_identifier:
             raise credentials_exception
+        token_jti = payload.get("jti")
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -88,6 +89,15 @@ async def get_current_broker(
         )
     except jwt.PyJWTError:
         raise credentials_exception
+
+    if token_jti:
+        from app.modules.security.services.token_security import TokenSecurityService
+        if await TokenSecurityService(db).is_token_revoked(str(token_jti)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication token has been revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     # Query broker by email or UUID (Supabase sub can be either)
     try:
@@ -102,6 +112,13 @@ async def get_current_broker(
     if broker is None:
         # Return 401 not 404 — do not reveal whether the account exists
         raise credentials_exception
+
+    if int(payload.get("auth_version", 0)) != int(getattr(broker, "auth_version", 0) or 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication session is no longer valid. Please sign in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     if broker.onboarding_status == "SUSPENDED":
         raise HTTPException(
@@ -194,6 +211,11 @@ def get_ambient_tenant() -> Optional[TenantContext]:
     return current_tenant_ctx.get()
 
 
+def clear_ambient_tenant() -> None:
+    """Clear the ambient tenant context from contextvars."""
+    current_tenant_ctx.set(None)
+
+
 async def get_current_tenant(
     current_broker: Broker = Depends(get_current_broker),
     db: AsyncSession = Depends(get_db),
@@ -272,6 +294,57 @@ async def get_current_tenant(
     )
     current_tenant_ctx.set(ctx)
     return ctx
+
+
+async def get_optional_tenant(
+    current_broker: Optional[Broker] = Depends(get_optional_broker),
+    db: AsyncSession = Depends(get_db),
+    requested_organization_id: Optional[str] = Header(
+        default=None, alias="X-WefyLabs-Organization-Id"
+    ),
+) -> Optional[TenantContext]:
+    """Resolves optional tenant context if valid credentials exist, otherwise returns None."""
+    if not current_broker:
+        return None
+    try:
+        result = await db.execute(
+            select(OrganizationMember.organization_id, OrganizationMember.role).where(
+                OrganizationMember.broker_id == current_broker.id
+            )
+        )
+        memberships = {str(row[0]): (row[1] or "AGENT").upper() for row in result.all()}
+        organization_ids = list(memberships.keys())
+        if not organization_ids:
+            return None
+
+        if requested_organization_id:
+            try:
+                selected_org = str(uuid.UUID(requested_organization_id))
+                if selected_org in memberships:
+                    ctx = TenantContext(
+                        organization_id=selected_org,
+                        broker_id=current_broker.id,
+                        user_id=str(current_broker.id),
+                        role=memberships[selected_org],
+                    )
+                    current_tenant_ctx.set(ctx)
+                    return ctx
+            except ValueError:
+                pass
+        if len(organization_ids) == 1:
+            selected_org = organization_ids[0]
+            ctx = TenantContext(
+                organization_id=selected_org,
+                broker_id=current_broker.id,
+                user_id=str(current_broker.id),
+                role=memberships[selected_org],
+            )
+            current_tenant_ctx.set(ctx)
+            return ctx
+        return None
+    except Exception:
+        return None
+
 
 async def require_active_subscription(
     broker: Broker = Depends(get_current_broker),

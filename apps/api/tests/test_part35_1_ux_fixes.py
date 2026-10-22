@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from app.main import app
 from app.database import Base
-from app.dependencies import get_db, get_current_broker, clear_rate_limits
+from app.dependencies import get_db, get_current_broker, clear_rate_limits, clear_ambient_tenant
 from app.models.broker import Broker
 from app.models.lead import Lead
 from app.models.property_models import PropertyListing, PropertyPriceHistory
@@ -32,8 +32,10 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 @pytest.fixture(autouse=True)
 def setup_test_env():
     clear_rate_limits()
+    clear_ambient_tenant()
     yield
     clear_rate_limits()
+    clear_ambient_tenant()
     app.dependency_overrides.clear()
 
 

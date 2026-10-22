@@ -28,6 +28,7 @@ from app.models.calendar_models import SchedulingMeeting
 from app.models.transaction_models import DealTransaction
 from app.models.revenue_intelligence_models import RevenueFunnelSnapshot, RevenueLeakageEvent
 from app.models.broker import Broker
+from app.models.organization import Organization, OrganizationMember
 from app.models.property_models import PropertyListing
 from app.models.infrastructure_models import TimelineEvent
 
@@ -1500,8 +1501,21 @@ class OverviewAnalyzer:
         attr_rev = float(rev_row.attr_rev) if rev_row.attr_rev else None
         unattr_rev = float(rev_row.unattr_rev) if rev_row.unattr_rev else None
 
+        # Resolve organization currency
+        org_currency = "INR"
+        if organization_id:
+            org_obj = await self.db.get(Organization, organization_id)
+            if not org_obj:
+                stmt_m = select(OrganizationMember.organization_id).where(OrganizationMember.broker_id == organization_id)
+                m_org_id = (await self.db.execute(stmt_m)).scalars().first()
+                if m_org_id:
+                    org_obj = await self.db.get(Organization, m_org_id)
+            if org_obj:
+                org_currency = org_obj.currency_code or org_obj.reporting_currency_code or ("AED" if org_obj.country_code == "AE" else "INR")
+
         return {
             "organization_id": str(organization_id),
+            "currency": org_currency,
             "realized_revenue": funnel_summary["confirmed_revenue"],
             "current_pipeline_estimate": funnel_summary["estimated_pipeline_value_estimate"],
             "revenue_at_risk_estimate": leakage_summary["total_estimated_value_at_risk_estimate"],

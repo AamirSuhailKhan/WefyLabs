@@ -458,6 +458,7 @@ class TestPhase2C3BRealEventAndObservationTrace:
             ComparisonCategory.EXACT_AGREEMENT.value,
             ComparisonCategory.SEMANTIC_AGREEMENT.value,
             ComparisonCategory.ACCEPTABLE_DISAGREEMENT.value,  # valid when agent has no action (shadow dry-run)
+            ComparisonCategory.ABSTENTION.value,
         )
 
         # Verify observation is now marked human-decided (eligible for accuracy computation)

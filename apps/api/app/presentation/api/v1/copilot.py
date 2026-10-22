@@ -205,7 +205,7 @@ async def delete_copilot_conversation(
 @router.get("/suggested-actions")
 async def get_copilot_suggested_actions(
     route_path: str = Query("/dashboard"),
-    current_broker: Optional[Broker] = Depends(get_optional_broker)
+    current_broker: Broker = Depends(get_current_broker)
 ):
     """Returns context-aware prompt action pills based on user route and live CRM state."""
     ctx_type = CopilotOrchestratorService.resolve_context_type(route_path)

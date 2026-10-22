@@ -24,7 +24,7 @@ from app.database import Base
 from app.dependencies import get_db, clear_rate_limits
 from app.models.broker import Broker
 from app.models.invitation_models import PasswordResetToken
-from app.modules.auth.service import hash_password, verify_password
+from app.modules.auth.service import hash_password, verify_password, create_access_token
 from app.modules.auth.password_reset_service import PasswordResetService, GENERIC_RESET_RESPONSE
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
@@ -93,7 +93,8 @@ async def test_forgot_password_valid_user(client: AsyncClient, db_session: Async
     with patch("app.tasks.queue_workers.process_email_dispatch.delay") as mock_email:
         resp = await client.post(
             "/api/v1/auth/forgot-password",
-            json={"email": "realtor_reset@example.com"}
+            json={"email": "realtor_reset@example.com"},
+            headers={"Host": "attacker.example"}
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -114,6 +115,8 @@ async def test_forgot_password_valid_user(client: AsyncClient, db_session: Async
         call_args = mock_email.call_args[0][0]
         assert call_args["recipient"] == "realtor_reset@example.com"
         assert "reset-password?token=" in call_args["html_content"]
+        assert "attacker.example" not in call_args["content"]
+        assert "attacker.example" not in call_args["html_content"]
 
 
 @pytest.mark.asyncio
@@ -138,6 +141,16 @@ async def test_forgot_password_unknown_user_returns_generic_response(client: Asy
 
 @pytest.mark.asyncio
 async def test_reset_password_full_lifecycle(client: AsyncClient, db_session: AsyncSession, sample_broker: Broker):
+    old_session = create_access_token({
+        "sub": sample_broker.email,
+        "email": sample_broker.email,
+        "broker_id": str(sample_broker.id),
+        "auth_version": sample_broker.auth_version,
+    })
+    old_session_headers = {"Authorization": f"Bearer {old_session}"}
+    before_reset = await client.get("/api/v1/auth/me", headers=old_session_headers)
+    assert before_reset.status_code == 200
+
     # 1. Request reset
     with patch("app.tasks.queue_workers.process_email_dispatch.delay") as mock_email:
         await client.post(
@@ -166,6 +179,9 @@ async def test_reset_password_full_lifecycle(client: AsyncClient, db_session: As
     updated_broker = await db_session.get(Broker, sample_broker.id)
     assert verify_password("NewBrandNewPassword2026!", updated_broker.password_hash)
     assert not verify_password("OldPassword123!", updated_broker.password_hash)
+    invalidated_session = await client.get("/api/v1/auth/me", headers=old_session_headers)
+    assert invalidated_session.status_code == 401
+    assert "session is no longer valid" in invalidated_session.json()["detail"].lower()
 
     # 5. Token cannot be reused (Single-use enforcement)
     reused_resp = await client.post(

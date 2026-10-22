@@ -25,6 +25,7 @@ class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     broker: BrokerResponse
+    organization_id: Optional[str] = None
 
 class OnboardRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Broker full name")

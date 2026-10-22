@@ -1,6 +1,9 @@
 from typing import Optional, List
+import hashlib
+import hmac
 from fastapi import APIRouter, Depends, Query, Request, UploadFile, File, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.database import get_db
 from app.dependencies import get_current_broker
@@ -10,6 +13,8 @@ from app.modules.ingestion.pipeline.ingestion_pipeline import LeadIngestionPipel
 from app.modules.ingestion.service.batch_importer_service import BatchImporterService
 from app.modules.ingestion.service.dlq_service import DeadLetterQueueService
 from app.modules.ingestion.connectors.connector_factory import CONNECTOR_REGISTRY
+from app.models.ingestion_models import ConnectorConfig
+from app.common.security.token_encryption import decrypt_token
 
 router = APIRouter(prefix="/v1/ingest", tags=["Universal Lead Ingestion Engine"])
 
@@ -40,17 +45,50 @@ async def receive_webhook_lead(
     connector_id: str,
     raw_payload: dict,
     request: Request,
-    source: str = Query(default="webhook"),
-    org_id: str = Query(default="global"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Public webhook receiver endpoint for external integrations (Meta, Google, Zapier)."""
+    """Accept a webhook only when an active connector and its HMAC secret are configured."""
+    connector = (await db.execute(
+        select(ConnectorConfig).where(
+            ConnectorConfig.id == connector_id,
+            ConnectorConfig.is_active.is_(True),
+        )
+    )).scalars().first()
+    if connector is None:
+        raise HTTPException(status_code=404, detail="Active connector not found.")
+
+    source = connector.connector_type.strip().lower()
+    if source not in CONNECTOR_REGISTRY:
+        raise HTTPException(status_code=400, detail="Configured connector type is unsupported.")
+
+    secret = decrypt_token(connector.credentials_encrypted)
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Connector webhook authentication is not configured.",
+        )
+
+    raw_body = await request.body()
+    supplied_signature = request.headers.get("X-Webhook-Signature") or request.headers.get("X-Hub-Signature-256")
+    if not supplied_signature or not supplied_signature.startswith("sha256="):
+        raise HTTPException(status_code=401, detail="Missing webhook signature.")
+    expected_signature = "sha256=" + hmac.new(
+        secret.encode("utf-8"), raw_body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected_signature, supplied_signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+
+    safe_headers = {
+        key: value for key, value in request.headers.items()
+        if key.lower() not in {"authorization", "x-webhook-signature", "x-hub-signature-256"}
+    }
     pipeline = LeadIngestionPipeline(db)
     result = await pipeline.ingest_lead(
         source=source,
         raw_payload=raw_payload,
-        organization_id=org_id,
-        headers=dict(request.headers),
+        organization_id=str(connector.organization_id),
+        idempotency_key=request.headers.get("X-Idempotency-Key"),
+        headers=safe_headers,
     )
     return create_success_response(data=result.model_dump(), request_id=result.ingestion_id)
 

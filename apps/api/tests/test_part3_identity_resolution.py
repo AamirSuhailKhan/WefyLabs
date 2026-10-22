@@ -12,6 +12,7 @@ Comprehensive unit & integration tests covering:
 import pytest
 import uuid
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from app.database import Base, get_db
@@ -26,6 +27,7 @@ from app.modules.identity_resolution.candidate_search import CandidateFinder
 from app.modules.identity_resolution.service import IdentityResolutionService
 from app.modules.identity_resolution.merge_engine import MergeExecutor, MergeSimulator, MergeReverter
 from app.models.identity_models import Identity, IdentityLink, DuplicateCandidate, ManualReview, MergeOperation
+from app.models.lead import Lead
 
 # ─── SQLite In-Memory Database Fixture ───────────────────────────────────────
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -50,10 +52,13 @@ async def test_db():
 
 @pytest.fixture
 async def async_client(test_db):
+    from app.dependencies import get_current_tenant, TenantContext
     async def _get_test_db():
         yield test_db
 
+    test_tenant = TenantContext(organization_id="org_api_test", role="ADMIN")
     app.dependency_overrides[get_db] = _get_test_db
+    app.dependency_overrides[get_current_tenant] = lambda: test_tenant
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -311,6 +316,95 @@ async def test_rest_api_resolve_and_profile(async_client):
     assert profile_res.status_code == 200
     prof_data = profile_res.json()
     assert prof_data["identity"]["primary_email"] == "api.test@example.com"
+
+
+@pytest.mark.asyncio
+async def test_identity_simulation_merge_undo_and_review_are_tenant_scoped(async_client, test_db):
+    foreign_org = "org_foreign"
+    source = Identity(id=str(uuid.uuid4()), organization_id=foreign_org, primary_name="Source")
+    target = Identity(id=str(uuid.uuid4()), organization_id=foreign_org, primary_name="Target")
+    test_db.add_all([source, target])
+    review = ManualReview(
+        id=str(uuid.uuid4()),
+        candidate_id=str(uuid.uuid4()),
+        organization_id=foreign_org,
+        lead_id=str(uuid.uuid4()),
+        candidate_identity_id=source.id,
+        ai_confidence=0.9,
+        ai_recommendation="merge",
+        status="pending",
+        priority="normal",
+    )
+    test_db.add(review)
+    op = MergeOperation(
+        id=str(uuid.uuid4()),
+        organization_id=foreign_org,
+        source_identity_id=source.id,
+        target_identity_id=target.id,
+        source_snapshot={"primary_name": "Source"},
+        target_snapshot={"primary_name": "Target"},
+        source_links_snapshot=[],
+        merge_type="manual",
+        merge_confidence=1.0,
+        status="completed",
+    )
+    test_db.add(op)
+    await test_db.commit()
+
+    simulation = await async_client.post("/api/v1/identity/merge/simulate", json={
+        "source_identity_id": source.id,
+        "target_identity_id": target.id,
+    })
+    merge = await async_client.post("/api/v1/identity/merge", json={
+        "source_identity_id": source.id,
+        "target_identity_id": target.id,
+    })
+    undo = await async_client.post(f"/api/v1/identity/merge/{op.id}/undo")
+    review_action = await async_client.post(
+        f"/api/v1/identity/review/{review.id}/action",
+        json={"decision": "ignore"},
+    )
+
+    assert simulation.status_code == 404
+    assert merge.status_code == 400
+    assert undo.status_code == 400
+    assert review_action.status_code == 400
+    await test_db.refresh(source)
+    await test_db.refresh(review)
+    await test_db.refresh(op)
+    assert source.is_merged is False
+    assert review.status == "pending"
+    assert op.status == "completed"
+
+    with pytest.raises(ValueError, match="not found in this organization"):
+        await MergeExecutor(test_db).execute_merge(
+            source_identity_id=source.id,
+            target_identity_id=target.id,
+            organization_id="org_api_test",
+            merge_confidence=1.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_identity_resolution_rejects_existing_foreign_lead(async_client, test_db):
+    foreign_lead = Lead(
+        id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+        broker_id=uuid.uuid4(),
+        phone="+15555550123",
+        name="Foreign lead",
+        source="test",
+    )
+    test_db.add(foreign_lead)
+    await test_db.commit()
+
+    response = await async_client.post(
+        f"/api/v1/identity/resolve/{foreign_lead.id}",
+        json={"lead_data": {"phone": foreign_lead.phone, "name": foreign_lead.name}},
+    )
+    assert response.status_code == 404
+    identity_count = await test_db.scalar(select(func.count()).select_from(Identity))
+    assert identity_count == 0
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,103 @@
+{
+  "capture_timestamp": "2026-10-06T13:19:33.340027+00:00",
+  "pilot_tenants": {
+    "error": "(sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column \"stage\" does not exist\n[SQL: \n        SELECT id, organization_id, stage, autonomy_level,\n               enrollment_date, created_at\n        FROM pilot_tenants ORDER BY created_at DESC "
+  },
+  "pilot_human_decisions": 1,
+  "pilot_observations_count": 1,
+  "pilot_evidence_records_count": 0,
+  "pilot_audit_events_count": 3,
+  "pilot_metric_snapshots_count": 2,
+  "deal_transactions_columns": [
+    "id",
+    "broker_id",
+    "lead_id",
+    "property_id",
+    "deal_name",
+    "agreed_price",
+    "currency",
+    "current_stage",
+    "commission_percentage",
+    "estimated_commission_amount",
+    "risk_level",
+    "closing_probability_pct",
+    "missing_documents",
+    "created_at",
+    "updated_at"
+  ],
+  "deal_transactions_count": 4,
+  "audit_logs_count": 1,
+  "latest_audit_event": {
+    "error": "(sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column \"event_type\" does not exist\n[SQL: \n        SELECT id, event_type, created_at FROM audit_logs\n        ORDER BY created_at DESC LIMIT 3\n    ]\n(Background on this error at: https://sqlalc"
+  },
+  "organizations": [
+    {
+      "id": "1b229ea8-e905-44f1-b918-8712daa1a0fc",
+      "name": "yojjkhfdxtfx",
+      "created_at": "2026-08-29T08:31:22.811930+00:00"
+    },
+    {
+      "id": "5651f9f3-2a17-4261-8b22-1989887e25d1",
+      "name": "Test Agency",
+      "created_at": "2026-08-29T10:14:19.967242+00:00"
+    },
+    {
+      "id": "d131f898-1fea-44a5-9cf3-ddd8107731c1",
+      "name": "Aamir Realty 2",
+      "created_at": "2026-08-29T10:32:40.004699+00:00"
+    },
+    {
+      "id": "d795d9d1-1221-4024-9538-120a0e875e36",
+      "name": "TestAgency A",
+      "created_at": "2026-08-29T13:30:51.687754+00:00"
+    },
+    {
+      "id": "3edcde48-1193-449f-87b8-d8f13bb870f6",
+      "name": "TestAgency B",
+      "created_at": "2026-08-29T13:31:00.578954+00:00"
+    },
+    {
+      "id": "d61f6ab6-77db-4917-89f2-5b4a7dc56563",
+      "name": "Agency A",
+      "created_at": "2026-08-29T13:31:39.021179+00:00"
+    },
+    {
+      "id": "8e054a8c-7f75-4f01-87b7-d8f2bc59a226",
+      "name": "Agency B",
+      "created_at": "2026-08-29T13:31:40.345092+00:00"
+    },
+    {
+      "id": "4099d14b-33c8-4a85-b676-9c35c8efb697",
+      "name": "Test User's Agency",
+      "created_at": "2026-09-13T15:30:39.244908+00:00"
+    },
+    {
+      "id": "0a4e798f-91c3-4814-8ba6-9bd588c23842",
+      "name": "Demo Agent's Agency",
+      "created_at": "2026-09-13T15:36:32.894341+00:00"
+    },
+    {
+      "id": "a0317351-e076-493e-8b84-182f8c43666e",
+      "name": "Aamir Suhail's Agency",
+      "created_at": "2026-09-15T12:36:26.794337+00:00"
+    }
+  ],
+  "pilot_stage_transitions": [
+    {
+      "id": "134904c2-ba57-44e6-a4c8-70a1aa7416c9",
+      "pilot_id": "d153ea17-b2d3-40ab-b258-75951ef7de28",
+      "organization_id": "a0317351-e076-493e-8b84-182f8c43666e",
+      "from_stage": "NOT_ENROLLED",
+      "to_stage": "STAGE_1_SHADOW",
+      "transition_type": "ENROLL",
+      "triggered_by": "Aamir Suhail <aamir.fresh@bmu.edu.in> (c193be18-4a6a-4030-9089-f94c42119189)",
+      "reason": "Initial enrollment",
+      "evidence_snapshot": null,
+      "evidence_hash": null,
+      "transitioned_at": "2026-10-02T12:02:17.171040+00:00",
+      "created_at": "2026-10-02T12:02:17.171893+00:00",
+      "updated_at": "2026-10-02T12:02:17.171895+00:00"
+    }
+  ],
+  "pilot_approval_items_count": 0
+}

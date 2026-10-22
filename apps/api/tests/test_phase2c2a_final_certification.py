@@ -899,7 +899,7 @@ class TestFinalEvidenceSnapshot:
             # 10. _append_audit_event: seq, count -> _scalar_one, _scalar
             mock_db.execute = AsyncMock(side_effect=[
                 _scalar_one(pilot),             # get_pilot_tenant
-                _scalar(60), _scalar(6), _scalar(0),  # get_pilot_stats (6 eligible < 50)
+                _scalar(60), _scalar(6), _scalar(0), _scalar(0),  # get_pilot_stats (total, eligible, pending, human_decisions)
                 *[_scalar(v) for v in [38, 12, 2, 1, 0, 2]],  # 6 category counts
                 _scalar(6),                     # compute_shadow_accuracy total (< 50, early)
                 _scalars_all([]),               # provider telemetry
@@ -948,7 +948,7 @@ class TestFinalEvidenceSnapshot:
 
             mock_db.execute = AsyncMock(side_effect=[
                 _scalar_one(pilot),
-                _scalar(60), _scalar(6), _scalar(0),
+                _scalar(60), _scalar(6), _scalar(0), _scalar(0),  # get_pilot_stats (total, eligible, pending, human_decisions)
                 *[_scalar(v) for v in [38, 12, 2, 1, 0, 2]],
                 _scalar(6),  # shadow accuracy total (early return)
                 _scalars_all([]),

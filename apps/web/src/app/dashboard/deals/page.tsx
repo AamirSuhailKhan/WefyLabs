@@ -6,7 +6,7 @@ import {
   AlertCircle, ArrowRight, DollarSign, Clock, FileText, UserCheck,
   Award, Star, Sparkles, ChevronRight, History, Layers
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { ConfirmDialog } from '@/components/ui';
 import { api } from '@/lib/api-client';
 
@@ -17,8 +17,11 @@ const ORDERED_STAGES = [
 
 const IRREVERSIBLE_STAGES = new Set(['reservation', 'booking', 'closing']);
 
-function formatCurrency(amount?: number | null, currency: string = 'AED'): string {
+function formatCurrency(amount?: number | null, currency: string = 'INR'): string {
   if (amount === null || amount === undefined || isNaN(amount)) return '—';
+  if (currency === 'INR') {
+    return `₹ ${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  }
   return `${currency} ${Number(amount).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
@@ -86,8 +89,22 @@ export default function DealsPage() {
   const [commissionForm, setCommissionForm] = useState({
     transaction_price: 3450000,
     commission_percentage: 2.0,
-    currency: 'AED',
+    tax_rate_percentage: 0.0,
+    split_basis: 'GROSS' as 'GROSS' | 'NET',
+    broker_split_percentage: 70.0,
+    agency_split_percentage: 30.0,
+    currency: 'INR',
     invoice_reference: 'INV-2026-001'
+  });
+
+  // Commission Settlement Form
+  const [settleForm, setSettleForm] = useState({
+    settled_amount: 0,
+    payment_reference: '',
+    payment_mode: 'MANUAL_BANK_TRANSFER',
+    provenance: 'MANUAL_UNVERIFIED',
+    settlement_evidence_url: '',
+    notes: 'Verified against bank settlement advice'
   });
 
   // Closing Form
@@ -139,6 +156,7 @@ export default function DealsPage() {
       setActiveDealDetail(detail);
       // Prepopulate forms
       if (detail) {
+        const isIndia = (detail.currency || '').toUpperCase() === 'INR';
         setOfferForm(prev => ({
           ...prev,
           offer_price: detail.agreed_price || detail.offer_price || 3400000,
@@ -159,9 +177,23 @@ export default function DealsPage() {
         setCommissionForm(prev => ({
           ...prev,
           transaction_price: detail.agreed_price || 3450000,
-          currency: detail.currency || 'AED',
-          commission_percentage: detail.commission_percentage || 2.0
+          currency: detail.currency || (isIndia ? 'INR' : 'AED'),
+          commission_percentage: detail.commission_percentage || 2.0,
+          tax_rate_percentage: 0.0,
+          split_basis: 'GROSS',
+          broker_split_percentage: 70.0,
+          agency_split_percentage: 30.0
         }));
+        if (detail.commission) {
+          setSettleForm({
+            settled_amount: detail.commission.net_commission || detail.commission.gross_commission || 0,
+            payment_reference: detail.commission.payment_reference || `UTR-${Date.now().toString().slice(-6)}`,
+            payment_mode: detail.commission.payment_mode ? detail.commission.payment_mode.split(' ')[0] : 'MANUAL_BANK_TRANSFER',
+            provenance: detail.commission.provenance || 'MANUAL_UNVERIFIED',
+            settlement_evidence_url: '',
+            notes: 'Verified against direct bank credit statement'
+          });
+        }
       }
     } catch (err: any) {
       setActionError(err?.message || 'Failed to load deal detail');
@@ -327,7 +359,7 @@ export default function DealsPage() {
     }
   };
 
-  // Commission Ledger
+  // Commission Ledger Recording
   const handleRecordCommission = async () => {
     if (!activeDealId) return;
     setActionError(null);
@@ -336,13 +368,79 @@ export default function DealsPage() {
       await api.dealOS.recordCommission(activeDealId, {
         transaction_price: Number(commissionForm.transaction_price),
         commission_percentage: Number(commissionForm.commission_percentage),
+        split_basis: commissionForm.split_basis,
+        tax_rate_percentage: Number(commissionForm.tax_rate_percentage || 0),
+        broker_split_percentage: Number(commissionForm.broker_split_percentage),
+        agency_split_percentage: Number(commissionForm.agency_split_percentage),
         currency: commissionForm.currency,
-        invoice_reference: commissionForm.invoice_reference
+        invoice_reference: commissionForm.invoice_reference,
+        idempotency_key: `comm-${activeDealId}-${Date.now()}`
       });
-      setActionSuccess('Commission ledger calculated with split breakdown!');
+      setActionSuccess('Commission ledger recorded successfully!');
       await openDealWorkspace(activeDealId);
+      await loadData();
     } catch (err: any) {
       setActionError(err?.message || 'Failed to record commission');
+    }
+  };
+
+  // Commission Settlement & Revenue Realization
+  const handleSettleCommission = async () => {
+    if (!activeDealId) return;
+    if (!settleForm.payment_reference.trim()) {
+      setActionError('Payment reference (e.g. UTR / Cheque / Escrow Ref) is required');
+      return;
+    }
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await api.dealOS.settleCommission(activeDealId, {
+        settled_amount: Number(settleForm.settled_amount),
+        payment_reference: settleForm.payment_reference.trim(),
+        payment_mode: settleForm.payment_mode,
+        provenance: settleForm.provenance || 'MANUAL_UNVERIFIED',
+        currency: activeDealDetail?.commission?.currency || activeDealDetail?.currency || 'INR',
+        notes: settleForm.notes,
+        settlement_evidence_url: settleForm.settlement_evidence_url || undefined,
+        idempotency_key: `settle-${activeDealId}-${Date.now()}`
+      });
+      setActionSuccess('Commission settled! Realized revenue recognized with audited provenance.');
+      await openDealWorkspace(activeDealId);
+      await loadData();
+    } catch (err: any) {
+      setActionError(err?.message || 'Settlement recording failed');
+    }
+  };
+
+  const handleDisputeCommission = async () => {
+    if (!activeDealId) return;
+    const reason = window.prompt('Enter commission dispute reason:');
+    if (!reason) return;
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await api.dealOS.disputeCommission(activeDealId, { reason, idempotency_key: `dispute-${activeDealId}-${Date.now()}` });
+      setActionSuccess('Commission marked as DISPUTED.');
+      await openDealWorkspace(activeDealId);
+      await loadData();
+    } catch (err: any) {
+      setActionError(err?.message || 'Dispute submission failed');
+    }
+  };
+
+  const handleReverseSettlement = async () => {
+    if (!activeDealId) return;
+    const reason = window.prompt('Enter reason for settlement reversal (audit required):');
+    if (!reason) return;
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await api.dealOS.reverseSettlement(activeDealId, { reason, idempotency_key: `reverse-${activeDealId}-${Date.now()}` });
+      setActionSuccess('Settlement reversed: Commission status reverted to PENDING and refund issued.');
+      await openDealWorkspace(activeDealId);
+      await loadData();
+    } catch (err: any) {
+      setActionError(err?.message || 'Settlement reversal failed');
     }
   };
 
@@ -415,10 +513,7 @@ export default function DealsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8]">
-      <DashboardNav />
-
-      <div className="pt-16 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         {/* Header Banner */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8] pb-6">
           <div>
@@ -462,37 +557,45 @@ export default function DealsPage() {
 
         {/* Commercial Pipeline KPI Cards */}
         {summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-4 rounded-xl shadow-xs">
-              <span className="text-[11px] font-mono uppercase text-[#6B6B6B] block">Active Deals</span>
-              <div className="text-[24px] font-bold font-mono text-[#1A1A1A] mt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-mono uppercase text-[#6B6B6B] block">Active Deals</span>
+              <div className="text-[22px] font-bold font-mono text-[#1A1A1A] mt-1">
                 {summary.total_active_deals || 0}
               </div>
-              <span className="text-[10px] text-emerald-700 font-mono">100% Tenant Isolated</span>
+              <span className="text-[10px] text-emerald-700 font-mono">Tenant Isolated</span>
             </div>
 
-            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-4 rounded-xl shadow-xs">
-              <span className="text-[11px] font-mono uppercase text-[#6B6B6B] block">Gross Pipeline Value</span>
-              <div className="text-[20px] sm:text-[22px] font-bold font-mono text-emerald-800 mt-1">
-                {formatCurrency(summary.total_pipeline_value, 'AED')}
+            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-mono uppercase text-[#6B6B6B] block">Pipeline Value</span>
+              <div className="text-[18px] font-bold font-mono text-[#1A1A1A] mt-1">
+                {formatCurrency(summary.total_pipeline_value, summary.currency || 'INR')}
               </div>
-              <span className="text-[10px] text-[#6B6B6B] font-mono">Agreed / Offer Total</span>
+              <span className="text-[10px] text-[#6B6B6B] font-mono">Active Deals Total</span>
             </div>
 
-            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-4 rounded-xl shadow-xs">
-              <span className="text-[11px] font-mono uppercase text-[#6B6B6B] block">Weighted Value</span>
-              <div className="text-[20px] sm:text-[22px] font-bold font-mono text-indigo-800 mt-1">
-                {formatCurrency(summary.weighted_pipeline_value, 'AED')}
+            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-mono uppercase text-[#6B6B6B] block">Booked Value</span>
+              <div className="text-[18px] font-bold font-mono text-purple-800 mt-1">
+                {formatCurrency(summary.booked_value, summary.currency || 'INR')}
               </div>
-              <span className="text-[10px] text-[#6B6B6B] font-mono">Probability Adjusted</span>
+              <span className="text-[10px] text-purple-700 font-mono">Confirmed Bookings</span>
             </div>
 
-            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-4 rounded-xl shadow-xs">
-              <span className="text-[11px] font-mono uppercase text-[#6B6B6B] block">Projected Commission</span>
-              <div className="text-[20px] sm:text-[22px] font-bold font-mono text-[#0D9488] mt-1">
-                {formatCurrency(summary.total_commission_projected, 'AED')}
+            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-mono uppercase text-[#6B6B6B] block">Accrued Commission</span>
+              <div className="text-[18px] font-bold font-mono text-amber-800 mt-1">
+                {formatCurrency(summary.commission_pending, summary.currency || 'INR')}
               </div>
-              <span className="text-[10px] text-[#6B6B6B] font-mono">Ledger Calculated</span>
+              <span className="text-[10px] text-amber-700 font-mono">Pending Settlement</span>
+            </div>
+
+            <div className="bg-[#FAF7F2] border border-[#D4D0C8] p-3.5 rounded-xl shadow-xs">
+              <span className="text-[10px] font-mono uppercase text-[#6B6B6B] block">Realized Revenue</span>
+              <div className="text-[18px] font-bold font-mono text-emerald-800 mt-1">
+                {formatCurrency(summary.commission_earned, summary.currency || 'INR')}
+              </div>
+              <span className="text-[10px] text-emerald-700 font-mono">Settled / Verified</span>
             </div>
           </div>
         )}
@@ -670,7 +773,6 @@ export default function DealsPage() {
             })}
           </div>
         )}
-      </div>
 
       {/* ───────────────────────────────────────────────────────────────────────────── */}
       {/* Create Deal Modal */}
@@ -1277,38 +1379,221 @@ export default function DealsPage() {
                   {detailTab === 'commission' && (
                     <div className="space-y-5">
                       {activeDealDetail.commission ? (
-                        <div className="bg-white p-4 rounded-xl border border-[#D4D0C8] space-y-3">
+                        <div className="bg-white p-4 rounded-xl border border-[#D4D0C8] space-y-4">
                           <div className="flex justify-between items-center border-b border-[#EAE7E1] pb-2">
                             <span className="text-xs font-mono font-bold text-[#1A1A1A]">
                               Invoice Ref: {activeDealDetail.commission.invoice_reference || 'LEDGER-ACTIVE'}
                             </span>
-                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                              activeDealDetail.commission.status === 'PAID'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : activeDealDetail.commission.status === 'DISPUTED'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
                               Status: {activeDealDetail.commission.status}
                             </span>
                           </div>
-                          <div className="grid grid-cols-3 gap-3 text-xs font-mono">
-                            <div>
-                              <span className="text-[#6B6B6B] block">Gross Commission</span>
-                              <strong className="text-[16px] text-emerald-800">{formatCurrency(activeDealDetail.commission.gross_commission, activeDealDetail.commission.currency)}</strong>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                            <div className="bg-[#FAF7F2] p-2.5 rounded-lg border border-[#EAE7E1]">
+                              <span className="text-[#6B6B6B] block text-[10px]">Gross Commission</span>
+                              <strong className="text-[15px] text-[#1A1A1A]">{formatCurrency(activeDealDetail.commission.gross_commission, activeDealDetail.commission.currency)}</strong>
                             </div>
-                            <div>
-                              <span className="text-[#6B6B6B] block">Rate %</span>
-                              <strong className="text-[16px]">{activeDealDetail.commission.commission_percentage}%</strong>
+                            <div className="bg-[#FAF7F2] p-2.5 rounded-lg border border-[#EAE7E1]">
+                              <span className="text-[#6B6B6B] block text-[10px]">TDS Withholding</span>
+                              <strong className="text-[15px] text-rose-700">{formatCurrency(activeDealDetail.commission.tax_deducted || 0, activeDealDetail.commission.currency)}</strong>
                             </div>
-                            <div>
-                              <span className="text-[#6B6B6B] block">Transaction Price</span>
-                              <strong className="text-[16px]">{formatCurrency(activeDealDetail.commission.transaction_price, activeDealDetail.commission.currency)}</strong>
+                            <div className="bg-[#FAF7F2] p-2.5 rounded-lg border border-[#EAE7E1]">
+                              <span className="text-[#6B6B6B] block text-[10px]">Net Payable</span>
+                              <strong className="text-[15px] text-emerald-800">{formatCurrency(activeDealDetail.commission.net_commission, activeDealDetail.commission.currency)}</strong>
+                            </div>
+                            <div className="bg-[#FAF7F2] p-2.5 rounded-lg border border-[#EAE7E1]">
+                              <span className="text-[#6B6B6B] block text-[10px]">Rate % / Tx Price</span>
+                              <strong className="text-[13px]">{activeDealDetail.commission.commission_percentage}% on {formatCurrency(activeDealDetail.commission.transaction_price, activeDealDetail.commission.currency)}</strong>
                             </div>
                           </div>
+
+                          {/* Split Breakdown */}
                           {activeDealDetail.commission.commission_splits && (
-                            <div className="space-y-1.5 pt-2">
-                              <span className="text-[11px] font-mono font-bold text-[#1A1A1A] block">Commission Split Allocation</span>
-                              {activeDealDetail.commission.commission_splits.map((split: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-xs font-mono bg-[#FAF7F2] p-2 rounded border border-[#EAE7E1]">
-                                  <span>{split.role} ({split.percentage}%)</span>
-                                  <strong>{formatCurrency(split.amount, activeDealDetail.commission.currency)}</strong>
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[11px] font-mono font-bold text-[#1A1A1A] block">70/30 Configured Split Allocation</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {activeDealDetail.commission.commission_splits.map((split: any, idx: number) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs font-mono bg-[#FAF7F2] p-2.5 rounded border border-[#EAE7E1]">
+                                    <div>
+                                      <span className="font-bold block">{split.recipient_role || split.role} ({split.split_percentage || split.percentage}%)</span>
+                                      <span className="text-[10px] text-[#6B6B6B]">ID: {split.recipient_id || 'AGENCY'}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="font-bold text-emerald-800 block">
+                                        Net: {formatCurrency(split.net_amount || split.amount, activeDealDetail.commission.currency)}
+                                      </span>
+                                      {split.gross_amount && (
+                                        <span className="text-[10px] text-[#6B6B6B]">
+                                          Gross: {formatCurrency(split.gross_amount, activeDealDetail.commission.currency)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Settlement Status / Form */}
+                          {activeDealDetail.commission.status === 'PAID' ? (
+                            <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-mono font-bold text-emerald-950 flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                  REVENUE REALIZED &amp; SETTLED
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                    activeDealDetail.commission.provenance === 'PROVIDER_CONFIRMED'
+                                      ? 'bg-emerald-200 text-emerald-900 border-emerald-400'
+                                      : 'bg-blue-100 text-blue-900 border-blue-300'
+                                  }`}>
+                                    PROVENANCE: {activeDealDetail.commission.provenance || 'MANUAL_REVIEWED'}
+                                  </span>
+                                  <button
+                                    onClick={handleReverseSettlement}
+                                    className="px-2.5 py-1 bg-white border border-rose-300 hover:bg-rose-50 text-rose-700 text-[10px] font-mono font-bold rounded shadow-xs"
+                                  >
+                                    Reverse Settlement
+                                  </button>
                                 </div>
-                              ))}
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-emerald-900 pt-1">
+                                <div>Payment Ref: <strong>{activeDealDetail.commission.payment_reference || 'MANUAL-REF'}</strong></div>
+                                <div>Mode: <strong>{activeDealDetail.commission.payment_mode || 'MANUAL_BANK_TRANSFER'}</strong></div>
+                                <div>Settled Date: <strong>{activeDealDetail.commission.paid_at ? new Date(activeDealDetail.commission.paid_at).toLocaleString() : 'Recorded'}</strong></div>
+                                <div>Split Basis: <strong>{activeDealDetail.commission.split_basis || 'GROSS'}</strong></div>
+                              </div>
+                            </div>
+                          ) : activeDealDetail.commission.status === 'RECORDED_UNVERIFIED' ? (
+                            <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-mono font-bold text-amber-950 flex items-center gap-1.5">
+                                  <Clock className="w-4 h-4 text-amber-600" />
+                                  MANUAL RECEIPT RECORDED — UNVERIFIED
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-200 text-amber-900 border border-amber-400">
+                                    PROVENANCE: MANUAL_UNVERIFIED
+                                  </span>
+                                  <button
+                                    onClick={handleReverseSettlement}
+                                    className="px-2.5 py-1 bg-white border border-amber-400 hover:bg-amber-100 text-amber-900 text-[10px] font-mono font-bold rounded shadow-xs"
+                                  >
+                                    Cancel / Re-audit Entry
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-[11px] font-mono text-amber-900">
+                                ⚠️ User entered manual transfer reference. Excluded from independently provider-confirmed revenue until audited by an authorized accountant.
+                              </p>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-amber-950 pt-1 border-t border-amber-200">
+                                <div>Payment Ref: <strong>{activeDealDetail.commission.payment_reference || 'MANUAL-REF'}</strong></div>
+                                <div>Mode: <strong>{activeDealDetail.commission.payment_mode || 'MANUAL_BANK_TRANSFER'}</strong></div>
+                                <div>Recorded Date: <strong>{activeDealDetail.commission.paid_at ? new Date(activeDealDetail.commission.paid_at).toLocaleString() : 'Recorded'}</strong></div>
+                                <div>Split Basis: <strong>{activeDealDetail.commission.split_basis || 'GROSS'}</strong></div>
+                              </div>
+                            </div>
+                          ) : activeDealDetail.commission.status === 'DISPUTED' ? (
+                            <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-xl text-xs font-mono space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-rose-950 flex items-center gap-1.5">
+                                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                                  COMMISSION RECORD DISPUTED
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-rose-800">
+                                Reason: {activeDealDetail.commission.dispute_reason || 'Under commercial review'}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="bg-[#FAF7F2] p-4 rounded-xl border border-[#D4D0C8] space-y-3">
+                              <div className="flex justify-between items-center">
+                                <h4 className="text-xs font-mono font-bold text-[#1A1A1A] uppercase flex items-center gap-1.5">
+                                  <DollarSign className="w-4 h-4 text-emerald-700" />
+                                  Record Settlement Receipt &amp; Realize Revenue
+                                </h4>
+                                <button
+                                  onClick={handleDisputeCommission}
+                                  className="text-[10px] font-mono text-amber-800 hover:underline"
+                                >
+                                  Flag as Disputed
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-[#6B6B6B] font-mono">
+                                A commission is pending accrual until actual receipt is confirmed. All manual receipts require explicit provenance classification and cannot be mislabeled as bank-confirmed without automated webhook verification.
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="text-[10px] font-mono text-[#6B6B6B] block">Settled Amount</label>
+                                  <input
+                                    type="number"
+                                    value={settleForm.settled_amount}
+                                    onChange={(e) => setSettleForm({ ...settleForm, settled_amount: Number(e.target.value) })}
+                                    className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-mono text-[#6B6B6B] block">Payment Reference (UTR / Cheque)</label>
+                                  <input
+                                    type="text"
+                                    value={settleForm.payment_reference}
+                                    onChange={(e) => setSettleForm({ ...settleForm, payment_reference: e.target.value })}
+                                    placeholder="e.g. UTR-20261021-998"
+                                    className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-mono text-[#6B6B6B] block">Payment Mode</label>
+                                  <select
+                                    value={settleForm.payment_mode}
+                                    onChange={(e) => setSettleForm({ ...settleForm, payment_mode: e.target.value })}
+                                    className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                                  >
+                                    <option value="MANUAL_BANK_TRANSFER">Manual Bank Transfer / NEFT / RTGS</option>
+                                    <option value="CHEQUE">Cheque Deposit</option>
+                                    <option value="DIRECT_DEPOSIT">Direct Deposit</option>
+                                    <option value="ESCROW_TRANSFER">Escrow Account Transfer</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="text-[10px] font-mono text-[#6B6B6B] block">Settlement Provenance</label>
+                                  <select
+                                    value={settleForm.provenance}
+                                    onChange={(e) => setSettleForm({ ...settleForm, provenance: e.target.value })}
+                                    className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                                  >
+                                    <option value="MANUAL_UNVERIFIED">MANUAL_UNVERIFIED — User Entry (Awaiting Audit Review)</option>
+                                    <option value="MANUAL_REVIEWED">MANUAL_REVIEWED — Reviewed &amp; Verified by Accountant</option>
+                                    <option value="PROVIDER_CONFIRMED">PROVIDER_CONFIRMED — Automated Gateway / Direct Wire Advice</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-mono text-[#6B6B6B] block">Receipt Notes / Statement Reference</label>
+                                  <input
+                                    type="text"
+                                    value={settleForm.notes}
+                                    onChange={(e) => setSettleForm({ ...settleForm, notes: e.target.value })}
+                                    placeholder="Verified against bank credit statement"
+                                    className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                onClick={handleSettleCommission}
+                                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-mono font-bold"
+                              >
+                                Record Settlement &amp; Recognize Revenue
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1319,11 +1604,17 @@ export default function DealsPage() {
                       )}
 
                       {/* Record Commission Form */}
-                      <div className="bg-[#FAF7F2] p-4 rounded-xl border border-[#D4D0C8] space-y-3">
-                        <h4 className="text-xs font-mono font-bold text-[#1A1A1A] uppercase">
-                          Calculate / Update Commission Ledger
-                        </h4>
-                        <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-[#FAF7F2] p-4 rounded-xl border border-[#D4D0C8] space-y-4">
+                        <div className="flex justify-between items-center border-b border-[#EAE7E1] pb-2">
+                          <h4 className="text-xs font-mono font-bold text-[#1A1A1A] uppercase">
+                            Commission Management &amp; Split Ledger
+                          </h4>
+                          <span className="text-[10px] font-mono text-[#6B6B6B]">
+                            Exact Decimal Math • 70/30 Configurable Split Allocation
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="text-[10px] font-mono text-[#6B6B6B] block">Transaction Price</label>
                             <input
@@ -1344,6 +1635,56 @@ export default function DealsPage() {
                             />
                           </div>
                           <div>
+                            <label className="text-[10px] font-mono text-[#6B6B6B] block">Withholding / Tax Rate %</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={commissionForm.tax_rate_percentage}
+                              onChange={(e) => setCommissionForm({ ...commissionForm, tax_rate_percentage: Number(e.target.value) })}
+                              className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="text-[10px] font-mono text-[#6B6B6B] block">Split Basis</label>
+                            <select
+                              value={commissionForm.split_basis}
+                              onChange={(e) => setCommissionForm({ ...commissionForm, split_basis: e.target.value as 'GROSS' | 'NET' })}
+                              className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                            >
+                              <option value="GROSS">Gross Basis (Split before deductions)</option>
+                              <option value="NET">Net Basis (Split after deductions)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono text-[#6B6B6B] block">Broker Share %</label>
+                            <input
+                              type="number"
+                              step="1"
+                              value={commissionForm.broker_split_percentage}
+                              onChange={(e) => {
+                                const b = Number(e.target.value);
+                                setCommissionForm({
+                                  ...commissionForm,
+                                  broker_split_percentage: b,
+                                  agency_split_percentage: 100 - b
+                                });
+                              }}
+                              className="w-full bg-white border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono text-[#6B6B6B] block">Agency Share %</label>
+                            <input
+                              type="number"
+                              disabled
+                              value={commissionForm.agency_split_percentage}
+                              className="w-full bg-gray-50 border border-[#D4D0C8] rounded px-2.5 py-1.5 text-xs font-mono text-gray-500"
+                            />
+                          </div>
+                          <div>
                             <label className="text-[10px] font-mono text-[#6B6B6B] block">Invoice Ref</label>
                             <input
                               type="text"
@@ -1353,12 +1694,16 @@ export default function DealsPage() {
                             />
                           </div>
                         </div>
-                        <button
-                          onClick={handleRecordCommission}
-                          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-mono font-bold"
-                        >
-                          Calculate Ledger
-                        </button>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleRecordCommission}
+                            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-mono font-bold"
+                          >
+                            Record Commission in Ledger
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1616,6 +1961,6 @@ export default function DealsPage() {
         onConfirm={handleConfirmAdvance}
         onCancel={() => setAdvanceModal(prev => ({ ...prev, isOpen: false }))}
       />
-    </div>
+    </PageContainer>
   );
 }

@@ -50,7 +50,9 @@ class SecurityStatusResponse(BaseModel):
 # --- Endpoints ---
 
 @router.get("/security-status", response_model=SecurityStatusResponse)
-async def get_enterprise_security_status():
+async def get_enterprise_security_status(
+    current_broker: Broker = Depends(get_current_broker)
+):
     """Returns SOC 2 Type II, ISO 27001, Encryption, and Disaster Recovery readiness metrics."""
     return SecurityStatusResponse(
         soc2_readiness="compliant",

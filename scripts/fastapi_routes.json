@@ -1,0 +1,48 @@
+[
+  {
+    "path": "/api/v1/openapi.json",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "openapi"
+  },
+  {
+    "path": "/api/v1/docs",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "swagger_ui_html"
+  },
+  {
+    "path": "/docs/oauth2-redirect",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "swagger_ui_redirect"
+  },
+  {
+    "path": "/api/v1/redoc",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "name": "redoc_html"
+  },
+  {
+    "path": "/metrics",
+    "methods": [
+      "GET"
+    ],
+    "name": "metrics"
+  },
+  {
+    "path": "/",
+    "methods": [
+      "GET"
+    ],
+    "name": "root"
+  }
+]

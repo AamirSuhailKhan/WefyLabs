@@ -72,6 +72,7 @@ class ReviewService:
         review_id: str,
         reviewer_id: str,
         decision: str,  # merge | ignore | defer
+        organization_id: str,
         reviewer_notes: Optional[str] = None,
         reviewer_confidence: Optional[float] = None,
     ) -> Dict[str, Any]:
@@ -79,7 +80,10 @@ class ReviewService:
         Submit a reviewer decision. Stores as ML ground truth label.
         Returns the updated review and next action to take.
         """
-        result = await self.db.execute(select(ManualReview).where(ManualReview.id == review_id))
+        result = await self.db.execute(select(ManualReview).where(
+            ManualReview.id == review_id,
+            ManualReview.organization_id == organization_id,
+        ))
         review = result.scalar_one_or_none()
 
         if not review:
@@ -100,7 +104,10 @@ class ReviewService:
 
         # Update the DuplicateCandidate status
         cand_result = await self.db.execute(
-            select(DuplicateCandidate).where(DuplicateCandidate.id == review.candidate_id)
+            select(DuplicateCandidate).where(
+                DuplicateCandidate.id == review.candidate_id,
+                DuplicateCandidate.organization_id == review.organization_id,
+            )
         )
         candidate = cand_result.scalar_one_or_none()
         if candidate:

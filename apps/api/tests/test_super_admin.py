@@ -45,3 +45,25 @@ async def test_explicitly_allowlisted_operator_can_reach_super_admin_router(
     assert response.status_code == 200
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_tenant_broker_cannot_reach_cross_tenant_billing_admin(
+    db_session: AsyncSession, test_broker: Broker, monkeypatch
+):
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr(settings, "SUPER_ADMIN_EMAILS", [])
+    token = create_access_token({"sub": test_broker.email, "email": test_broker.email})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/api/v1/billing/admin/health", headers=headers)
+        metrics_response = await ac.get("/v1/metrics", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Super-admin access is required."
+    assert metrics_response.status_code == 403
+    app.dependency_overrides.clear()

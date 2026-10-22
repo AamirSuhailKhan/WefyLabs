@@ -1,10 +1,11 @@
 import uuid
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_broker
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker, tenant_lead_filter
 from app.models.broker import Broker
 from app.models.lead import Lead
 from app.models.follow_up import FollowUp
@@ -16,16 +17,18 @@ router = APIRouter(prefix="/leads", tags=["Follow-Ups"])
 @router.get("/{lead_id}/follow-ups", response_model=List[FollowUpResponse])
 async def list_lead_followups(
     lead_id: uuid.UUID,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     current_broker: Broker = Depends(get_current_broker),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieves all follow-up records (scheduled, sent, cancelled, failed) for a lead.
-    Enforces multi-tenant isolation.
+    Enforces multi-tenant organization and broker isolation.
     """
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
     lead_stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == current_broker.id,
+        tenant_lead_filter(org_id, current_broker.id),
         Lead.deleted_at.is_(None)
     )
     lead = (await db.execute(lead_stmt)).scalars().first()
@@ -43,15 +46,18 @@ async def list_lead_followups(
 @router.post("/{lead_id}/follow-ups/cancel")
 async def cancel_lead_followups(
     lead_id: uuid.UUID,
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
     current_broker: Broker = Depends(get_current_broker),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Cancels all scheduled follow-up messages for a lead.
+    Enforces multi-tenant organization and broker isolation.
     """
+    org_id = await resolve_organization_id_for_broker(db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True)
     lead_stmt = select(Lead).where(
         Lead.id == lead_id,
-        Lead.broker_id == current_broker.id,
+        tenant_lead_filter(org_id, current_broker.id),
         Lead.deleted_at.is_(None)
     )
     lead = (await db.execute(lead_stmt)).scalars().first()

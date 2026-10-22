@@ -61,11 +61,11 @@ class MergeExecutor:
             }
         """
         # ── Load both identities ──────────────────────────────────────────────
-        source = await self._get_identity(source_identity_id)
-        target = await self._get_identity(target_identity_id)
+        source = await self._get_identity(source_identity_id, organization_id)
+        target = await self._get_identity(target_identity_id, organization_id)
 
         if not source or not target:
-            raise ValueError(f"Identity not found: source={source_identity_id} target={target_identity_id}")
+            raise ValueError("One or both identities were not found in this organization.")
 
         if source.is_merged:
             raise ValueError(f"Source identity {source_identity_id} is already merged.")
@@ -73,7 +73,7 @@ class MergeExecutor:
         # ── Snapshot pre-merge state ──────────────────────────────────────────
         source_snapshot = self._snapshot_identity(source)
         target_snapshot = self._snapshot_identity(target)
-        source_links = await self._get_identity_links(source_identity_id)
+        source_links = await self._get_identity_links(source_identity_id, organization_id)
         source_links_snapshot = [
             {"id": l.id, "lead_id": l.lead_id, "source": l.source, "link_method": l.link_method}
             for l in source_links
@@ -109,7 +109,7 @@ class MergeExecutor:
             link.link_method = "merge_migrated"
 
         # ── Migrate IdentityAliases from source → target ──────────────────────
-        await self._migrate_aliases(source_identity_id, target_identity_id)
+        await self._migrate_aliases(source_identity_id, target_identity_id, organization_id)
 
         # ── Mark source as merged ─────────────────────────────────────────────
         source.is_merged = True
@@ -191,20 +191,30 @@ class MergeExecutor:
 
         return conflicts, merged_fields
 
-    async def _migrate_aliases(self, source_id: str, target_id: str):
+    async def _migrate_aliases(self, source_id: str, target_id: str, organization_id: str):
         """Move all aliases from source identity to target identity."""
-        stmt = select(IdentityAlias).where(IdentityAlias.identity_id == source_id)
+        stmt = select(IdentityAlias).where(
+            IdentityAlias.identity_id == source_id,
+            IdentityAlias.organization_id == organization_id,
+        )
         result = await self.db.execute(stmt)
         for alias in result.scalars().all():
             alias.identity_id = target_id
 
-    async def _get_identity(self, identity_id: str) -> Optional[Identity]:
-        result = await self.db.execute(select(Identity).where(Identity.id == identity_id))
+    async def _get_identity(self, identity_id: str, organization_id: str) -> Optional[Identity]:
+        result = await self.db.execute(select(Identity).where(
+            Identity.id == identity_id,
+            Identity.organization_id == organization_id,
+        ))
         return result.scalar_one_or_none()
 
-    async def _get_identity_links(self, identity_id: str) -> List[IdentityLink]:
+    async def _get_identity_links(self, identity_id: str, organization_id: str) -> List[IdentityLink]:
         result = await self.db.execute(
-            select(IdentityLink).where(IdentityLink.identity_id == identity_id, IdentityLink.is_active == True)
+            select(IdentityLink).where(
+                IdentityLink.identity_id == identity_id,
+                IdentityLink.organization_id == organization_id,
+                IdentityLink.is_active == True,
+            )
         )
         return result.scalars().all()
 

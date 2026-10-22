@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
+import jwt
 
 from app.config import settings
-from app.dependencies import get_db, get_current_broker, check_auth_rate_limit
+from app.dependencies import get_db, get_current_broker, check_auth_rate_limit, security
 from app.models.broker import Broker
 from app.schemas.broker import BrokerResponse
 from sqlalchemy import select
@@ -65,23 +68,20 @@ def _resolve_or_create_oauth_session(request: Request, response: Response) -> st
 def _resolve_oauth_session(request: Request) -> str:
     """Read-only session resolution for the exchange step (never mints cookies).
 
-    Falls back to a client fingerprint when the cookie is unavailable. The
-    fingerprint binds the state to the originating browser context without
-    storing any personal identifier.
+    Retrieves the stable session identifier from the pre-login browser session cookie.
+    Rejects requests without a valid session cookie.
     """
     existing = request.cookies.get(OAUTH_SESSION_COOKIE)
     if existing and len(existing) >= 16:
         return existing
-    ua = request.headers.get("user-agent", "")
-    ip = request.client.host if request.client else "unknown"
-    return hashlib.sha256(f"oauth-sid|{ip}|{ua}".encode("utf-8")).hexdigest()
+    return ""
 
 
 @router.get("/google/url", response_model=GoogleAuthUrlResponse)
 async def get_google_auth_url(
+    request: Request,
+    response: Response,
     redirect_uri: Optional[str] = None,
-    request: Request = None,
-    response: Response = None,
 ):
     """Returns the Google OAuth 2.0 Authorization URL with server-issued state."""
     session_id = _resolve_or_create_oauth_session(request, response)
@@ -96,15 +96,48 @@ async def get_google_auth_url(
 async def google_exchange(
     req: GoogleExchangeRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """Exchanges Google authorization code for a verified session and token."""
     session_id = _resolve_oauth_session(request)
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth state does not belong to this session."
+        )
     broker = await exchange_google_oauth_code(db, req, session_id=session_id)
-    token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
+
+    # Server-side canonical organization membership resolution
+    stmt_member = select(OrganizationMember).where(OrganizationMember.broker_id == broker.id)
+    existing_member = (await db.execute(stmt_member)).scalars().first()
+    org_id_str = str(existing_member.organization_id) if existing_member else None
+
+    token_payload = {
+        "sub": broker.email,
+        "email": broker.email,
+        "broker_id": str(broker.id),
+        "auth_version": broker.auth_version,
+    }
+    if org_id_str:
+        token_payload["org_id"] = org_id_str
+        token_payload["organization_id"] = org_id_str
+
+    token = create_access_token(token_payload)
+
+    # Clear pre-login OAuth session cookie now that authentication succeeded
+    response.delete_cookie(
+        OAUTH_SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=_oauth_cookie_secure(),
+    )
+
     return AuthTokenResponse(
         access_token=token,
-        broker=BrokerResponse.model_validate(broker)
+        broker=BrokerResponse.model_validate(broker),
+        organization_id=org_id_str
     )
 
 @router.post(
@@ -115,10 +148,20 @@ async def google_exchange(
 )
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     broker = await register_broker(db, req)
-    token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
+    stmt_member = select(OrganizationMember.organization_id).where(OrganizationMember.broker_id == broker.id)
+    org_member = (await db.execute(stmt_member)).scalars().first()
+    org_id_str = str(org_member) if org_member else None
+
+    token_payload = {"sub": broker.email, "email": broker.email, "broker_id": str(broker.id), "auth_version": broker.auth_version}
+    if org_id_str:
+        token_payload["org_id"] = org_id_str
+        token_payload["organization_id"] = org_id_str
+    token = create_access_token(token_payload)
+
     return AuthTokenResponse(
         access_token=token,
-        broker=BrokerResponse.model_validate(broker)
+        broker=BrokerResponse.model_validate(broker),
+        organization_id=org_id_str
     )
 
 @router.post(
@@ -128,10 +171,20 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 )
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     broker = await authenticate_broker(db, req.email, req.password)
-    token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
+    stmt_member = select(OrganizationMember.organization_id).where(OrganizationMember.broker_id == broker.id)
+    org_member = (await db.execute(stmt_member)).scalars().first()
+    org_id_str = str(org_member) if org_member else None
+
+    token_payload = {"sub": broker.email, "email": broker.email, "broker_id": str(broker.id), "auth_version": broker.auth_version}
+    if org_id_str:
+        token_payload["org_id"] = org_id_str
+        token_payload["organization_id"] = org_id_str
+    token = create_access_token(token_payload)
+
     return AuthTokenResponse(
         access_token=token,
-        broker=BrokerResponse.model_validate(broker)
+        broker=BrokerResponse.model_validate(broker),
+        organization_id=org_id_str
     )
 
 @router.post(
@@ -232,6 +285,45 @@ async def get_me(current_broker: Broker = Depends(get_current_broker)):
     return BrokerResponse.model_validate(current_broker)
 
 
+@router.post("/logout")
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke the current bearer token immediately; the client should also clear its copy."""
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256", "RS256"],
+            options={"verify_aud": False, "verify_exp": True, "verify_iat": True},
+        )
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    jti = payload.get("jti")
+    expires_at = payload.get("exp")
+    if not jti or not expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This legacy session cannot be revoked. Please sign in again.",
+        )
+
+    from app.modules.security.services.token_security import TokenSecurityService
+    await TokenSecurityService(db).revoke_token(
+        jti=str(jti),
+        user_id=str(current_broker.id),
+        expires_at=datetime.fromtimestamp(float(expires_at), tz=timezone.utc),
+        reason="logout",
+    )
+    return {"success": True, "message": "Logged out."}
+
+
 # ─── PART 24.1 — Self-Service Password Reset Endpoints ─────────────────────────
 from pydantic import BaseModel, EmailStr, Field
 from app.modules.auth.password_reset_service import PasswordResetService, GENERIC_RESET_RESPONSE
@@ -255,18 +347,16 @@ class ResetPasswordRequest(BaseModel):
 )
 async def forgot_password(
     req: ForgotPasswordRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Public self-service forgot password initiation.
     Returns identical generic response regardless of account existence to prevent enumeration.
     """
-    base_url = str(request.base_url).rstrip("/")
     return await PasswordResetService.request_password_reset(
         email=req.email,
         db=db,
-        frontend_base_url=base_url
+        frontend_base_url=settings.FRONTEND_URL
     )
 
 
@@ -354,7 +444,7 @@ if settings.ENV.lower() not in ("production", "prod"):
                 detail="Not found."
             )
         broker = await get_or_create_test_broker(db, email=req.email, name=req.name)
-        token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id)})
+        token = create_access_token({"sub": broker.email, "email": broker.email, "broker_id": str(broker.id), "auth_version": broker.auth_version})
         return AuthTokenResponse(
             access_token=token,
             broker=BrokerResponse.model_validate(broker)

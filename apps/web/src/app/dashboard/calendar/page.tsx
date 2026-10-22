@@ -9,7 +9,7 @@ import {
   ChevronRight, Plus, RefreshCw, Filter, ShieldAlert, Sparkles,
   CalendarDays, Video, Users, Check, ExternalLink, ArrowRight
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import {
   MeetingOutcome, MeetingPreparationBrief, MeetingNoShowPrediction,
@@ -78,9 +78,17 @@ export default function CalendarPage() {
   // New Appointment Modal
   const [newModalOpen, setNewModalOpen] = useState(false);
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
-  const [bookingForm, setBookingForm] = useState({
+  const [bookingForm, setBookingForm] = useState<{
+    leadId: string;
+    meetingType: CalendarEvent['meetingType'];
+    date: string;
+    time: string;
+    propertyTitle: string;
+    location: string;
+    notes: string;
+  }>({
     leadId: '',
-    meetingType: 'site_visit' as const,
+    meetingType: 'site_visit',
     date: new Date().toISOString().split('T')[0],
     time: '11:00',
     propertyTitle: '',
@@ -93,19 +101,47 @@ export default function CalendarPage() {
     setLoading(true);
     setError(null);
     try {
-      // Load command center schedule and tasks to synthesize authoritative calendar events
-      const [ccRes, leadsRes, crmRes] = await Promise.allSettled([
+      // Load command center schedule, tasks, and live calendar bookings
+      const [ccRes, leadsRes, crmRes, bookingsRes] = await Promise.allSettled([
         api.commandCenter.getData().catch(() => null),
         api.getLeads({ limit: 50 }).catch(() => ({ items: [] })),
-        api.crm.getDashboard().catch(() => null)
+        api.crm.getDashboard().catch(() => null),
+        api.calendar.getBookings().catch(() => [])
       ]);
 
       const ccData = ccRes.status === 'fulfilled' ? ccRes.value : null;
       const leads = leadsRes.status === 'fulfilled' && leadsRes.value ? ((leadsRes.value as any).items || (leadsRes.value as any).data || []) : [];
       setLeadsList(leads);
 
-      // Synthesize events from CommandCenter today_schedule and leads with scheduled viewing/visits
+      // Synthesize events from live bookings, CommandCenter today_schedule and leads
       const loadedEvents: CalendarEvent[] = [];
+      const seenIds = new Set<string>();
+
+      const bookings = bookingsRes.status === 'fulfilled' && Array.isArray(bookingsRes.value) ? bookingsRes.value : [];
+      bookings.forEach((b: any) => {
+        const typeLower = (b.meeting_type || 'site_visit').toLowerCase().replace(' ', '_');
+        const mType: CalendarEvent['meetingType'] =
+          typeLower.includes('call') ? 'client_call' :
+          typeLower.includes('video') ? 'video_call' :
+          typeLower.includes('meet') ? 'in_person' : 'site_visit';
+
+        const matchedLead = leads.find((l: Lead) => l.id === b.lead_id);
+        seenIds.add(b.id);
+        loadedEvents.push({
+          id: b.id,
+          title: b.title || 'Client Appointment',
+          leadId: b.lead_id || '',
+          leadName: matchedLead?.name || 'Client',
+          leadPhone: matchedLead?.phone || '',
+          propertyId: b.property_id || undefined,
+          propertyTitle: b.property_id ? 'Property Site' : undefined,
+          meetingType: mType,
+          status: (b.status?.toLowerCase() as any) || 'scheduled',
+          startTimeUtc: b.start_utc,
+          endTimeUtc: b.end_utc,
+          location: b.location_address || 'Site Office'
+        });
+      });
 
       if (ccData?.today_schedule && Array.isArray(ccData.today_schedule)) {
         ccData.today_schedule.forEach((item: TodayScheduleItem, idx: number) => {
@@ -115,28 +151,34 @@ export default function CalendarPage() {
             typeLower.includes('video') ? 'video_call' :
             typeLower.includes('meet') ? 'in_person' : 'site_visit';
 
-          loadedEvents.push({
-            id: item.id || `evt-cc-${idx}`,
-            title: item.title || `${item.lead_name || 'Client'} — Scheduled Meeting`,
-            leadId: item.lead_id || `lead-${idx}`,
-            leadName: item.lead_name || 'Client',
-            leadPhone: '',
-            propertyTitle: undefined,
-            meetingType: mType,
-            status: (item.status?.toLowerCase() as any) || 'scheduled',
-            startTimeUtc: item.scheduled_at || new Date().toISOString(),
-            endTimeUtc: new Date(Date.now() + (item.duration_minutes || 45) * 60000).toISOString(),
-            location: item.location || 'Site Office'
-          });
+          const evtId = item.id || `evt-cc-${idx}`;
+          if (!seenIds.has(evtId)) {
+            seenIds.add(evtId);
+            loadedEvents.push({
+              id: evtId,
+              title: item.title || `${item.lead_name || 'Client'} — Scheduled Meeting`,
+              leadId: item.lead_id || `lead-${idx}`,
+              leadName: item.lead_name || 'Client',
+              leadPhone: '',
+              propertyTitle: undefined,
+              meetingType: mType,
+              status: (item.status?.toLowerCase() as any) || 'scheduled',
+              startTimeUtc: item.scheduled_at || new Date().toISOString(),
+              endTimeUtc: new Date(Date.now() + (item.duration_minutes || 45) * 60000).toISOString(),
+              location: item.location || 'Site Office'
+            });
+          }
         });
       }
 
-      // If leads have stage "viewing", add corresponding site visit records
+      // If leads have stage "viewing", add corresponding site visit records if not already present
       leads.forEach((l: Lead) => {
         const stage = (l.pipeline_stage || l.stage_name || '').toLowerCase();
-        if (stage.includes('view') || stage.includes('visit') || stage.includes('appointment')) {
+        const visitId = `visit-lead-${l.id}`;
+        if ((stage.includes('view') || stage.includes('visit') || stage.includes('appointment')) && !seenIds.has(visitId)) {
+          seenIds.add(visitId);
           loadedEvents.push({
-            id: `visit-lead-${l.id}`,
+            id: visitId,
             title: `Property Viewing with ${l.name || 'Lead'}`,
             leadId: l.id,
             leadName: l.name || 'Qualified Buyer',
@@ -221,23 +263,22 @@ export default function CalendarPage() {
 
     setIsBooking(true);
     try {
-      const selectedLead = leadsList.find(l => l.id === bookingForm.leadId);
-      const newEvt: CalendarEvent = {
-        id: `evt-${Date.now()}`,
-        title: `${selectedLead?.name || 'Client'} — ${bookingForm.propertyTitle || 'Consultation'}`,
-        leadId: bookingForm.leadId,
-        leadName: selectedLead?.name || 'Client',
-        leadPhone: selectedLead?.phone || '',
-        propertyTitle: bookingForm.propertyTitle || 'Selected Property',
-        meetingType: bookingForm.meetingType,
-        status: 'scheduled',
-        startTimeUtc: `${bookingForm.date}T${bookingForm.time}:00Z`,
-        endTimeUtc: `${bookingForm.date}T${bookingForm.time}:45Z`,
-        location: bookingForm.location || 'Site Office',
-        notes: bookingForm.notes
-      };
+      const slotStartUtc = `${bookingForm.date}T${bookingForm.time}:00Z`;
+      const mType = bookingForm.meetingType === 'site_visit' ? 'PROPERTY_VIEWING' :
+                    bookingForm.meetingType === 'client_call' ? 'CALL' :
+                    bookingForm.meetingType === 'video_call' ? 'VIDEO_CALL' : 'SITE_VISIT';
 
-      setEvents(prev => [newEvt, ...prev]);
+      await api.calendar.bookMeeting({
+        lead_id: bookingForm.leadId,
+        meeting_type: mType,
+        slot_start_utc: slotStartUtc,
+        duration_minutes: 45,
+        location_type: 'PROPERTY',
+        location_address: bookingForm.location || 'Site Office',
+        virtual_provider: bookingForm.meetingType === 'video_call' ? 'GOOGLE_MEET' : 'NONE',
+        notes: bookingForm.notes
+      });
+
       setNewModalOpen(false);
       setBookingForm({
         leadId: '',
@@ -248,6 +289,7 @@ export default function CalendarPage() {
         location: '',
         notes: ''
       });
+      await fetchCalendarData();
     } catch (err: any) {
       alert(err.message || 'Failed to schedule appointment.');
     } finally {
@@ -256,10 +298,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-20 pb-16">
+    <PageContainer>
         {/* Header */}
         <div className="py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4D0C8]">
           <div>
@@ -455,7 +494,6 @@ export default function CalendarPage() {
             </div>
           )}
         </div>
-      </main>
 
       {/* Event Details Drawer */}
       <AnimatePresence>
@@ -785,6 +823,6 @@ export default function CalendarPage() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </PageContainer>
   );
 }

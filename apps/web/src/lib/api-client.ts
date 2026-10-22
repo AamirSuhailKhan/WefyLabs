@@ -10,13 +10,20 @@ import {
 } from '@/types';
 
 export const getApiBase = (): string => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
-  }
+  let base = process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : '';
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/api/v1`;
+    if (!base) {
+      return `${window.location.origin}/api/v1`;
+    }
+    // Harmonize localhost and 127.0.0.1 to avoid cross-site cookie restrictions
+    if (window.location.hostname === '127.0.0.1' && base.includes('localhost')) {
+      base = base.replace('localhost', '127.0.0.1');
+    } else if (window.location.hostname === 'localhost' && base.includes('127.0.0.1')) {
+      base = base.replace('127.0.0.1', 'localhost');
+    }
+    return base;
   }
-  return 'http://localhost:8000/api/v1';
+  return base || 'http://localhost:8000/api/v1';
 };
 
 export const getToken = (): string => {
@@ -51,8 +58,12 @@ export const getOrganizationId = (): string => {
 
 export const setOrganizationId = (orgId: string): void => {
   if (typeof window !== 'undefined') {
+    const prev = localStorage.getItem('wefylabs_org_id');
     localStorage.setItem('wefylabs_org_id', orgId);
     localStorage.setItem('beetlelabs_org_id', orgId);
+    if (prev !== orgId) {
+      window.dispatchEvent(new CustomEvent('wefylabs:org_changed', { detail: { organizationId: orgId, previousOrganizationId: prev } }));
+    }
   }
 };
 
@@ -188,6 +199,7 @@ export async function fetcher<T>(endpoint: string, options?: RequestInit): Promi
 
   try {
     const res = await fetch(url, {
+      credentials: options?.credentials || 'include',
       ...options,
       headers
     });
@@ -242,7 +254,7 @@ export const api = {
       city?: string;
       whatsapp_number?: string;
     }) => {
-      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker }>('/auth/register', {
+      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker; organization_id?: string }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
           ...data,
@@ -252,18 +264,26 @@ export const api = {
 
       if (res.access_token) {
         setToken(res.access_token);
+        const orgId = (res as any).organization_id || res.broker?.organization_id;
+        if (orgId) {
+          setOrganizationId(orgId);
+        }
       }
       return res;
     },
 
     login: async (data: { email: string; password: string }) => {
-      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker }>('/auth/login', {
+      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker; organization_id?: string }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(data)
       });
 
       if (res.access_token) {
         setToken(res.access_token);
+        const orgId = res.organization_id || res.broker?.organization_id;
+        if (orgId) {
+          setOrganizationId(orgId);
+        }
       }
       return res;
     },
@@ -296,12 +316,16 @@ export const api = {
   },
 
     exchangeGoogleCode: async (params: { code: string; state?: string; redirect_uri?: string }) => {
-      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker }>('/auth/google/exchange', {
+      const res = await fetcher<{ access_token: string; token_type: string; broker: Broker; organization_id?: string }>('/auth/google/exchange', {
         method: 'POST',
         body: JSON.stringify(params)
       });
       if (res.access_token) {
         setToken(res.access_token);
+        const orgId = res.organization_id || res.broker?.organization_id;
+        if (orgId) {
+          setOrganizationId(orgId);
+        }
       }
       return res;
     },
@@ -337,8 +361,19 @@ export const api = {
       });
     },
 
-    logout: () => {
-      removeToken();
+    logout: async () => {
+      try {
+        await fetcher<{ success: boolean }>('/auth/logout', { method: 'POST' });
+      } catch {
+        // Clear local credentials even when the API cannot be reached. The
+        // server-side revocation result is then unavailable until token expiry.
+      } finally {
+        removeToken();
+        removeOrganizationId();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('wefylabs:org_changed', { detail: { organizationId: null } }));
+        }
+      }
     }
   },
 
@@ -541,7 +576,7 @@ export const api = {
     fetcher<any>('/scoring/qualify', {
       method: 'POST',
       body: JSON.stringify({ lead_id: id, force })
-    }).catch(() => ({ status: 'success', score: 'hot', confidence: 0.9, reasoning: 'Live AI score refreshed based on latest customer interactions and budget qualification.' })),
+    }),
 
   // Sales Pipeline & Deal Execution OS (Build 08)
   salesPipeline: {
@@ -805,6 +840,22 @@ export const api = {
       fetcher<any>(`/deals/${dealId}/bookings/confirm`, { method: 'POST', body: JSON.stringify(data) }),
     recordCommission: (dealId: string, data: any) =>
       fetcher<any>(`/deals/${dealId}/commissions`, { method: 'POST', body: JSON.stringify(data) }),
+    settleCommission: (dealId: string, data: {
+      settled_amount: number;
+      payment_reference: string;
+      payment_mode?: string;
+      provenance?: string;
+      currency?: string;
+      settled_at?: string;
+      notes?: string;
+      settlement_evidence_url?: string;
+      idempotency_key: string;
+    }) =>
+      fetcher<any>(`/deals/${dealId}/commissions/settle`, { method: 'POST', body: JSON.stringify(data) }),
+    disputeCommission: (dealId: string, data: { reason: string; idempotency_key?: string }) =>
+      fetcher<any>(`/deals/${dealId}/commissions/dispute`, { method: 'POST', body: JSON.stringify(data) }),
+    reverseSettlement: (dealId: string, data: { reason: string; idempotency_key?: string }) =>
+      fetcher<any>(`/deals/${dealId}/commissions/reverse`, { method: 'POST', body: JSON.stringify(data) }),
     createClosing: (dealId: string, data: any) =>
       fetcher<any>(`/deals/${dealId}/closings`, { method: 'POST', body: JSON.stringify(data) }),
     completeClosing: (dealId: string) =>
@@ -1564,6 +1615,9 @@ export const api = {
         body: JSON.stringify(req),
       }),
 
+    getBookings: () =>
+      fetcher<CalendarBookingResponse[]>('/calendar/bookings'),
+
     getBooking: (meetingId: string) =>
       fetcher<CalendarBookingResponse>(`/calendar/bookings/${meetingId}`),
 
@@ -2101,19 +2155,19 @@ export const api = {
 
   // ─── Part 11 — Revenue Intelligence ──────────────────────────────────
   revenueIntelligence: {
-    getOverview: (params?: { start_date?: string; end_date?: string }) => {
+    getOverview: (params?: { start_date?: string; end_date?: string }, signal?: AbortSignal) => {
       const q = new URLSearchParams();
       if (params?.start_date) q.append('start_date', params.start_date);
       if (params?.end_date) q.append('end_date', params.end_date);
       const qStr = q.toString() ? `?${q.toString()}` : '';
-      return fetcher<RevenueOverviewDTO>(`/revenue-intelligence/overview${qStr}`);
+      return fetcher<RevenueOverviewDTO>(`/revenue-intelligence/overview${qStr}`, { signal });
     },
-    getFunnel: (params?: { start_date?: string; end_date?: string }) => {
+    getFunnel: (params?: { start_date?: string; end_date?: string }, signal?: AbortSignal) => {
       const q = new URLSearchParams();
       if (params?.start_date) q.append('start_date', params.start_date);
       if (params?.end_date) q.append('end_date', params.end_date);
       const qStr = q.toString() ? `?${q.toString()}` : '';
-      return fetcher<FunnelSummaryDTO>(`/revenue-intelligence/funnel${qStr}`);
+      return fetcher<FunnelSummaryDTO>(`/revenue-intelligence/funnel${qStr}`, { signal });
     },
     getLeakage: (params?: { start_date?: string; end_date?: string; staleness_threshold_days?: number }) => {
       const q = new URLSearchParams();
@@ -3464,6 +3518,7 @@ export interface SnapshotListDTO {
 
 export interface RevenueOverviewDTO {
   organization_id: string;
+  currency?: string;
   realized_revenue: number | null;
   current_pipeline_estimate: number | null;
   revenue_at_risk_estimate: number | null;

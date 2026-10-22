@@ -4,6 +4,10 @@ Global Infrastructure API Router
 Part 14 — Global Multi-Country Infrastructure & Localization Engine
 Public API endpoints for country, market, currency, configuration, localization,
 tax/fees, pipelines, phone, addresses, and provider health.
+
+P0 Security Hardening (applied):
+- /analytics/revenue-consolidated: requires get_current_tenant; org_id derived from JWT (IDOR fix).
+- All read-only public config endpoints (countries, currencies, timezones, etc.) remain public.
 """
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_tenant, get_optional_tenant, TenantContext
 from app.modules.global_.countries.service import CountryService
 from app.modules.global_.markets.service import MarketService, MarketActivationService
 from app.modules.global_.currencies.exchange_rate_service import ExchangeRateService
@@ -342,11 +347,15 @@ async def calculate_transaction_costs(
 @router.get("/pipelines/stages", summary="Get Pipeline Stages for Market")
 async def get_pipeline_stages(
     market_id: Optional[str] = Query(None),
-    organization_id: Optional[str] = Query(None),
+    tenant: Optional[TenantContext] = Depends(get_optional_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    """Return pipeline stages for market. If tenant authenticated, loads tenant pipeline;
+    otherwise returns market defaults. Caller cannot spoof organization_id.
+    """
     service = RegionalPipelineService(db)
-    stages = await service.get_pipeline_stages(market_id=market_id, organization_id=organization_id)
+    effective_org_id = tenant.organization_id if tenant else None
+    stages = await service.get_pipeline_stages(market_id=market_id, organization_id=effective_org_id)
     return {
         "market_id": market_id,
         "stages": [
@@ -366,12 +375,16 @@ async def get_pipeline_stages(
 @router.get("/feature-flags", summary="Get effective market feature flags")
 async def get_feature_flags(
     market_id: Optional[str] = Query(None),
-    organization_id: Optional[str] = Query(None),
+    tenant: Optional[TenantContext] = Depends(get_optional_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    """Return effective feature flags. If tenant authenticated, evaluates tenant-specific
+    overrides; otherwise returns market defaults. Caller cannot spoof organization_id.
+    """
     service = MarketFlagService(db)
-    flags = await service.get_all_flags(market_id=market_id, organization_id=organization_id)
-    return {"market_id": market_id, "organization_id": organization_id, "flags": flags}
+    effective_org_id = tenant.organization_id if tenant else None
+    flags = await service.get_all_flags(market_id=market_id, organization_id=effective_org_id)
+    return {"market_id": market_id, "organization_id": effective_org_id, "flags": flags}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,13 +393,16 @@ async def get_feature_flags(
 
 @router.get("/analytics/revenue-consolidated", summary="Consolidated Multi-Market Revenue")
 async def get_consolidated_revenue(
-    organization_id: str = Query(...),
     target_currency: str = Query("USD"),
+    tenant: TenantContext = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    """Generate consolidated multi-market revenue report. Requires authentication.
+    organization_id derived from authenticated JWT principal — not caller-supplied.
+    """
     engine = CrossCountryAnalyticsEngine(db)
     report = await engine.generate_global_revenue_report(
-        organization_id=organization_id,
+        organization_id=tenant.organization_id,  # Server-side only
         target_reporting_currency=target_currency,
     )
     return report.to_dict()

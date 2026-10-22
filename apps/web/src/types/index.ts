@@ -52,6 +52,7 @@ export interface Broker {
   subscription_plan?: string;
   trial_ends_at?: string;
   trial_days_remaining?: number;
+  organization_id?: string;
   onboarding_status: string;
   created_at: string;
 }
@@ -405,6 +406,7 @@ export interface CommandCenterResponse {
   broker_id: string;
   broker_name: string;
   timezone: string;
+  currency?: string;
   summary: CommandCenterSummary;
   daily_briefing: DailyBriefing;
   priorities: PriorityItem[];

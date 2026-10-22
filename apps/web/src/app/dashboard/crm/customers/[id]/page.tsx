@@ -7,7 +7,7 @@ import {
   Target, CheckSquare, MessageSquare, Activity, ShieldCheck, 
   Sparkles, DollarSign, Home, Plus
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { Customer360Response } from '@/types/crm';
 import { LeadIntelligencePanel } from '@/components/analytics/LeadIntelligencePanel';
@@ -78,34 +78,25 @@ export default function Customer360Page({ params }: { params: Promise<{ id: stri
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-        <DashboardNav />
-        <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-32 pb-16 text-center text-[#6B7280]">
-          Loading Customer 360 Workspace...
-        </main>
-      </div>
+      <PageContainer className="text-center text-[#6B7280] py-32">
+        Loading Customer 360 Workspace...
+      </PageContainer>
     );
   }
 
   if (!customer) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-        <DashboardNav />
-        <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-32 pb-16 text-center">
-          <p className="text-[#DC2626] font-semibold">Customer record not found or access denied.</p>
-          <Link href="/dashboard/crm/customers" className="text-xs text-[#0F766E] underline mt-2 block">
-            Return to Customer Directory
-          </Link>
-        </main>
-      </div>
+      <PageContainer className="text-center py-32">
+        <p className="text-[#DC2626] font-semibold">Customer record not found or access denied.</p>
+        <Link href="/dashboard/crm/customers" className="text-xs text-[#0F766E] underline mt-2 block">
+          Return to Customer Directory
+        </Link>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-24 pb-16">
+    <PageContainer>
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2 mb-4 text-xs text-[#6B7280]">
           <Link href="/dashboard/crm" className="hover:text-[#111827]">
@@ -591,7 +582,6 @@ export default function Customer360Page({ params }: { params: Promise<{ id: stri
             )}
           </div>
         )}
-      </main>
-    </div>
+      </PageContainer>
   );
 }

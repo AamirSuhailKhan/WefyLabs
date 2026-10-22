@@ -6,7 +6,7 @@ import {
   Rocket, Plus, RefreshCw, CheckCircle2, XCircle, AlertCircle,
   Shield, Check, Clock, ChevronRight
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import {
   Button, Card, CardHeader, CardTitle, CardContent,
   PageHeader, KpiCard, StatusBadge, EmptyState, Skeleton
@@ -58,10 +58,7 @@ export default function MarketingLaunchesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F0EDE8] text-[#1A1A1A] flex flex-col pt-16">
-      <DashboardNav />
-
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <PageContainer className="space-y-6">
         <PageHeader
           title="PROJECT LAUNCH COMMAND CENTER"
           description="Institutional launch readiness checklist. Enforces deterministic multi-gate verification before commercial project launch."
@@ -187,7 +184,6 @@ export default function MarketingLaunchesPage() {
             />
           )}
         </div>
-      </main>
-    </div>
+      </PageContainer>
   );
 }

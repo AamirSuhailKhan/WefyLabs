@@ -6,7 +6,7 @@ import {
   Users, Filter, Search, ArrowLeft, ArrowUpRight, CheckSquare, 
   MoreHorizontal, Plus, RefreshCw, AlertCircle
 } from 'lucide-react';
-import DashboardNav from '@/components/shared/DashboardNav';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { api } from '@/lib/api-client';
 import { LeadCRMListItem } from '@/types/crm';
 
@@ -100,10 +100,7 @@ export default function CRMLeadsOperatorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A]">
-      <DashboardNav />
-
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-24 pb-16">
+    <PageContainer>
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2 mb-4 text-xs text-[#6B7280]">
           <Link href="/dashboard/crm" className="hover:text-[#111827] flex items-center gap-1">
@@ -367,7 +364,6 @@ export default function CRMLeadsOperatorPage() {
             </table>
           </div>
         </div>
-      </main>
-    </div>
+      </PageContainer>
   );
 }
