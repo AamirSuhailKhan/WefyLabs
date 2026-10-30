@@ -33,29 +33,32 @@ async def liveness_check():
 async def readiness_check():
     """
     Kubernetes / Cloud Readiness Probe with DB & Redis Verification.
+    Runs database and cache connectivity checks concurrently to minimize latency.
     Returns 503 if any critical dependency (DB or Redis) is unavailable.
     """
+    import asyncio
     import redis.asyncio as aioredis
     from sqlalchemy import text
     from app.database import AsyncSessionLocal
 
-    db_ok = False
-    redis_ok = False
+    async def _check_db() -> bool:
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+            return True
+        except Exception:
+            return False
 
-    try:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception:
-        db_ok = False
+    async def _check_redis() -> bool:
+        try:
+            _redis = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+            await _redis.ping()
+            await _redis.aclose()
+            return True
+        except Exception:
+            return False
 
-    try:
-        _redis = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
-        await _redis.ping()
-        await _redis.aclose()
-        redis_ok = True
-    except Exception:
-        redis_ok = False
+    db_ok, redis_ok = await asyncio.gather(_check_db(), _check_redis())
 
     is_ready = db_ok and redis_ok
     status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
@@ -145,7 +148,9 @@ async def dependency_health_registry():
             await session.execute(text("SELECT 1"))
         db_ok = True
         db_ms = round((time.perf_counter() - t0) * 1000, 2)
-    except Exception:
+    except Exception as exc:
+        import logging
+        logging.getLogger("app.health").warning(f"[dependency_health_registry] Database check failed: {type(exc).__name__}: {exc}")
         db_ok = False
 
     t1 = time.perf_counter()
@@ -238,7 +243,9 @@ async def deep_health_check():
             except Exception:
                 pass
 
-    except Exception:
+    except Exception as exc:
+        import logging
+        logging.getLogger("app.health").warning(f"[dependency_health_registry] Database check failed: {type(exc).__name__}: {exc}")
         db_ok = False
 
     # 2. Redis check & latency

@@ -22,16 +22,21 @@ logger = logging.getLogger("beetlelabs.config")
 API_DIR = Path(__file__).resolve().parent.parent.parent.parent
 REPO_ROOT = API_DIR.parent.parent
 
-# Explicitly load .env files with repo root taking canonical precedence
-if (REPO_ROOT / ".env").exists():
-    load_dotenv(REPO_ROOT / ".env", override=True)
-if (API_DIR / ".env").exists():
-    load_dotenv(API_DIR / ".env", override=False)
-if (REPO_ROOT / ".env.local").exists():
-    load_dotenv(REPO_ROOT / ".env.local", override=True)
-if (API_DIR / ".env.local").exists():
-    load_dotenv(API_DIR / ".env.local", override=True)
-load_dotenv(Path.cwd() / ".env", override=False)
+# Support explicit environment file override via ENV_FILE
+env_file_override = os.getenv("ENV_FILE")
+if env_file_override and Path(env_file_override).exists():
+    load_dotenv(Path(env_file_override), override=True)
+else:
+    # Explicitly load .env files with repo root taking canonical precedence
+    if (REPO_ROOT / ".env").exists():
+        load_dotenv(REPO_ROOT / ".env", override=False)
+    if (API_DIR / ".env").exists():
+        load_dotenv(API_DIR / ".env", override=False)
+    if (REPO_ROOT / ".env.local").exists():
+        load_dotenv(REPO_ROOT / ".env.local", override=True)
+    if (API_DIR / ".env.local").exists():
+        load_dotenv(API_DIR / ".env.local", override=True)
+    load_dotenv(Path.cwd() / ".env", override=False)
 
 DEFAULT_SECRET_KEY = "beetlelabs_super_secret_jwt_key_2026_change_in_prod"
 DEFAULT_SUPABASE_SECRET = "supabase_jwt_secret_placeholder_32b_dev"
@@ -48,11 +53,12 @@ class EnterpriseSettings(BaseSettings):
 
     # Database & Cache
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore"
+    DB_SCHEMA: Optional[str] = None
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # AI Engine Keys (Google Gemini is the Primary & Sole AI Provider)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-3.5-flash"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
 
     # WhatsApp Meta Cloud Direct / 360Dialog
     # STRICT SAFETY POLICY: WhatsApp remains hard-disabled until explicitly
@@ -158,6 +164,9 @@ class EnterpriseSettings(BaseSettings):
     ALERT_SLACK_WEBHOOK_URL: Optional[str] = None
     ALERT_PAGERDUTY_ROUTING_KEY: Optional[str] = None
     ALERT_WEBHOOK_URL: Optional[str] = None
+
+    # Database DDL Policy (ARCH-STARTUP-03)
+    AUTO_CREATE_SCHEMA_ON_STARTUP: bool = False
 
     # CORS
     CORS_ORIGINS: List[str] = [
@@ -275,6 +284,13 @@ class EnterpriseSettings(BaseSettings):
             # 2. Database
             if self.DATABASE_URL.startswith("sqlite"):
                 errors.append("SQLite is not allowed in production! Configure PostgreSQL with pgvector.")
+
+            # 2a. Database DDL Policy (ARCH-STARTUP-03 / Master Prompt 10 Section 6)
+            if self.AUTO_CREATE_SCHEMA_ON_STARTUP:
+                errors.append(
+                    "AUTO_CREATE_SCHEMA_ON_STARTUP=True is strictly prohibited in production and staging environments! "
+                    "Schema DDL must be managed authoritatively via Alembic migrations."
+                )
             
             # 3. AI Provider: Google Gemini
             has_gemini = bool(
@@ -333,12 +349,16 @@ class EnterpriseSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=(
-            str(REPO_ROOT / ".env"),
-            str(API_DIR / ".env"),
-            str(REPO_ROOT / ".env.local"),
-            str(API_DIR / ".env.local"),
-            ".env",
-            "../.env"
+            os.getenv("ENV_FILE")
+            if os.getenv("ENV_FILE")
+            else (
+                str(REPO_ROOT / ".env"),
+                str(API_DIR / ".env"),
+                str(REPO_ROOT / ".env.local"),
+                str(API_DIR / ".env.local"),
+                ".env",
+                "../.env"
+            )
         ),
         env_file_encoding="utf-8",
         case_sensitive=True,

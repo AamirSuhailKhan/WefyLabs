@@ -2,7 +2,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Literal, Tuple, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,10 +18,34 @@ class ExtractedData(BaseModel):
     budget_min: Optional[int] = None
     budget_max: Optional[int] = None
     preferred_locations: Optional[List[str]] = None
-    property_type: Optional[Literal["1bhk", "2bhk", "3bhk", "villa", "plot"]] = None
+    property_type: Optional[Literal["1bhk", "2bhk", "3bhk", "4bhk", "villa", "plot", "commercial", "penthouse"]] = None
     transaction_type: Optional[Literal["buy", "rent", "lease"]] = None
     timeline: Optional[Literal["immediate", "1_month", "3_months", "6_months"]] = None
     loan_status: Optional[Literal["pre_approved", "in_process", "not_started"]] = None
+
+    @field_validator("property_type", mode="before")
+    @classmethod
+    def normalize_property_type(cls, v: Any) -> Optional[str]:
+        if not v or not isinstance(v, str):
+            return v
+        v_clean = v.strip().lower().replace("-", "_").replace(" ", "_")
+        if "3bhk" in v_clean or "3_bhk" in v_clean:
+            return "3bhk"
+        if "2bhk" in v_clean or "2_bhk" in v_clean:
+            return "2bhk"
+        if "1bhk" in v_clean or "1_bhk" in v_clean:
+            return "1bhk"
+        if "4bhk" in v_clean or "4_bhk" in v_clean:
+            return "4bhk"
+        if "villa" in v_clean:
+            return "villa"
+        if "plot" in v_clean or "land" in v_clean:
+            return "plot"
+        if "commercial" in v_clean or "office" in v_clean or "retail" in v_clean:
+            return "commercial"
+        if "penthouse" in v_clean:
+            return "penthouse"
+        return v_clean
 
 def calculate_score(data: ExtractedData) -> Tuple[str, float, str]:
     """

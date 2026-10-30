@@ -23,7 +23,7 @@ from app.modules.crm_intelligence.dto.intelligence_schemas import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/intelligence", tags=["CRM Intelligence & Autonomous Sales Operations Engine"])
+router = APIRouter(prefix="/api/v1/crm-intelligence", tags=["CRM Intelligence & Autonomous Sales Operations Engine"])
 
 # ─── Lead Health & Risks ───────────────────────────────────────────────────────
 

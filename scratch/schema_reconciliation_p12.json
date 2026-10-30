@@ -1,0 +1,119 @@
+{
+  "phase": "PHASE_12",
+  "schema_name": "phase9_fresh_disposable",
+  "section_1_application_table_columns": {
+    "orm_model_columns_count": 6057,
+    "db_app_columns_count": 6058,
+    "total_db_all_tables_count": 6059,
+    "difference_count": 1,
+    "tables_with_column_differences": {
+      "knowledge_embeddings": {
+        "model_count": 13,
+        "db_count": 14,
+        "missing": [],
+        "extra": [
+          "embedding"
+        ]
+      }
+    },
+    "status": "PASS"
+  },
+  "section_2_alembic_version_columns": {
+    "table_name": "alembic_version",
+    "column_count": 1,
+    "columns": [
+      {
+        "column_name": "version_num",
+        "data_type": "character varying",
+        "udt_name": "varchar",
+        "char_len": 64,
+        "precision": null,
+        "scale": null,
+        "is_nullable": false,
+        "default": null
+      }
+    ],
+    "status": "PASS"
+  },
+  "section_3_additional_db_columns_explanation": {
+    "extra_application_columns": [
+      {
+        "table": "knowledge_embeddings",
+        "column": "embedding",
+        "udt_name": "vector",
+        "dimension": 1536,
+        "justification": "Defined as vector(1536) in PostgreSQL for native pgvector HNSW search; ORM model defines embedding_json as JSONBType for SQLite unit test compatibility while documenting production ALTER TABLE in knowledge_models.py:319-323. Applied during init_db.py bootstrap.",
+        "status": "JUSTIFIED_CONTRACT"
+      }
+    ],
+    "extra_metadata_tables_columns": [
+      {
+        "table": "alembic_version",
+        "column": "version_num",
+        "udt_name": "varchar",
+        "length": 64,
+        "justification": "Created by Alembic migration framework to persist migration head state (0047_webhook_event_claims). Widened to VARCHAR(64) in migration 0039.",
+        "status": "JUSTIFIED_CONTRACT"
+      }
+    ],
+    "reconciliation_formula": "6,057 ORM model columns + 1 vector column (knowledge_embeddings.embedding) + 1 metadata column (alembic_version.version_num) = 6,059 total PostgreSQL database columns.",
+    "status": "PASS"
+  },
+  "section_4_table_definitions_and_schema": {
+    "total_orm_models": 410,
+    "total_db_tables": 411,
+    "app_tables_match": true,
+    "missing_in_db": [],
+    "extra_in_db": [
+      "alembic_version"
+    ],
+    "status": "PASS"
+  },
+  "section_5_column_types_nullability_defaults": {
+    "nullability_mismatches_count": 0,
+    "nullability_mismatches": [],
+    "status": "PASS"
+  },
+  "section_6_constraints_audit": {
+    "total_constraints": 821,
+    "primary_keys_count": 411,
+    "foreign_keys_count": 298,
+    "unique_constraints_count": 82,
+    "check_constraints_count": 30,
+    "webhook_event_claims_unique_verified": true,
+    "status": "PASS"
+  },
+  "section_7_indexes_audit": {
+    "total_indexes": 2373,
+    "status": "PASS"
+  },
+  "section_8_extensions_audit": {
+    "installed_extensions": {
+      "plpgsql": "1.0",
+      "pg_stat_statements": "1.11",
+      "uuid-ossp": "1.1",
+      "pgcrypto": "1.3",
+      "supabase_vault": "0.3.1",
+      "vector": "0.8.2"
+    },
+    "required_verified": true,
+    "status": "PASS"
+  },
+  "section_9_vector_and_hnsw_audit": {
+    "embedding_column_present": true,
+    "pgvector_dimension": 1536,
+    "hnsw_index_present": true,
+    "hnsw_index_definition": "CREATE INDEX ix_ke_vector_hnsw ON phase9_fresh_disposable.knowledge_embeddings USING hnsw (embedding vector_cosine_ops)",
+    "cosine_ops_verified": true,
+    "status": "PASS"
+  },
+  "section_10_webhook_idempotency_audit": {
+    "alembic_version_table_present": true,
+    "version_column_width": 64,
+    "recorded_revision": "0047_webhook_event_claims",
+    "expected_revision": "0047_webhook_event_claims",
+    "webhook_deduplication_constraint": true,
+    "status": "PASS"
+  },
+  "certified_parity_verdict": "CERTIFIED_PARITY"
+}

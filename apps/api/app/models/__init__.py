@@ -39,6 +39,11 @@ from app.models.property_models import (
 from app.models.command_center_models import CommandCenterDismissal
 from app.models.onboarding_models import OnboardingState, TenantActivation, DemoSession
 from app.models.transaction_models import DealTransaction, DealMilestone, DealPaymentSchedule
+from app.modules.autonomous_loop.phase2c_durable_models import (
+    PilotTenant, PilotStageTransition, PilotObservation, PilotMetricSnapshot,
+    PilotEvidenceRecord, PilotAuditEvent, PilotActionRecord, PilotHumanDecision,
+    PilotApprovalItem
+)
 
 from app.models.ingestion_models import ConnectorConfig, LeadImportBatch, LeadImportItem, OriginalPayload, IngestionLog
 from app.models.enrichment_models import LeadEnrichment, ConfidenceScore, EnrichmentHistory, EnrichmentSource, EnrichmentProvider
@@ -187,6 +192,30 @@ from app.models.sales_pipeline_models import (
     BookingReconciliationTask,
     LostReasonType,
     MoneyType, PctType,
+)
+
+# ─── Enterprise Security, Infrastructure, Observability & Platform Models ────
+from app.models.security_models import (
+    TokenBlacklist, PasswordHistory, BackupJob,
+    DisasterRecoveryPlan, ComplianceAuditReport,
+)
+from app.models.customer_success_models import (
+    CustomerHealthRecord, SupportTicket,
+)
+from app.models.infrastructure_models import (
+    BackgroundJob, EventHistory, FeatureFlag,
+    Integration, IntegrationCredential, NotificationPreference,
+    Setting, SystemHealthSnapshot, TimelineEvent, WebhookDelivery,
+)
+from app.models.marketplace_models import (
+    MarketplaceInstallation, MarketplaceItem,
+)
+from app.models.observability_models import (
+    AlertHistory, AlertRule, CapacityForecast,
+    HealthCheckResult, Incident, MetricSnapshot, PerformanceProfile,
+)
+from app.models.search_models import (
+    SavedSearch, SearchHistory, SearchIndexMetadata, SearchRanking,
 )
 
 __all__ = [

@@ -1,0 +1,14 @@
+{
+  "phase": "PHASE_14",
+  "schema": "phase14_upgrade_disposable",
+  "initial_state": "0038_build08_sales_pipeline",
+  "final_state": "0047_webhook_event_claims",
+  "synthetic_rows_before": 3,
+  "synthetic_rows_after": 3,
+  "backfill_rows_created": 3,
+  "data_loss_detected": false,
+  "version_column_width": 64,
+  "rollback_safety_verified": true,
+  "idempotence_verified": true,
+  "status": "CERTIFIED_UPGRADE"
+}

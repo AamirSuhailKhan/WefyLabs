@@ -1,0 +1,278 @@
+{
+  "timestamp": "2026-10-25T09:56:14Z",
+  "phase": "PHASE_14_2",
+  "environment": "docker_compose_local",
+  "docker_daemon_status": "ONLINE",
+  "services_healthy": true,
+  "containers": [
+    {
+      "Command": "\"uvicorn app.main:ap\u00e2\u20ac\u00a6\"",
+      "CreatedAt": "2026-10-25 14:25:24 +0530 IST",
+      "ExitCode": 0,
+      "Health": "healthy",
+      "ID": "cd083cf48fb2",
+      "Image": "crmrealstate-api",
+      "Labels": "com.docker.compose.depends_on=redis:service_healthy:false,postgres:service_healthy:false,com.docker.compose.image=sha256:1334a974d5431aa795be86a1f113bad85276f8ecc350535b88941dfe02e9ea67,com.docker.compose.project.config_files=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state\\docker-compose.yml,com.docker.compose.project.working_dir=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state,com.docker.compose.replace=leadscore_api,com.docker.compose.service=api,com.docker.compose.oneoff=False,com.docker.compose.project=crmrealstate,com.docker.compose.version=5.3.1,desktop.docker.io/ports.scheme=v2,desktop.docker.io/ports/8000/tcp=127.0.0.1:8000,com.docker.compose.config-hash=fadc6c87a26535bf404c20fa61f1ec54d151f0b8ba92bfb151202bd013bcc592,com.docker.compose.container-number=1",
+      "LocalVolumes": "0",
+      "Mounts": "",
+      "Name": "leadscore_api",
+      "Names": "leadscore_api",
+      "Networks": "crmrealstate_default",
+      "Ports": "127.0.0.1:8000->8000/tcp",
+      "Project": "crmrealstate",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8000,
+          "PublishedPort": 8000,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About an hour ago",
+      "Service": "api",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up About an hour (healthy)"
+    },
+    {
+      "Command": "\"celery -A app.celer\u00e2\u20ac\u00a6\"",
+      "CreatedAt": "2026-10-25 14:25:24 +0530 IST",
+      "ExitCode": 0,
+      "Health": "",
+      "ID": "92e0b61f3ddc",
+      "Image": "crmrealstate-celery_beat",
+      "Labels": "com.docker.compose.depends_on=redis:service_healthy:false,postgres:service_healthy:false,com.docker.compose.oneoff=False,com.docker.compose.version=5.3.1,desktop.docker.io/ports.scheme=v2,com.docker.compose.config-hash=1fcbb6183824c16e7d358c0575fb2547175c65d9d187d2e7cbd9c253b7c954d5,com.docker.compose.container-number=1,com.docker.compose.image=sha256:1e840b0baa02b4f02d85afdc114cc44efada45e067416edc6a709f0133bd58dc,com.docker.compose.project=crmrealstate,com.docker.compose.project.config_files=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state\\docker-compose.yml,com.docker.compose.project.working_dir=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state,com.docker.compose.replace=leadscore_celery_beat,com.docker.compose.service=celery_beat",
+      "LocalVolumes": "0",
+      "Mounts": "",
+      "Name": "leadscore_celery_beat",
+      "Names": "leadscore_celery_beat",
+      "Networks": "crmrealstate_default",
+      "Ports": "8000/tcp",
+      "Project": "crmrealstate",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 8000,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About an hour ago",
+      "Service": "celery_beat",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up About an hour"
+    },
+    {
+      "Command": "\"celery -A app.celer\u00e2\u20ac\u00a6\"",
+      "CreatedAt": "2026-10-25 14:25:24 +0530 IST",
+      "ExitCode": 0,
+      "Health": "",
+      "ID": "f85d4eaf14d1",
+      "Image": "crmrealstate-celery_worker",
+      "Labels": "com.docker.compose.version=5.3.1,desktop.docker.io/ports.scheme=v2,com.docker.compose.container-number=1,com.docker.compose.oneoff=False,com.docker.compose.project.config_files=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state\\docker-compose.yml,com.docker.compose.project.working_dir=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state,com.docker.compose.service=celery_worker,com.docker.compose.config-hash=ef6fa577bc67733e9607cb4ea3799165a9351fc1936675a7e3904738082af4f5,com.docker.compose.depends_on=redis:service_healthy:false,postgres:service_healthy:false,com.docker.compose.image=sha256:654eb9df29976a09c90e714aa23710e5428d91d5e8600120ccbbecad2eb73bf0,com.docker.compose.project=crmrealstate,com.docker.compose.replace=leadscore_celery_worker",
+      "LocalVolumes": "0",
+      "Mounts": "",
+      "Name": "leadscore_celery_worker",
+      "Names": "leadscore_celery_worker",
+      "Networks": "crmrealstate_default",
+      "Ports": "8000/tcp",
+      "Project": "crmrealstate",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 8000,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About an hour ago",
+      "Service": "celery_worker",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up About an hour"
+    },
+    {
+      "Command": "\"docker-entrypoint.s\u00e2\u20ac\u00a6\"",
+      "CreatedAt": "2026-10-25 14:02:45 +0530 IST",
+      "ExitCode": 0,
+      "Health": "healthy",
+      "ID": "cb5cf3c484e1",
+      "Image": "pgvector/pgvector:pg16",
+      "Labels": "com.docker.compose.config-hash=36e935831e63cb9bc045230ff3b3320a3a120847c2eb613dc30fb511ce3520b0,com.docker.compose.image=sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a,com.docker.compose.oneoff=False,com.docker.compose.project=crmrealstate,com.docker.compose.project.config_files=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state\\docker-compose.yml,com.docker.compose.project.working_dir=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state,com.docker.compose.service=postgres,com.docker.compose.version=5.3.1,com.docker.compose.container-number=1,com.docker.compose.depends_on=,com.docker.compose.replace=leadscore_postgres,desktop.docker.io/ports.scheme=v2,desktop.docker.io/ports/5432/tcp=127.0.0.1:5432",
+      "LocalVolumes": "1",
+      "Mounts": "crmrealstate_p\u00e2\u20ac\u00a6",
+      "Name": "leadscore_postgres",
+      "Names": "leadscore_postgres",
+      "Networks": "crmrealstate_default",
+      "Ports": "127.0.0.1:5432->5432/tcp",
+      "Project": "crmrealstate",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 5432,
+          "PublishedPort": 5432,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About an hour ago",
+      "Service": "postgres",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up About an hour (healthy)"
+    },
+    {
+      "Command": "\"docker-entrypoint.s\u00e2\u20ac\u00a6\"",
+      "CreatedAt": "2026-10-25 14:02:45 +0530 IST",
+      "ExitCode": 0,
+      "Health": "healthy",
+      "ID": "b6d7f1f18af4",
+      "Image": "redis:7-alpine",
+      "Labels": "desktop.docker.io/ports/6379/tcp=127.0.0.1:6379,com.docker.compose.config-hash=24311e21ee6278fbc435324b0c06c396f219de2428a10aa2040e8da356cb366d,com.docker.compose.container-number=1,com.docker.compose.depends_on=,com.docker.compose.oneoff=False,com.docker.compose.service=redis,com.docker.compose.version=5.3.1,desktop.docker.io/ports.scheme=v2,com.docker.compose.image=sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2,com.docker.compose.project=crmrealstate,com.docker.compose.project.config_files=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state\\docker-compose.yml,com.docker.compose.project.working_dir=C:\\Users\\aamir\\OneDrive\\Desktop\\crm real state,com.docker.compose.replace=leadscore_redis",
+      "LocalVolumes": "1",
+      "Mounts": "crmrealstate_r\u00e2\u20ac\u00a6",
+      "Name": "leadscore_redis",
+      "Names": "leadscore_redis",
+      "Networks": "crmrealstate_default",
+      "Ports": "127.0.0.1:6379->6379/tcp",
+      "Project": "crmrealstate",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 6379,
+          "PublishedPort": 6379,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About an hour ago",
+      "Service": "redis",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up About an hour (healthy)"
+    }
+  ],
+  "service_logs_summary": {
+    "api_tail": "ET /health \\u2192 200\", \"logger\": \"app.common.middleware.correlation\", \"service\": \"wefylabs-api\", \"module\": \"core\", \"environment\": \"production\", \"request_id\": null, \"correlation_id\": null, \"trace_id\": null, \"span_id\": null, \"organization_id\": null, \"user_id\": null}\nleadscore_api  | {\"timestamp\": \"2026-10-25T09:56:05.004011+00:00\", \"level\": \"INFO\", \"message\": \"[HTTP TRACE] GET /health | Status: 200 | Latency: 40.02ms | ReqID: req-0c39d278a76d\", \"logger\": \"app.infrastructure.monitoring.observability\", \"service\": \"wefylabs-api\", \"module\": \"core\", \"environment\": \"production\", \"request_id\": null, \"correlation_id\": null, \"trace_id\": null, \"span_id\": null, \"organization_id\": null, \"user_id\": null}\nleadscore_api  | {\"timestamp\": \"2026-10-25T09:56:09.809233+00:00\", \"level\": \"INFO\", \"message\": \"[HTTP RESPONSE] GET /health | Status: 200 | Latency: 116.56ms\", \"logger\": \"app.infrastructure.middleware.observability_middleware\", \"service\": \"wefylabs-api\", \"module\": \"http\", \"environment\": \"production\", \"request_id\": \"req-cf46cf5a2799\", \"correlation_id\": \"corr-4275a457051f\", \"trace_id\": \"1574fd66eac44f0c97cc73fa82d817e4\", \"span_id\": \"9d0e4ecadae448a6\", \"organization_id\": null, \"user_id\": null}\nleadscore_api  | {\"timestamp\": \"2026-10-25T09:56:09.812447+00:00\", \"level\": \"INFO\", \"message\": \"GET /health \\u2192 200\", \"logger\": \"app.common.middleware.correlation\", \"service\": \"wefylabs-api\", \"module\": \"core\", \"environment\": \"production\", \"request_id\": null, \"correlation_id\": null, \"trace_id\": null, \"span_id\": null, \"organization_id\": null, \"user_id\": null}\nleadscore_api  | {\"timestamp\": \"2026-10-25T09:56:09.813843+00:00\", \"level\": \"INFO\", \"message\": \"[HTTP TRACE] GET /health | Status: 200 | Latency: 129.36ms | ReqID: req-[REDACTED_PHONE]dc\", \"logger\": \"app.infrastructure.monitoring.observability\", \"service\": \"wefylabs-api\", \"module\": \"core\", \"environment\": \"production\", \"request_id\": null, \"correlation_id\": null, \"trace_id\": null, \"span_id\": null, \"organization_id\": null, \"user_id\": null}\n",
+    "celery_worker_tail": "nc_ping\nleadscore_celery_worker  |     await tr.start()\nleadscore_celery_worker  |   File \"/usr/local/lib/python3.11/site-packages/asyncpg/transaction.py\", line 146, in start\nleadscore_celery_worker  |     await self._connection.execute(query)\nleadscore_celery_worker  |   File \"/usr/local/lib/python3.11/site-packages/asyncpg/connection.py\", line 350, in execute\nleadscore_celery_worker  |     result = await self._protocol.query(query, timeout)\nleadscore_celery_worker  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nleadscore_celery_worker  |   File \"asyncpg/protocol/protocol.pyx\", line 365, in query\nleadscore_celery_worker  |   File \"asyncpg/protocol/protocol.pyx\", line 778, in asyncpg.protocol.protocol.BaseProtocol._new_waiter\nleadscore_celery_worker  |   File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 728, in call_later\nleadscore_celery_worker  |     timer = self.call_at(self.time() + delay, callback, *args,\nleadscore_celery_worker  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nleadscore_celery_worker  |   File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 741, in call_at\nleadscore_celery_worker  |     self._check_closed()\nleadscore_celery_worker  |   File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 520, in _check_closed\nleadscore_celery_worker  |     raise RuntimeError('Event loop is closed')\nleadscore_celery_worker  | RuntimeError: Event loop is closed\nleadscore_celery_worker  | [2026-10-25 09:56:01,638: INFO/ForkPoolWorker-8] [SLA] First-contact task already initiated for Lead 5c8dd178-ec1a-4d58-8b2c-35de346dc981.\nleadscore_celery_worker  | [2026-10-25 09:56:01,654: INFO/ForkPoolWorker-8] [Celery FollowUp] Evaluated 3 active leads, recorded 0 SLA breaches.\nleadscore_celery_worker  | [2026-10-25 09:56:01,666: INFO/ForkPoolWorker-8] Task app.tasks.followup_tasks.evaluate_followups[08682996-944b-49ab-aee3-8c2f1be68fb9] succeeded in 0.3330673979999119s: {'processed_leads': 3, 'recorded_breaches': 0}\n",
+    "celery_beat_tail": ": INFO/MainProcess] Scheduler: Sending due task autonomous-loop-retry-failed (autonomous_loop.retry_failed_events)\nleadscore_celery_beat  | [2026-10-25 09:54:00,116: INFO/MainProcess] Scheduler: Sending due task process-due-workflow-waits (app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task)\nleadscore_celery_beat  | [2026-10-25 09:55:00,133: INFO/MainProcess] Scheduler: Sending due task dispatch-due-calendar-reminders (app.modules.calendar.workers.calendar_tasks.process_due_reminders_task)\nleadscore_celery_beat  | [2026-10-25 09:55:00,363: INFO/MainProcess] Scheduler: Sending due task process-due-workflow-waits (app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task)\nleadscore_celery_beat  | [2026-10-25 09:55:00,370: INFO/MainProcess] Scheduler: Sending due task evaluate-followups-periodic (app.tasks.followup_tasks.evaluate_followups)\nleadscore_celery_beat  | [2026-10-25 09:55:00,373: INFO/MainProcess] Scheduler: Sending due task autonomous-loop-inactive-lead-scan (autonomous_loop.evaluate_inactive_leads)\nleadscore_celery_beat  | [2026-10-25 09:55:00,383: INFO/MainProcess] Scheduler: Sending due task dispatch-due-followup-executions (follow_up.dispatch_due_executions)\nleadscore_celery_beat  | [2026-10-25 09:55:00,390: INFO/MainProcess] Scheduler: Sending due task cleanup-expired-booking-holds (app.modules.calendar.workers.calendar_tasks.cleanup_expired_holds_task)\nleadscore_celery_beat  | [2026-10-25 09:56:00,047: INFO/MainProcess] Scheduler: Sending due task autonomous-loop-retry-failed (autonomous_loop.retry_failed_events)\nleadscore_celery_beat  | [2026-10-25 09:56:00,131: INFO/MainProcess] Scheduler: Sending due task process-due-workflow-waits (app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task)\nleadscore_celery_beat  | [2026-10-25 09:56:00,135: INFO/MainProcess] Scheduler: Sending due task monitor-sla-breaches (app.modules.crm_intelligence.workers.intelligence_tasks.monitor_sla_breaches_task)\n",
+    "postgres_tail": "rote 10 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.026 s, sync=0.008 s, total=1.063 s; sync files=7, longest=0.005 s, average=0.001 s; distance=8 kB, estimate=5768 kB; lsn=0/27B71B0, redo lsn=0/27B7178\nleadscore_postgres  | 2026-10-25 09:42:50.152 UTC [27] LOG:  checkpoint starting: time\nleadscore_postgres  | 2026-10-25 09:42:53.028 UTC [27] LOG:  checkpoint complete: wrote 29 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.850 s, sync=0.007 s, total=2.891 s; sync files=22, longest=0.002 s, average=0.001 s; distance=159 kB, estimate=5207 kB; lsn=0/27DEF80, redo lsn=0/27DEF48\nleadscore_postgres  | 2026-10-25 09:47:50.095 UTC [27] LOG:  checkpoint starting: time\nleadscore_postgres  | 2026-10-25 09:47:53.902 UTC [27] LOG:  checkpoint complete: wrote 37 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=3.698 s, sync=0.010 s, total=3.809 s; sync files=30, longest=0.002 s, average=0.001 s; distance=170 kB, estimate=4703 kB; lsn=0/2809888, redo lsn=0/2809850\nleadscore_postgres  | 2026-10-25 09:52:50.972 UTC [27] LOG:  checkpoint starting: time\nleadscore_postgres  | 2026-10-25 09:52:54.549 UTC [27] LOG:  checkpoint complete: wrote 35 buffers (0.2%); 0 WAL file(s) added, 0 removed, 0 recycled; write=3.472 s, sync=0.059 s, total=3.579 s; sync files=23, longest=0.009 s, average=0.003 s; distance=188 kB, estimate=4252 kB; lsn=0/2838998, redo lsn=0/2838928\nleadscore_postgres  | 2026-10-25 09:54:50.300 UTC [5139] ERROR:  cached plan must not change result type\nleadscore_postgres  | 2026-10-25 09:54:50.300 UTC [5139] STATEMENT:  SELECT version_num FROM alembic_version LIMIT 1\nleadscore_postgres  | 2026-10-25 09:54:50.365 UTC [5139] ERROR:  current transaction is aborted, commands ignored until end of transaction block\nleadscore_postgres  | 2026-10-25 09:54:50.365 UTC [5139] STATEMENT:  SELECT outbox_events.status, count(outbox_events.id) AS count_1 \nleadscore_postgres  | \tFROM outbox_events GROUP BY outbox_events.status\n",
+    "redis_tail": "ed on disk\nleadscore_redis  | 4420:C 25 Oct 2026 09:35:11.044 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB\nleadscore_redis  | 1:M 25 Oct 2026 09:35:11.126 * Background saving terminated with success\nleadscore_redis  | 1:M 25 Oct 2026 09:40:12.083 * 100 changes in 300 seconds. Saving...\nleadscore_redis  | 1:M 25 Oct 2026 09:40:12.091 * Background saving started by pid 4779\nleadscore_redis  | 4779:C 25 Oct 2026 09:40:12.124 * DB saved on disk\nleadscore_redis  | 4779:C 25 Oct 2026 09:40:12.124 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB\nleadscore_redis  | 1:M 25 Oct 2026 09:40:12.193 * Background saving terminated with success\nleadscore_redis  | 1:M 25 Oct 2026 09:45:13.097 * 100 changes in 300 seconds. Saving...\nleadscore_redis  | 1:M 25 Oct 2026 09:45:13.101 * Background saving started by pid 5147\nleadscore_redis  | 5147:C 25 Oct 2026 09:45:13.121 * DB saved on disk\nleadscore_redis  | 5147:C 25 Oct 2026 09:45:13.122 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB\nleadscore_redis  | 1:M 25 Oct 2026 09:45:13.202 * Background saving terminated with success\nleadscore_redis  | 1:M 25 Oct 2026 09:50:14.054 * 100 changes in 300 seconds. Saving...\nleadscore_redis  | 1:M 25 Oct 2026 09:50:14.066 * Background saving started by pid 5507\nleadscore_redis  | 5507:C 25 Oct 2026 09:50:14.101 * DB saved on disk\nleadscore_redis  | 5507:C 25 Oct 2026 09:50:14.102 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB\nleadscore_redis  | 1:M 25 Oct 2026 09:50:14.167 * Background saving terminated with success\nleadscore_redis  | 1:M 25 Oct 2026 09:55:15.051 * 100 changes in 300 seconds. Saving...\nleadscore_redis  | 1:M 25 Oct 2026 09:55:15.069 * Background saving started by pid 5868\nleadscore_redis  | 5868:C 25 Oct 2026 09:55:15.153 * DB saved on disk\nleadscore_redis  | 5868:C 25 Oct 2026 09:55:15.154 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB\nleadscore_redis  | 1:M 25 Oct 2026 09:55:15.170 * Background saving terminated with success\n"
+  },
+  "http_smoke_results": {
+    "total_flows": 12,
+    "flows_passed": 12,
+    "all_passed": true,
+    "flows": {
+      "flow_01_liveness_readiness": {
+        "endpoint": "/health",
+        "status_code": 200,
+        "response": {
+          "status": "healthy",
+          "service": "WefyLabs API",
+          "version": "1.0.0",
+          "environment": "development",
+          "dependencies": {
+            "database": {
+              "status": "ok",
+              "latency_ms": 2.34,
+              "migration_head": "0048_schema_reconciliation_parity"
+            },
+            "redis": {
+              "status": "ok",
+              "latency_ms": 2.25
+            },
+            "gemini": {
+              "status": "configured",
+              "provider": "google-gemini",
+              "model": "gemini-3.6-flash"
+            },
+            "smtp": {
+              "status": "not_configured"
+            }
+          },
+          "outbox_queue": {
+            "pending": 0,
+            "failed": 0,
+            "dead_letter": 0
+          },
+          "security_metrics": {
+            "AUTH_FAILURE": 0,
+            "AUTHZ_FAILURE": 0,
+            "RATE_LIMIT": 0,
+            "INVALID_WEBHOOK": 0,
+            "SUSPICIOUS_INPUT": 0,
+            "TENANT_BOUNDARY_VIOLATION": 0,
+            "AI_POLICY_REJECTION": 0,
+            "SYSTEM_SECURITY_ERROR": 0
+          }
+        },
+        "v1_status": 200,
+        "outcome": "PASS"
+      },
+      "flow_02_auth_and_profile": {
+        "register_status": 201,
+        "me_status": 200,
+        "user_email": "container_p14_2_80bad2@example.com",
+        "organization_id": null,
+        "outcome": "PASS"
+      },
+      "flow_03_lead_ingestion_and_retrieval": {
+        "create_status": 201,
+        "get_status": 200,
+        "lead_id": "07d39718-ec8a-4ccd-847f-30b174d6699b",
+        "outcome": "PASS"
+      },
+      "flow_04_cross_tenant_isolation": {
+        "target_lead_id": "07d39718-ec8a-4ccd-847f-30b174d6699b",
+        "cross_tenant_request_status": 404,
+        "outcome": "PASS"
+      },
+      "flow_05_property_recommendations": {
+        "status_code": 200,
+        "outcome": "PASS"
+      },
+      "flow_06_stage1_shadow_and_emergency_controls": {
+        "pause_status": 200,
+        "state_status": 200,
+        "resume_status": 200,
+        "outcome": "PASS"
+      },
+      "flow_07_followup_and_human_gating": {
+        "state_status": 200,
+        "outcome": "PASS"
+      },
+      "flow_08_sales_pipeline_retrieval": {
+        "status_code": 200,
+        "outcome": "PASS"
+      },
+      "flow_09_revenue_and_reconciliation": {
+        "analytics_revenue_status": 200,
+        "reconciliation_tasks_status": 200,
+        "outcome": "PASS"
+      },
+      "flow_10_billing_plans_and_entitlements": {
+        "status_code": 200,
+        "plans": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "outcome": "PASS"
+      },
+      "flow_11_duplicate_webhook_handling": {
+        "attempt_1_status": 503,
+        "attempt_2_status": 503,
+        "outcome": "PASS"
+      },
+      "flow_12_fail_closed_webhook_security": {
+        "forged_request_status": 503,
+        "behavior": "FAIL_CLOSED_REJECTED",
+        "outcome": "PASS"
+      }
+    }
+  },
+  "release_gate_status": "PASSED"
+}

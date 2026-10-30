@@ -1,0 +1,71 @@
+[
+  {
+    "category": "REPRODUCTION_0048",
+    "title": "Deliberate 0048 Type Divergence Reproduction",
+    "target_database": "PostgreSQL (test_disposable_0048)",
+    "initial_revision": "0048_schema_reconciliation_parity",
+    "command": "python scratch/action3_reproduce_on_disposable_0048.py",
+    "exit_code": 0,
+    "status": "PASSED_EXPECTED_FAILURE_CONFIRMED",
+    "details": "Confirmed PostgreSQL asyncpg failure: operator does not exist: uuid = character varying on Lead JOIN SourceAttribution."
+  },
+  {
+    "category": "MIGRATION_CHAIN_0047_TO_0050",
+    "title": "Sequential Upgrade Chain (0047 -> 0048 -> 0049 -> 0050)",
+    "target_database": "PostgreSQL (test_upgrade_0047_to_0050)",
+    "initial_revision": "0047_webhook_event_claims",
+    "final_revision": "0050_broker_subscription_constraint_parity",
+    "command": "python scratch/test_upgrade_from_0047_to_0050.py",
+    "exit_code": 0,
+    "status": "PASSED_100_FIDELITY",
+    "details": "All 3 intermediate and head revisions executed sequentially on PostgreSQL without drift."
+  },
+  {
+    "category": "ORPHAN_RECONCILIATION_MIGRATION_0049",
+    "title": "Migration 0049 Orphaned Attribution Safety Proof",
+    "target_database": "PostgreSQL (test_orphan_check)",
+    "initial_revision": "0048_schema_reconciliation_parity",
+    "final_revision": "0050_broker_subscription_constraint_parity",
+    "command": "python scratch/test_orphan_migration_safety.py",
+    "exit_code": 0,
+    "status": "PASSED_ORPHAN_NULLIFIED",
+    "details": "Historical attribution referencing purged lead preserved with lead_id = NULL; foreign key added without violation."
+  },
+  {
+    "category": "RECOVERY_DOWNGRADE_SAFEGUARD",
+    "title": "Downgrade Fail-Closed Drill on Transformed Data",
+    "target_database": "PostgreSQL (test_drill_phase3_downgrade)",
+    "attempted_command": "alembic downgrade 0048_schema_reconciliation_parity",
+    "exit_code": 1,
+    "status": "FAIL_CLOSED_CONFIRMED",
+    "details": "Downgrade deliberately aborted with RuntimeError because NULL lead_id exists; transaction rolled back; schema preserved at 0050."
+  },
+  {
+    "category": "BACKUP_AND_CATALOG_VERIFICATION",
+    "title": "Native pg_dump and pg_restore Catalog Verification",
+    "target_database": "PostgreSQL (test_disposable_backup_drill)",
+    "command": "python scratch/test_backup_and_catalog_verification.py",
+    "exit_code": 0,
+    "status": "PASSED",
+    "details": "Binary dump created via pg_dump -Fc; catalog verified with 3,510 entries including leads, brokers, attributions."
+  },
+  {
+    "category": "RESTORE_AND_DATA_LOSS_REHEARSAL",
+    "title": "Full Snapshot Restore Rehearsal & Post-Backup Writes Proof",
+    "target_database": "PostgreSQL (test_disposable_source_for_restore -> test_disposable_restored_db)",
+    "command": "python scratch/rehearse_full_backup_and_restore.py",
+    "exit_code": 0,
+    "status": "PASSED_PROOF_ESTABLISHED",
+    "details": "Proved that snapshot restore wipes out all writes made after backup; established rule that post-backup writes require forward fix."
+  },
+  {
+    "category": "POST_MIGRATION_SMOKE_TESTS",
+    "title": "Rigorous Phase 5 PostgreSQL Smoke Test Suite (10 Assertions)",
+    "target_database": "PostgreSQL (test_disposable_phase5_smoke)",
+    "command": "python scratch/rigorous_phase5_postgresql_smoke_test.py",
+    "exit_code": 0,
+    "status": "ALL_10_ASSERTIONS_PASSED",
+    "details": "Verified: 0050 revision, native UUID types, FKs with CASCADE/SET NULL, check constraints, seeded joins, UUID handling, invalid UUID rejection, and tenant isolation."
+  }
+]
+

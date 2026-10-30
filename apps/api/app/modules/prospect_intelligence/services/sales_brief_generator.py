@@ -4,7 +4,7 @@ Part 21.2A — Sales Intelligence Brief & Next Best Action Generator
 Synthesizes a structured, concise sales briefing for brokers and determines the
 highest-impact Next Best Action grounded in extracted evidence.
 """
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from app.models.prospect_intelligence_models import NextBestActionType, SalesReadiness
 from app.modules.prospect_intelligence.dto.prospect_intelligence_dto import (
     StrictLLMProspectExtractionDTO, SalesBriefDTO

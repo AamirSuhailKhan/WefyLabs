@@ -15,16 +15,9 @@ from app.celery_app import celery_app
 from app.database import async_session_factory
 from app.modules.workflow.service import WorkflowService
 
-logger = logging.getLogger(__name__)
+from app.core.async_runner import run_async as _run_async
 
-def _run_async(coro):
-    """Helper to run async coroutines synchronously in Celery worker thread."""
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="app.modules.workflow.workers.workflow_tasks.process_due_workflow_waits_task", queue="workflow-timers")

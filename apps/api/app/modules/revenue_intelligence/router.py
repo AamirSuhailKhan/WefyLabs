@@ -14,13 +14,15 @@ from __future__ import annotations
 import uuid
 import logging
 from datetime import datetime, timezone
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_broker
+from app.infrastructure.tenancy.scope import resolve_organization_id_for_broker
 from app.models.broker import Broker
 from app.modules.revenue_intelligence.service import RevenueIntelligenceService
 from app.modules.revenue_intelligence.dto import (
@@ -49,6 +51,21 @@ router = APIRouter(
 )
 
 
+async def get_revenue_org_id(
+    db: AsyncSession = Depends(get_db),
+    current_broker: Broker = Depends(get_current_broker),
+    x_organization_id: Optional[str] = Header(None, alias="X-WefyLabs-Organization-Id"),
+) -> uuid.UUID:
+    """Authoritative tenant scope resolver for Revenue Intelligence.
+    Ensures multi-tenant membership checks and prevents cross-tenant spoofing."""
+    org_id = await resolve_organization_id_for_broker(
+        db, current_broker.id, requested_organization_id=x_organization_id, allow_fallback=True
+    )
+    if isinstance(org_id, str):
+        return uuid.UUID(org_id)
+    return org_id
+
+
 def _parse_date(raw: Optional[str], field_name: str) -> Optional[datetime]:
     """Parse ISO date string to datetime. Raises 422 on bad format."""
     if raw is None:
@@ -60,7 +77,7 @@ def _parse_date(raw: Optional[str], field_name: str) -> Optional[datetime]:
         return dt
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail=f"Invalid date format for '{field_name}'. Use ISO 8601 (e.g. 2026-01-01 or 2026-01-01T00:00:00Z).",
         )
 
@@ -107,19 +124,20 @@ async def get_funnel_summary(
     date_to: Optional[str] = Query(None, description="ISO 8601 end date filter"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
         result = await svc.funnel.get_funnel_summary(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             date_from=df,
             date_to=dt,
         )
         return result
     except Exception as exc:
-        logger.error(f"[RI:funnel] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:funnel] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Revenue funnel computation failed.")
 
 
@@ -144,13 +162,14 @@ async def get_leakage_report(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
         result = await svc.leakage.get_leakage_report(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             staleness_days=staleness_days,
             date_from=df,
             date_to=dt,
@@ -158,7 +177,7 @@ async def get_leakage_report(
         await db.commit()
         return result
     except Exception as exc:
-        logger.error(f"[RI:leakage] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:leakage] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Leakage detection failed.")
 
 
@@ -180,19 +199,20 @@ async def get_outcome_summary(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
         result = await svc.outcomes.get_outcome_summary(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             date_from=df,
             date_to=dt,
         )
         return result
     except Exception as exc:
-        logger.error(f"[RI:outcomes] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:outcomes] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Outcome summary computation failed.")
 
 
@@ -215,19 +235,20 @@ async def get_attribution_report(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
         result = await svc.attribution.get_attribution_report(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             date_from=df,
             date_to=dt,
         )
         return result
     except Exception as exc:
-        logger.error(f"[RI:attribution] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:attribution] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Attribution report computation failed.")
 
 
@@ -242,8 +263,9 @@ async def get_sources_report(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
-    return await get_attribution_report(date_from, date_to, db, current_broker)
+    return await get_attribution_report(date_from, date_to, db, current_broker, org_id)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -265,19 +287,20 @@ async def get_learning_loop_summary(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
         result = await svc.learning.get_learning_summary(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             date_from=df,
             date_to=dt,
         )
         return result
     except Exception as exc:
-        logger.error(f"[RI:learning] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:learning] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Learning loop summary failed.")
 
 
@@ -292,8 +315,9 @@ async def get_actions_summary(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
-    return await get_learning_loop_summary(date_from, date_to, db, current_broker)
+    return await get_learning_loop_summary(date_from, date_to, db, current_broker, org_id)
 
 
 @router.get(
@@ -306,20 +330,21 @@ async def get_opportunities_summary(
     date_to: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     df = _parse_date(date_from, "date_from")
     dt = _parse_date(date_to, "date_to")
     svc = RevenueIntelligenceService(db)
     try:
-        learning = await svc.learning.get_learning_summary(current_broker.id, df, dt)
+        learning = await svc.learning.get_learning_summary(org_id, df, dt)
         return {
-            "organization_id": str(current_broker.id),
+            "organization_id": str(org_id),
             "total_opportunities": learning.get("total_opportunities_evaluated", 0),
             "top_opportunity_types": learning.get("top_opportunity_types", []),
             "computation_method": "deterministic_heuristic_v1",
         }
     except Exception as exc:
-        logger.error(f"[RI:opportunities] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:opportunities] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Revenue opportunities retrieval failed.")
 
 
@@ -331,20 +356,21 @@ async def get_opportunities_summary(
 async def recompute_intelligence(
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
-        await svc.snapshots.capture(current_broker.id, period_type="DAILY")
-        await svc.leakage.get_leakage_report(current_broker.id)
+        await svc.snapshots.capture(org_id, period_type="DAILY")
+        await svc.leakage.get_leakage_report(org_id)
         await db.commit()
         return {
             "status": "success",
-            "organization_id": str(current_broker.id),
+            "organization_id": str(org_id),
             "recomputed_at": datetime.now(timezone.utc).isoformat(),
             "message": "Revenue intelligence derived state recomputed successfully."
         }
     except Exception as exc:
-        logger.error(f"[RI:recompute] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:recompute] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Recomputation failed.")
 
 
@@ -368,6 +394,7 @@ async def capture_snapshot(
     body: SnapshotCaptureRequestDTO,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     valid_period_types = {"DAILY", "WEEKLY", "MONTHLY"}
     if body.period_type not in valid_period_types:
@@ -378,14 +405,14 @@ async def capture_snapshot(
     svc = RevenueIntelligenceService(db)
     try:
         snap = await svc.snapshots.capture(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             period_type=body.period_type,
         )
         await db.commit()
         await db.refresh(snap)
         return _snap_to_dto(snap)
     except Exception as exc:
-        logger.error(f"[RI:snapshot:capture] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:snapshot:capture] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Snapshot capture failed.")
 
 
@@ -404,21 +431,22 @@ async def list_snapshots(
     limit: int = Query(30, ge=1, le=90, description="Max snapshots to return"),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
         snaps, total = await svc.snapshots.list_snapshots(
-            organization_id=current_broker.id,
+            organization_id=org_id,
             period_type=period_type,
             limit=limit,
         )
         return {
-            "organization_id": str(current_broker.id),
+            "organization_id": str(org_id),
             "total": total,
             "snapshots": [_snap_to_dto(s) for s in snaps],
         }
     except Exception as exc:
-        logger.error(f"[RI:snapshot:list] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:snapshot:list] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Snapshot listing failed.")
 
 
@@ -435,12 +463,13 @@ async def list_snapshots(
 async def get_overview(
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
-        return await svc.overview.get_overview(current_broker.id)
+        return await svc.overview.get_overview(org_id)
     except Exception as exc:
-        logger.error(f"[RI:overview] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:overview] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Revenue overview failed.")
 
 
@@ -458,12 +487,13 @@ async def get_leakage_items(
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
-        return await svc.leakage.get_extended_leakage_items(current_broker.id, limit=limit)
+        return await svc.leakage.get_extended_leakage_items(org_id, limit=limit)
     except Exception as exc:
-        logger.error(f"[RI:leakage:items] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:leakage:items] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Extended leakage retrieval failed.")
 
 
@@ -480,12 +510,13 @@ async def get_leakage_items(
 async def get_data_quality(
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
-        return await svc.data_quality.get_data_quality_report(current_broker.id)
+        return await svc.data_quality.get_data_quality_report(org_id)
     except Exception as exc:
-        logger.error(f"[RI:data-quality] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:data-quality] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Data quality audit failed.")
 
 
@@ -503,22 +534,23 @@ async def get_lead_journey(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     try:
         lid = uuid.UUID(lead_id)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid lead UUID format.")
+        raise HTTPException(status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", status.HTTP_422_UNPROCESSABLE_ENTITY), detail="Invalid lead UUID format.")
 
     svc = RevenueIntelligenceService(db)
     try:
-        journey = await svc.journeys.get_lead_journey(current_broker.id, lid)
+        journey = await svc.journeys.get_lead_journey(org_id, lid)
         if not journey:
             raise HTTPException(status_code=404, detail="Lead not found.")
         return journey
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error(f"[RI:journey:lead] org={current_broker.id} lead={lead_id} error={exc}", exc_info=True)
+        logger.error(f"[RI:journey:lead] org={org_id} lead={lead_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Lead journey reconstruction failed.")
 
 
@@ -531,8 +563,9 @@ async def get_lead_journey_alias(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
-    return await get_lead_journey(lead_id, db, current_broker)
+    return await get_lead_journey(lead_id, db, current_broker, org_id)
 
 
 
@@ -550,22 +583,23 @@ async def get_property_journey(
     property_id: str,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     try:
         pid = uuid.UUID(property_id)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid property UUID format.")
+        raise HTTPException(status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", status.HTTP_422_UNPROCESSABLE_ENTITY), detail="Invalid property UUID format.")
 
     svc = RevenueIntelligenceService(db)
     try:
-        journey = await svc.journeys.get_property_journey(current_broker.id, pid)
+        journey = await svc.journeys.get_property_journey(org_id, pid)
         if not journey:
             raise HTTPException(status_code=404, detail="Property listing not found.")
         return journey
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error(f"[RI:journey:property] org={current_broker.id} prop={property_id} error={exc}", exc_info=True)
+        logger.error(f"[RI:journey:property] org={org_id} prop={property_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Property journey reconstruction failed.")
 
 
@@ -578,8 +612,9 @@ async def get_property_journey_alias(
     property_id: str,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
-    return await get_property_journey(property_id, db, current_broker)
+    return await get_property_journey(property_id, db, current_broker, org_id)
 
 
 
@@ -596,12 +631,13 @@ async def get_property_journey_alias(
 async def get_team_metrics(
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     svc = RevenueIntelligenceService(db)
     try:
-        return await svc.team.get_team_metrics(current_broker.id)
+        return await svc.team.get_team_metrics(org_id)
     except Exception as exc:
-        logger.error(f"[RI:team] org={current_broker.id} error={exc}", exc_info=True)
+        logger.error(f"[RI:team] org={org_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Team intelligence retrieval failed.")
 
 
@@ -619,20 +655,25 @@ async def get_lead_propensity(
     lead_id: str,
     db: AsyncSession = Depends(get_db),
     current_broker: Broker = Depends(get_current_broker),
+    org_id: uuid.UUID = Depends(get_revenue_org_id),
 ):
     try:
         lid = uuid.UUID(lead_id)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid lead UUID format.")
+        raise HTTPException(status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", status.HTTP_422_UNPROCESSABLE_ENTITY), detail="Invalid lead UUID format.")
 
     svc = RevenueIntelligenceService(db)
     try:
-        prop = await svc.propensity.calculate_lead_propensity(current_broker.id, lid)
+        prop = await svc.propensity.calculate_lead_propensity(org_id, lid)
         if not prop:
             raise HTTPException(status_code=404, detail="Lead not found.")
         return prop
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error(f"[RI:propensity] org={current_broker.id} lead={lead_id} error={exc}", exc_info=True)
+        logger.error(f"[RI:propensity] org={org_id} lead={lead_id} error={exc}", exc_info=True)
         raise HTTPException(status_code=500, detail="Propensity calculation failed.")
+
+
+# ── Canonical Domain Consolidation: Re-export Build 09 Router ─────────────────
+from app.modules.revenue_intelligence.router_b09 import router_b09  # noqa: F401

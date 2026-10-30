@@ -1,0 +1,30 @@
+{
+  "test_1_worker_beat_isolation": {
+    "status": "PASSED",
+    "worker_command": "celery worker directly (no migrations)",
+    "beat_command": "celery beat directly (no migrations)"
+  },
+  "test_2_no_accidental_migration": {
+    "status": "PASSED",
+    "database_revision_unchanged": "0047_webhook_event_claims"
+  },
+  "test_3_fail_closed_on_unmigrated_db": {
+    "status": "PASSED",
+    "exit_code": 1,
+    "stdout": "[FATAL] Production database revision mismatch: found 0047_webhook_event_claims, expected 0050_broker_subscription_constraint_parity"
+  },
+  "test_4_unauthorized_predecessor_rejected": {
+    "status": "PASSED",
+    "exit_code": 1
+  },
+  "test_5_dedicated_runner_success": {
+    "status": "PASSED",
+    "initial_revision": "0047_webhook_event_claims",
+    "final_revision": "0050_broker_subscription_constraint_parity",
+    "exit_code": 0
+  },
+  "test_6_api_startup_on_migrated_db": {
+    "status": "PASSED",
+    "exit_code": 0
+  }
+}

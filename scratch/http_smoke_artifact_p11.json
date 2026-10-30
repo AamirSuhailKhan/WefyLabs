@@ -1,0 +1,160 @@
+{
+  "flow_01_liveness_readiness": {
+    "endpoint": "/health",
+    "status_code": 200,
+    "response": {
+      "status": "healthy",
+      "service": "WefyLabs API",
+      "version": "1.0.0",
+      "environment": "development",
+      "dependencies": {
+        "database": {
+          "status": "ok",
+          "latency_ms": 269.76,
+          "migration_head": "0047_webhook_event_claims"
+        },
+        "redis": {
+          "status": "ok",
+          "latency_ms": 397.58
+        },
+        "gemini": {
+          "status": "configured",
+          "provider": "google-gemini",
+          "model": "gemini-3.5-flash"
+        },
+        "smtp": {
+          "status": "configured"
+        }
+      },
+      "outbox_queue": {
+        "pending": 0,
+        "failed": 0,
+        "dead_letter": 0
+      },
+      "security_metrics": {
+        "AUTH_FAILURE": 0,
+        "AUTHZ_FAILURE": 0,
+        "RATE_LIMIT": 0,
+        "INVALID_WEBHOOK": 0,
+        "SUSPICIOUS_INPUT": 0,
+        "TENANT_BOUNDARY_VIOLATION": 0,
+        "AI_POLICY_REJECTION": 0,
+        "SYSTEM_SECURITY_ERROR": 0
+      }
+    },
+    "v1_status": 200,
+    "outcome": "PASS"
+  },
+  "flow_02_authentication": {
+    "endpoint": "/api/v1/auth/register & /api/v1/auth/me",
+    "status_code": 201,
+    "me_status": 200,
+    "email": "pilot_broker_p11_f59ea738@example.com",
+    "outcome": "PASS"
+  },
+  "flow_03_lead_ingestion": {
+    "endpoint": "/api/v1/leads",
+    "status_code": 201,
+    "lead_id": "e78cc54b-7bfa-4d03-9509-dfe469bab598",
+    "lead_name": "Synthetic Investor Lead P11",
+    "outcome": "PASS"
+  },
+  "flow_04_tenant_isolation": {
+    "endpoint": "/api/v1/leads/e78cc54b-7bfa-4d03-9509-dfe469bab598",
+    "owner_status": 200,
+    "foreign_status": 404,
+    "isolation_verified": true,
+    "outcome": "PASS"
+  },
+  "flow_05_property_matching": {
+    "endpoint": "/api/v1/leads/e78cc54b-7bfa-4d03-9509-dfe469bab598/recommendations",
+    "status_code": 200,
+    "outcome": "PASS"
+  },
+  "flow_06_stage1_shadow_and_controls": {
+    "readiness_status": 200,
+    "emergency_pause_status": 200,
+    "emergency_resume_status": 200,
+    "outcome": "PASS"
+  },
+  "flow_07_human_approval_control": {
+    "endpoint": "/api/v1/autonomous-loop/leads/e78cc54b-7bfa-4d03-9509-dfe469bab598/pause",
+    "status_code": 200,
+    "outcome": "PASS"
+  },
+  "flow_08_follow_up_state": {
+    "endpoint": "/api/v1/autonomous-loop/leads/e78cc54b-7bfa-4d03-9509-dfe469bab598/state",
+    "status_code": 200,
+    "state_data": {
+      "lead_id": "e78cc54b-7bfa-4d03-9509-dfe469bab598",
+      "tenant_id": "0ae263c6-28d3-454d-8454-5852e5361cf6",
+      "is_paused": true,
+      "is_broker_takeover": false,
+      "current_lifecycle_state": "NEW",
+      "daily_action_count": 0,
+      "consecutive_failures": 0,
+      "pending_action_type": null,
+      "pending_since": null,
+      "last_event_type": null,
+      "last_event_at": null
+    },
+    "outcome": "PASS"
+  },
+  "flow_09_site_visit_pipeline": {
+    "endpoint": "/api/v1/pipelines",
+    "status_code": 200,
+    "pipelines_found": 0,
+    "outcome": "PASS"
+  },
+  "flow_10_audit_integrity": {
+    "endpoint": "/api/v1/analytics/revenue & /api/v1/reconciliation/tasks",
+    "status_code": 200,
+    "recon_status": 200,
+    "revenue_metrics": {
+      "period": {
+        "from": null,
+        "to": null,
+        "currency": "ALL"
+      },
+      "data_source": "revenue_events",
+      "metrics": {
+        "gross_booking_value": {
+          "value": null,
+          "definition": "SUM(revenue_events.amount WHERE event_type = 'booking.created')",
+          "verified": true
+        },
+        "collected_revenue": {
+          "value": null,
+          "definition": "SUM(revenue_events.amount WHERE event_type = 'payment.received')",
+          "verified": true
+        },
+        "refunded_revenue": {
+          "value": null,
+          "definition": "SUM(revenue_events.amount WHERE event_type = 'refund.issued')",
+          "verified": true
+        },
+        "net_revenue": {
+          "value": null,
+          "definition": "collected_revenue - SUM(revenue_events.amount WHERE event_type = 'refund.issued')",
+          "verified": true
+        }
+      },
+      "event_breakdown": {}
+    },
+    "outcome": "PASS"
+  },
+  "flow_11_billing_entitlements": {
+    "endpoint": "/api/v1/billing/plans",
+    "status_code": 200,
+    "plans_count": 6,
+    "pilot_plan_present": true,
+    "outcome": "PASS"
+  },
+  "flow_12_webhook_rejection": {
+    "endpoint": "/api/v1/whatsapp/webhook",
+    "status_code": 503,
+    "detail": "WhatsApp webhook signature verification is not configured.",
+    "rejection_verified": true,
+    "outcome": "PASS"
+  }
+}

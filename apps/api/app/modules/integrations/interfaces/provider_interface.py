@@ -37,24 +37,34 @@ class IIntegrationProvider(ABC):
 
 
 class GoogleCalendarProvider(IIntegrationProvider):
+    """
+    Integration framework adapter for Google Calendar.
+    Note: The authoritative production implementation of Google Calendar OAuth,
+    FreeBusy availability checking, and event booking is in `app.modules.calendar`
+    (see `GoogleCalendarProvider` at `app.modules.calendar.providers.google_provider`).
+    """
     provider_name = "google_calendar"
     provider_display_name = "Google Calendar"
 
     async def connect(self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> bool:
-        # TODO: OAuth2 flow with Google Calendar API
+        if not credentials or not any(credentials.get(k) for k in ("access_token", "client_id", "token", "refresh_token")):
+            return False
         return True
 
     async def disconnect(self, integration_id: str) -> bool:
-        # TODO: Revoke OAuth token
+        if not integration_id:
+            return False
         return True
 
     async def health_check(self, integration_id: str) -> bool:
-        # TODO: Test Google Calendar API connectivity
-        return True
+        if not integration_id:
+            return False
+        return False
 
     async def sync(self, integration_id: str, since_timestamp: Optional[str] = None) -> Dict[str, Any]:
-        # TODO: Sync calendar events as Meetings
-        return {"synced_events": 0}
+        if not integration_id:
+            return {"synced_events": 0, "status": "unconfigured"}
+        return {"synced_events": 0, "status": "idle"}
 
 
 class HubSpotProvider(IIntegrationProvider):
@@ -62,16 +72,18 @@ class HubSpotProvider(IIntegrationProvider):
     provider_display_name = "HubSpot"
 
     async def connect(self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> bool:
+        if not credentials or not credentials.get("api_key"):
+            return False
         return True
 
     async def disconnect(self, integration_id: str) -> bool:
-        return True
+        return bool(integration_id)
 
     async def health_check(self, integration_id: str) -> bool:
-        return True
+        return False
 
     async def sync(self, integration_id: str, since_timestamp: Optional[str] = None) -> Dict[str, Any]:
-        return {"synced_contacts": 0, "synced_deals": 0}
+        return {"synced_contacts": 0, "synced_deals": 0, "status": "unconfigured"}
 
 
 class StripeProvider(IIntegrationProvider):
@@ -79,16 +91,18 @@ class StripeProvider(IIntegrationProvider):
     provider_display_name = "Stripe"
 
     async def connect(self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> bool:
+        if not credentials or not (credentials.get("api_key") or credentials.get("secret_key")):
+            return False
         return True
 
     async def disconnect(self, integration_id: str) -> bool:
-        return True
+        return bool(integration_id)
 
     async def health_check(self, integration_id: str) -> bool:
-        return True
+        return False
 
     async def sync(self, integration_id: str, since_timestamp: Optional[str] = None) -> Dict[str, Any]:
-        return {"synced_payments": 0}
+        return {"synced_payments": 0, "status": "unconfigured"}
 
 
 # ─── Integration Provider Registry ────────────────────────────────────────────

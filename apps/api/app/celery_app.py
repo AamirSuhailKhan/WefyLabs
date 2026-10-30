@@ -32,6 +32,8 @@ celery_app = Celery(
         "app.modules.follow_up.tasks",
         # Phase 1 Sprint 1E — Revenue Learning OS & Outcome Intelligence
         "app.modules.intelligence.tasks",
+        # Part 31 — Customer Onboarding & Demo Lifecycle workers
+        "app.tasks.onboarding_tasks",
     ]
 )
 
@@ -336,3 +338,22 @@ if settings.REDIS_URL and settings.REDIS_URL.startswith("rediss://"):
         redis_backend_use_ssl=_ssl_options,
     )
 
+
+from celery.signals import worker_process_init, worker_process_shutdown
+from app.core.async_runner import reset_worker_event_loop, close_worker_event_loop
+
+@worker_process_init.connect
+def on_worker_process_init(**kwargs):
+    """
+    Reset inherited database connection pools and event loops in prefork worker child processes
+    to avoid sharing asyncpg connections or closed event loop references across forks.
+    """
+    reset_worker_event_loop()
+
+
+@worker_process_shutdown.connect
+def on_worker_process_shutdown(**kwargs):
+    """
+    Safely dispose database connections and close persistent worker event loops upon process termination.
+    """
+    close_worker_event_loop()

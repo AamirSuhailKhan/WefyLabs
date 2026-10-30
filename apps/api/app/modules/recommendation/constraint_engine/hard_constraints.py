@@ -6,7 +6,7 @@ Properties violating hard constraints are eliminated before scoring.
 """
 
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from app.models.property_models import PropertyListing
 from app.models.recommendation_models import BuyerProfile
 from app.modules.recommendation.scoring.FX_converter import FXConverter

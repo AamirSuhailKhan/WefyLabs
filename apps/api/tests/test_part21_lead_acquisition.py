@@ -757,3 +757,52 @@ class TestVocabularyAudit:
         bad_patterns = ["candidate", "recruiter", "vacancy", "employment", "job seeker", "resume"]
         for term in bad_patterns:
             assert term not in source, f"Forbidden term '{term}' found in prospect_service.py"
+
+
+class TestSourceAttributionReferentialIntegrity:
+    """Verifies SourceAttribution UUID typing, referential keys, and nullability."""
+
+    def test_source_attribution_schema_definition(self):
+        from app.models.acquisition_models import SourceAttribution
+        from sqlalchemy import inspect as sa_inspect
+
+        mapper = sa_inspect(SourceAttribution)
+        columns = {c.key: c for c in mapper.columns}
+
+        assert "organization_id" in columns
+        assert "lead_id" in columns
+
+        org_col = columns["organization_id"]
+        lead_col = columns["lead_id"]
+
+        assert not org_col.nullable, "organization_id must not be nullable"
+        assert lead_col.nullable, "lead_id must be nullable to support ON DELETE SET NULL on lead merge/purge"
+
+        # Check foreign keys
+        org_fks = list(org_col.foreign_keys)
+        assert len(org_fks) == 1
+        assert org_fks[0].target_fullname == "organizations.id"
+        assert org_fks[0].ondelete == "CASCADE"
+
+        lead_fks = list(lead_col.foreign_keys)
+        assert len(lead_fks) == 1
+        assert lead_fks[0].target_fullname == "leads.id"
+        assert lead_fks[0].ondelete == "SET NULL"
+
+    def test_source_attribution_instantiation_with_uuids(self):
+        from app.models.acquisition_models import SourceAttribution
+        org_id = uuid.uuid4()
+        lead_id = uuid.uuid4()
+
+        attr = SourceAttribution(
+            organization_id=org_id,
+            lead_id=lead_id,
+            channel="WEBSITE",
+            provider="meta_lead_ads",
+            utm_source="facebook",
+            utm_campaign="spring_launch_2026",
+        )
+        assert attr.organization_id == org_id
+        assert attr.lead_id == lead_id
+        assert attr.channel == "WEBSITE"
+

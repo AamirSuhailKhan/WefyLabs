@@ -14,16 +14,9 @@ from app.celery_app import celery_app
 from app.database import async_session_factory
 from app.modules.memory.service import AIMemoryService
 
-logger = logging.getLogger(__name__)
+from app.core.async_runner import run_async as _run_async
 
-def _run_async(coro):
-    """Helper to run async coroutines synchronously in Celery worker thread."""
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="app.modules.memory.workers.memory_tasks.evaluate_memory_decay_task", queue="memory-decay")

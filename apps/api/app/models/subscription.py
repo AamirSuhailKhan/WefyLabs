@@ -16,7 +16,8 @@ class Subscription(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     broker_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -30,11 +31,13 @@ class Subscription(Base):
     currency: Mapped[str] = mapped_column(
         String(3),
         default="INR",
+        server_default=text("'INR'"),
         nullable=False
     )
     status: Mapped[str] = mapped_column(
         String(20),
         default="created",
+        server_default=text("'created'"),
         nullable=False
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

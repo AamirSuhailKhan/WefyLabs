@@ -66,6 +66,131 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Authoritative Multi-Tenant Scoping Filters
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _as_uuid(val: Any) -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    return uuid.UUID(str(val))
+
+
+def _lead_scope_filter(organization_id: uuid.UUID):
+    """
+    Authoritative lead tenant scoping filter:
+    1. Modern canonical leads: Lead.organization_id == organization_id
+    2. Legacy unmigrated leads (where Lead.organization_id IS NULL):
+       Included ONLY IF Lead.broker_id belongs to an authorized member of the organization
+       (or matches organization_id in standalone single-broker fallback mode).
+    CRITICAL: NEVER matches a lead if Lead.organization_id belongs to another organization!
+    """
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    return or_(
+        Lead.organization_id == oid,
+        and_(
+            Lead.organization_id.is_(None),
+            or_(
+                Lead.broker_id == oid,
+                Lead.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+def _deal_scope_filter(organization_id: uuid.UUID):
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    org_leads = select(Lead.id).where(_lead_scope_filter(oid))
+    return or_(
+        DealTransaction.lead_id.in_(org_leads),
+        and_(
+            DealTransaction.lead_id.is_(None),
+            or_(
+                DealTransaction.broker_id == oid,
+                DealTransaction.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+def _meeting_scope_filter(organization_id: uuid.UUID):
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    org_leads = select(Lead.id).where(_lead_scope_filter(oid))
+    return or_(
+        SchedulingMeeting.organization_id == str(oid),
+        SchedulingMeeting.organization_id == oid,
+        SchedulingMeeting.lead_id.in_(org_leads),
+        and_(
+            SchedulingMeeting.organization_id.is_(None),
+            SchedulingMeeting.lead_id.is_(None),
+            or_(
+                SchedulingMeeting.broker_id == oid,
+                SchedulingMeeting.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+def _property_scope_filter(organization_id: uuid.UUID):
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    return or_(
+        PropertyListing.organization_id == oid,
+        and_(
+            PropertyListing.organization_id.is_(None),
+            or_(
+                PropertyListing.broker_id == oid,
+                PropertyListing.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+def _opportunity_scope_filter(organization_id: uuid.UUID):
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    return or_(
+        RevenueOpportunity.organization_id == oid,
+        and_(
+            RevenueOpportunity.organization_id.is_(None),
+            or_(
+                RevenueOpportunity.broker_id == oid,
+                RevenueOpportunity.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+def _feedback_log_scope_filter(organization_id: uuid.UUID):
+    oid = _as_uuid(organization_id)
+    org_brokers = select(OrganizationMember.broker_id).where(
+        OrganizationMember.organization_id == oid
+    )
+    return or_(
+        RevenueFeedbackLog.organization_id == oid,
+        and_(
+            RevenueFeedbackLog.organization_id.is_(None),
+            or_(
+                RevenueFeedbackLog.broker_id == oid,
+                RevenueFeedbackLog.broker_id.in_(org_brokers)
+            )
+        )
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 1. FunnelAnalyzer
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -89,8 +214,11 @@ class FunnelAnalyzer:
         confirmed revenue. All numeric fields that require division return None
         when denominator is 0.
         """
-        # Build base lead filter
-        filters = [Lead.broker_id == organization_id, Lead.deleted_at.is_(None)]
+        # Build base lead filter (support canonical organization_id or legacy broker_id)
+        filters = [
+            _lead_scope_filter(organization_id),
+            Lead.deleted_at.is_(None)
+        ]
         if date_from:
             filters.append(Lead.created_at >= date_from)
         if date_to:
@@ -149,7 +277,7 @@ class FunnelAnalyzer:
             select(func.sum(Lead.budget_max))
             .where(
                 and_(
-                    Lead.broker_id == organization_id,
+                    _lead_scope_filter(organization_id),
                     Lead.deleted_at.is_(None),
                     Lead.pipeline_stage.in_(pipeline_stages),
                     Lead.budget_max.isnot(None),
@@ -163,7 +291,7 @@ class FunnelAnalyzer:
             select(func.sum(DealTransaction.estimated_commission_amount))
             .where(
                 and_(
-                    DealTransaction.broker_id == organization_id,
+                    _deal_scope_filter(organization_id),
                     DealTransaction.current_stage == "commission_received",
                 )
             )
@@ -213,7 +341,7 @@ class LeakageDetector:
         stale_cutoff = now - timedelta(days=staleness_days)
 
         filters = [
-            Lead.broker_id == organization_id,
+            _lead_scope_filter(organization_id),
             Lead.deleted_at.is_(None),
             # Lost explicitly OR stale and not yet converted
             or_(
@@ -364,7 +492,7 @@ class LeakageDetector:
         new_q = await self.db.execute(
             select(Lead).where(
                 and_(
-                    Lead.broker_id == organization_id,
+                    _lead_scope_filter(organization_id),
                     Lead.deleted_at.is_(None),
                     Lead.pipeline_stage == "new",
                     Lead.status == "pending",
@@ -394,7 +522,7 @@ class LeakageDetector:
         qual_q = await self.db.execute(
             select(Lead).where(
                 and_(
-                    Lead.broker_id == organization_id,
+                    _lead_scope_filter(organization_id),
                     Lead.deleted_at.is_(None),
                     Lead.pipeline_stage == "qualified",
                     Lead.status != "converted",
@@ -424,7 +552,7 @@ class LeakageDetector:
         appt_q = await self.db.execute(
             select(SchedulingMeeting).where(
                 and_(
-                    SchedulingMeeting.broker_id == organization_id,
+                    _meeting_scope_filter(organization_id),
                     SchedulingMeeting.status.in_(["pending", "scheduled"]),
                     SchedulingMeeting.start_utc >= now,
                     SchedulingMeeting.start_utc <= next_24h,
@@ -451,7 +579,7 @@ class LeakageDetector:
         noshow_q = await self.db.execute(
             select(SchedulingMeeting).where(
                 and_(
-                    SchedulingMeeting.broker_id == organization_id,
+                    _meeting_scope_filter(organization_id),
                     SchedulingMeeting.status == "no_show",
                 )
             ).limit(10)
@@ -476,7 +604,7 @@ class LeakageDetector:
         visit_q = await self.db.execute(
             select(SchedulingMeeting).where(
                 and_(
-                    SchedulingMeeting.broker_id == organization_id,
+                    _meeting_scope_filter(organization_id),
                     SchedulingMeeting.meeting_type == "site_visit",
                     SchedulingMeeting.status == "completed",
                     SchedulingMeeting.start_utc <= cutoff_24h,
@@ -504,7 +632,7 @@ class LeakageDetector:
         hot_q = await self.db.execute(
             select(Lead).where(
                 and_(
-                    Lead.broker_id == organization_id,
+                    _lead_scope_filter(organization_id),
                     Lead.deleted_at.is_(None),
                     Lead.score == "hot",
                     Lead.status != "converted",
@@ -534,7 +662,7 @@ class LeakageDetector:
         opp_q = await self.db.execute(
             select(RevenueOpportunity).where(
                 and_(
-                    RevenueOpportunity.organization_id == organization_id,
+                    _opportunity_scope_filter(organization_id),
                     RevenueOpportunity.status.in_(["ACTIONED", "RECOMMENDED", "IN_PROGRESS"]),
                     RevenueOpportunity.updated_at <= cutoff_10d,
                 )
@@ -560,7 +688,7 @@ class LeakageDetector:
         lost_q = await self.db.execute(
             select(Lead).where(
                 and_(
-                    Lead.broker_id == organization_id,
+                    _lead_scope_filter(organization_id),
                     Lead.deleted_at.is_(None),
                     Lead.status == "lost",
                     Lead.pipeline_stage.in_(["qualified", "site_visit", "negotiation"]),
@@ -631,7 +759,7 @@ class OutcomeTracker:
         date_to: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         filters = [
-            RevenueFeedbackLog.organization_id == organization_id,
+            _feedback_log_scope_filter(organization_id),
         ]
         if date_from:
             filters.append(RevenueFeedbackLog.created_at >= date_from)
@@ -665,7 +793,7 @@ class OutcomeTracker:
         win_rate = _safe_rate(positive_count, total_feedback)
 
         # Completed deals
-        deal_filters = [DealTransaction.broker_id == organization_id]
+        deal_filters = [_deal_scope_filter(organization_id)]
         if date_from:
             deal_filters.append(DealTransaction.created_at >= date_from)
         if date_to:
@@ -686,7 +814,7 @@ class OutcomeTracker:
             )
             .where(
                 and_(
-                    RevenueFeedbackLog.organization_id == organization_id,
+                    _feedback_log_scope_filter(organization_id),
                     RevenueFeedbackLog.rating == "YES",
                 )
             )
@@ -727,7 +855,10 @@ class SourceAttributionReport:
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
     ) -> Dict[str, Any]:
-        filters = [Lead.broker_id == organization_id, Lead.deleted_at.is_(None)]
+        filters = [
+            _lead_scope_filter(organization_id),
+            Lead.deleted_at.is_(None)
+        ]
         if date_from:
             filters.append(Lead.created_at >= date_from)
         if date_to:
@@ -812,7 +943,7 @@ class LearningLoopSummary:
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
     ) -> Dict[str, Any]:
-        filters = [RevenueOpportunity.organization_id == organization_id]
+        filters = [_opportunity_scope_filter(organization_id)]
         if date_from:
             filters.append(RevenueOpportunity.created_at >= date_from)
         if date_to:
@@ -868,7 +999,7 @@ class LearningLoopSummary:
                 func.count(Lead.id).label("total"),
                 func.sum(case((Lead.status == "converted", 1), else_=0)).label("conv"),
             )
-            .where(and_(Lead.broker_id == organization_id, Lead.deleted_at.is_(None)))
+            .where(and_(_lead_scope_filter(organization_id), Lead.deleted_at.is_(None)))
             .group_by(Lead.source)
             .having(func.count(Lead.id) >= 3)  # at least 3 leads to be meaningful
         )
@@ -918,7 +1049,7 @@ class SnapshotService:
         existing_q = await self.db.execute(
             select(RevenueFunnelSnapshot).where(
                 and_(
-                    RevenueFunnelSnapshot.organization_id == organization_id,
+                    RevenueFunnelSnapshot.organization_id == _as_uuid(organization_id),
                     RevenueFunnelSnapshot.snapshot_date == snapshot_date,
                     RevenueFunnelSnapshot.period_type == period_type,
                 )
@@ -980,7 +1111,7 @@ class SnapshotService:
         period_type: Optional[str] = None,
         limit: int = 30,
     ) -> Tuple[List[RevenueFunnelSnapshot], int]:
-        filters = [RevenueFunnelSnapshot.organization_id == organization_id]
+        filters = [RevenueFunnelSnapshot.organization_id == _as_uuid(organization_id)]
         if period_type:
             filters.append(RevenueFunnelSnapshot.period_type == period_type)
 
@@ -1017,7 +1148,7 @@ class DataQualityAnalyzer:
                 func.sum(case((or_(Lead.source.is_(None), Lead.source == "unknown"), 1), else_=0)).label("missing_source"),
                 func.sum(case((Lead.budget_max.is_(None), 1), else_=0)).label("missing_budget"),
                 func.sum(case((Lead.timeline.is_(None), 1), else_=0)).label("missing_timeline"),
-            ).where(and_(Lead.broker_id == organization_id, Lead.deleted_at.is_(None)))
+            ).where(and_(_lead_scope_filter(organization_id), Lead.deleted_at.is_(None)))
         )
         l_row = leads_q.one()
         total_leads = l_row.total or 0
@@ -1029,7 +1160,7 @@ class DataQualityAnalyzer:
             select(
                 func.count(DealTransaction.id).label("total"),
                 func.sum(case((DealTransaction.estimated_commission_amount.is_(None), 1), else_=0)).label("missing_comm"),
-            ).where(DealTransaction.broker_id == organization_id)
+            ).where(_deal_scope_filter(organization_id))
         )
         d_row = deals_q.one()
         total_deals = d_row.total or 0
@@ -1039,7 +1170,7 @@ class DataQualityAnalyzer:
             select(
                 func.count(SchedulingMeeting.id).label("total"),
                 func.sum(case((and_(SchedulingMeeting.start_utc <= now, SchedulingMeeting.status == "scheduled"), 1), else_=0)).label("missing_outcome"),
-            ).where(and_(SchedulingMeeting.broker_id == organization_id, SchedulingMeeting.meeting_type == "site_visit"))
+            ).where(and_(_meeting_scope_filter(organization_id), SchedulingMeeting.meeting_type == "site_visit"))
         )
         v_row = visits_q.one()
         total_visits = v_row.total or 0
@@ -1126,7 +1257,13 @@ class JourneyReconstructor:
 
     async def get_lead_journey(self, organization_id: uuid.UUID, lead_id: uuid.UUID) -> Optional[Dict[str, Any]]:
         lead_q = await self.db.execute(
-            select(Lead).where(and_(Lead.id == lead_id, Lead.broker_id == organization_id, Lead.deleted_at.is_(None)))
+            select(Lead).where(
+                and_(
+                    Lead.id == lead_id,
+                    _lead_scope_filter(organization_id),
+                    Lead.deleted_at.is_(None)
+                )
+            )
         )
         lead = lead_q.scalar_one_or_none()
         if not lead:
@@ -1171,7 +1308,7 @@ class JourneyReconstructor:
         m_q = await self.db.execute(
             select(SchedulingMeeting).where(
                 and_(
-                    SchedulingMeeting.broker_id == organization_id,
+                    _meeting_scope_filter(organization_id),
                     SchedulingMeeting.lead_id == lead_id,
                 )
             ).order_by(SchedulingMeeting.start_utc.asc())
@@ -1192,7 +1329,7 @@ class JourneyReconstructor:
         opp_q = await self.db.execute(
             select(RevenueOpportunity).where(
                 and_(
-                    RevenueOpportunity.organization_id == organization_id,
+                    _opportunity_scope_filter(organization_id),
                     RevenueOpportunity.lead_id == lead_id,
                 )
             ).order_by(RevenueOpportunity.created_at.asc())
@@ -1213,7 +1350,7 @@ class JourneyReconstructor:
         deal_q = await self.db.execute(
             select(DealTransaction).where(
                 and_(
-                    DealTransaction.broker_id == organization_id,
+                    _deal_scope_filter(organization_id),
                     DealTransaction.lead_id == lead_id,
                 )
             ).order_by(DealTransaction.created_at.asc())
@@ -1223,7 +1360,7 @@ class JourneyReconstructor:
                 "event_id": str(d.id),
                 "occurred_at": _iso(d.created_at),
                 "stage": d.current_stage or "deal",
-                "title": f"Deal: {d.property_title or 'Property Deal'}",
+                "title": f"Deal: {getattr(d, 'deal_name', None) or getattr(d, 'property_title', None) or 'Property Deal'}",
                 "description": f"Agreed price: ₹{d.agreed_price:,.0f}" if d.agreed_price else "Deal in progress",
                 "actor_type": "USER",
                 "channel": "crm",
@@ -1247,7 +1384,7 @@ class JourneyReconstructor:
     async def get_property_journey(self, organization_id: uuid.UUID, property_id: uuid.UUID) -> Optional[Dict[str, Any]]:
         prop_q = await self.db.execute(
             select(PropertyListing).where(
-                and_(PropertyListing.id == property_id, PropertyListing.broker_id == organization_id)
+                and_(PropertyListing.id == property_id, _property_scope_filter(organization_id))
             )
         )
         prop = prop_q.scalar_one_or_none()
@@ -1256,7 +1393,7 @@ class JourneyReconstructor:
 
         m_q = await self.db.execute(
             select(func.count(SchedulingMeeting.id)).where(
-                and_(SchedulingMeeting.broker_id == organization_id, SchedulingMeeting.property_id == property_id)
+                and_(_meeting_scope_filter(organization_id), SchedulingMeeting.property_id == property_id)
             )
         )
         appts = m_q.scalar() or 0
@@ -1264,7 +1401,7 @@ class JourneyReconstructor:
         v_q = await self.db.execute(
             select(func.count(SchedulingMeeting.id)).where(
                 and_(
-                    SchedulingMeeting.broker_id == organization_id,
+                    _meeting_scope_filter(organization_id),
                     SchedulingMeeting.property_id == property_id,
                     SchedulingMeeting.meeting_type == "site_visit",
                 )
@@ -1278,7 +1415,7 @@ class JourneyReconstructor:
                 func.sum(DealTransaction.estimated_commission_amount).label("comm"),
             ).where(
                 and_(
-                    DealTransaction.broker_id == organization_id,
+                    _deal_scope_filter(organization_id),
                     DealTransaction.property_id == property_id,
                     DealTransaction.current_stage == "commission_received",
                 )
@@ -1317,7 +1454,16 @@ class TeamIntelligenceAnalyzer:
 
     async def get_team_metrics(self, organization_id: uuid.UUID) -> Dict[str, Any]:
         b_q = await self.db.execute(
-            select(Broker).where(Broker.id == organization_id)
+            select(Broker).where(
+                or_(
+                    Broker.id == organization_id,
+                    Broker.id.in_(
+                        select(OrganizationMember.broker_id).where(
+                            OrganizationMember.organization_id == organization_id
+                        )
+                    )
+                )
+            )
         )
         brokers = b_q.scalars().all()
 
@@ -1328,7 +1474,7 @@ class TeamIntelligenceAnalyzer:
                     func.count(Lead.id).label("total"),
                     func.sum(case((Lead.pipeline_stage == "contacted", 1), else_=0)).label("contacted"),
                     func.sum(case((Lead.pipeline_stage.in_(["qualified", "site_visit", "negotiation", "converted"]), 1), else_=0)).label("qualified"),
-                ).where(and_(Lead.broker_id == b.id, Lead.deleted_at.is_(None)))
+                ).where(and_(Lead.broker_id == b.id, _lead_scope_filter(organization_id), Lead.deleted_at.is_(None)))
             )
             l_row = leads_q.one()
 
@@ -1336,18 +1482,24 @@ class TeamIntelligenceAnalyzer:
                 select(
                     func.count(SchedulingMeeting.id).label("total"),
                     func.sum(case((SchedulingMeeting.meeting_type == "site_visit", 1), else_=0)).label("visits"),
-                ).where(SchedulingMeeting.broker_id == b.id)
+                ).where(and_(SchedulingMeeting.broker_id == b.id, _meeting_scope_filter(organization_id)))
             )
             m_row = appts_q.one()
 
             opps_q = await self.db.execute(
-                select(func.count(RevenueOpportunity.id)).where(RevenueOpportunity.organization_id == b.id)
+                select(func.count(RevenueOpportunity.id)).where(
+                    and_(RevenueOpportunity.broker_id == b.id, _opportunity_scope_filter(organization_id))
+                )
             )
             opps = opps_q.scalar() or 0
 
             deals_q = await self.db.execute(
                 select(func.count(DealTransaction.id)).where(
-                    and_(DealTransaction.broker_id == b.id, DealTransaction.current_stage == "commission_received")
+                    and_(
+                        DealTransaction.broker_id == b.id,
+                        _deal_scope_filter(organization_id),
+                        DealTransaction.current_stage == "commission_received"
+                    )
                 )
             )
             deals = deals_q.scalar() or 0
@@ -1388,7 +1540,13 @@ class PropensityEngine:
     async def calculate_lead_propensity(self, organization_id: uuid.UUID, lead_id: uuid.UUID) -> Optional[Dict[str, Any]]:
         now = datetime.now(timezone.utc)
         lead_q = await self.db.execute(
-            select(Lead).where(and_(Lead.id == lead_id, Lead.broker_id == organization_id, Lead.deleted_at.is_(None)))
+            select(Lead).where(
+                and_(
+                    Lead.id == lead_id,
+                    _lead_scope_filter(organization_id),
+                    Lead.deleted_at.is_(None)
+                )
+            )
         )
         lead = lead_q.scalar_one_or_none()
         if not lead:
@@ -1482,7 +1640,7 @@ class OverviewAnalyzer:
             select(
                 func.count(Lead.id).label("total"),
                 func.sum(case((or_(Lead.source.is_(None), Lead.source == "unknown"), 0), else_=1)).label("attributed"),
-            ).where(and_(Lead.broker_id == organization_id, Lead.deleted_at.is_(None)))
+            ).where(and_(_lead_scope_filter(organization_id), Lead.deleted_at.is_(None)))
         )
         s_row = src_q.one()
         total_leads = s_row.total or 0
@@ -1495,7 +1653,7 @@ class OverviewAnalyzer:
                 func.sum(case((or_(Lead.source.is_(None), Lead.source == "unknown"), DealTransaction.estimated_commission_amount), else_=0)).label("unattr_rev"),
             )
             .join(Lead, Lead.id == DealTransaction.lead_id)
-            .where(and_(DealTransaction.broker_id == organization_id, DealTransaction.current_stage == "commission_received"))
+            .where(and_(_deal_scope_filter(organization_id), _lead_scope_filter(organization_id), DealTransaction.current_stage == "commission_received"))
         )
         rev_row = rev_q.one()
         attr_rev = float(rev_row.attr_rev) if rev_row.attr_rev else None
@@ -1552,3 +1710,15 @@ class RevenueIntelligenceService:
         self.team = TeamIntelligenceAnalyzer(db)
         self.propensity = PropensityEngine(db)
         self.overview = OverviewAnalyzer(db, self.funnel, self.leakage)
+
+
+# ── Canonical Domain Consolidation: Re-export Build 09 Analytics Engines ──────
+from app.modules.revenue_intelligence.service_b09 import (  # noqa: F401
+    RevenueIntelligenceServiceV2,
+    AttributionEngine,
+    ForecastingEngineV2,
+    RevenueLeakageEngineV2,
+    DEFAULT_STAGE_PROBABILITIES,
+    METRIC_DEFINITIONS,
+    _safe_decimal_div,
+)

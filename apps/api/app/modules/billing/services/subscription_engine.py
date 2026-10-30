@@ -102,14 +102,14 @@ class SubscriptionEngine:
         now = datetime.now(timezone.utc)
         effective_trial_days = trial_days if trial_days is not None else plan_version.trial_days
 
-        if effective_trial_days > 0:
+        if effective_trial_days > 0 and plan_code != "pilot":
             status = SubscriptionLifecycleStatus.TRIALING.value
             trial_ends_at = now + timedelta(days=effective_trial_days)
             period_end = trial_ends_at
         else:
             status = SubscriptionLifecycleStatus.ACTIVE.value
             trial_ends_at = None
-            days_in_cycle = 365 if interval == PlanInterval.ANNUAL.value else 30
+            days_in_cycle = 14 if (plan_code == "pilot" or interval in (PlanInterval.CUSTOM.value, PlanInterval.ONE_TIME.value)) else (365 if interval == PlanInterval.ANNUAL.value else 30)
             period_end = now + timedelta(days=days_in_cycle)
 
         subscription = CanonicalSubscription(

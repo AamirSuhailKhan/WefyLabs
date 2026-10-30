@@ -22,6 +22,8 @@ try:
 except ImportError:
     celery_app = None
 
+from app.core.async_runner import run_async
+
 
 def _get_async_session():
     from app.database import AsyncSessionLocal
@@ -116,17 +118,11 @@ if celery_app:
                     ret_val["pilot_observation"] = pilot_obs_result
                 return ret_val
 
-        loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(_run())
+            return run_async(_run())
         except Exception as exc:
             logger.error(f"[LOOP_WORKER] Event processing error: {exc}", exc_info=True)
             raise self.retry(exc=exc)
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
 
     @celery_app.task(
         name="autonomous_loop.retry_failed_events",
@@ -150,15 +146,16 @@ if celery_app:
                     SalesLoopEventType, ActorType, EventProcessingState
                 )
 
+                where_clauses = [
+                    SalesLoopEvent.processing_state == EventProcessingState.RETRYABLE.value,
+                    SalesLoopEvent.retry_count < SalesLoopEvent.max_retries,
+                ]
+                if tenant_id and tenant_id != "__all__":
+                    where_clauses.append(SalesLoopEvent.tenant_id == tenant_id)
+
                 stmt = (
                     select(SalesLoopEvent)
-                    .where(
-                        and_(
-                            SalesLoopEvent.tenant_id == tenant_id,
-                            SalesLoopEvent.processing_state == EventProcessingState.RETRYABLE.value,
-                            SalesLoopEvent.retry_count < SalesLoopEvent.max_retries,
-                        )
-                    )
+                    .where(and_(*where_clauses))
                     .limit(limit)
                 )
                 res = await session.execute(stmt)
@@ -192,14 +189,7 @@ if celery_app:
                 await session.commit()
                 return {"status": "SUCCESS", "retried": retried}
 
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(_run())
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
+        return run_async(_run())
 
     @celery_app.task(
         name="autonomous_loop.evaluate_inactive_leads",
@@ -228,20 +218,37 @@ if celery_app:
                 from app.modules.autonomous_loop.taxonomies import SalesLoopEventType, ActorType
 
                 cutoff = datetime.now(timezone.utc) - timedelta(days=inactive_days)
+                import uuid
+                from sqlalchemy import or_
+
+                where_clauses = [
+                    Lead.status.in_(["active", "new", "pending"]),
+                    Lead.pipeline_stage.notin_([
+                        "CONVERTED", "LOST", "DO_NOT_CONTACT", "CLOSED"
+                    ]),
+                    Lead.updated_at <= cutoff,
+                ]
+
+                # Scoped tenant query: fail closed if a non-__all__ tenant is invalid
+                is_all_tenants = (tenant_id == "__all__")
+                if not is_all_tenants:
+                    try:
+                        tenant_uuid = uuid.UUID(str(tenant_id))
+                        where_clauses.append(
+                            or_(
+                                Lead.organization_id == tenant_uuid,
+                                Lead.broker_id == tenant_uuid,
+                            )
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"[LOOP_WORKER] Security notice: non-UUID tenant_id rejected: {tenant_id}"
+                        )
+                        return {"status": "SUCCESS", "leads_scanned": 0, "processed": 0}
+
                 stmt = (
                     select(Lead)
-                    .where(
-                        and_(
-                            # Phase 2C.3A canonical identity: tenant_id references organization_id
-                            # Lead.organization_id is the correct canonical tenant field (post migration 0015)
-                            Lead.organization_id == tenant_id,
-                            Lead.status.in_(["active", "new", "pending"]),
-                            Lead.pipeline_stage.notin_([
-                                "CONVERTED", "LOST", "DO_NOT_CONTACT", "CLOSED"
-                            ]),
-                            Lead.updated_at <= cutoff,
-                        )
-                    )
+                    .where(and_(*where_clauses))
                     .limit(limit)
                 )
                 res = await session.execute(stmt)
@@ -253,10 +260,30 @@ if celery_app:
                 today_str = datetime.now(timezone.utc).date().isoformat()
                 for lead in leads:
                     try:
+                        # Fail-closed tenant resolution: must resolve to valid organization or broker UUID
+                        lead_tenant_id = (
+                            str(lead.organization_id)
+                            if lead.organization_id
+                            else (str(lead.broker_id) if lead.broker_id else None)
+                        )
+                        if not lead_tenant_id:
+                            logger.warning(
+                                f"[LOOP_WORKER] Skipping lead {lead.id}: cannot establish tenant context"
+                            )
+                            continue
+
+                        # Verify tenant boundary when a specific tenant was requested
+                        if not is_all_tenants and lead_tenant_id != str(tenant_uuid) and str(lead.broker_id) != str(tenant_uuid):
+                            logger.error(
+                                f"[LOOP_WORKER] Tenant security violation: lead {lead.id} tenant {lead_tenant_id} does not match {tenant_id}"
+                            )
+                            continue
+
                         event_dto = SalesLoopEventDTO(
                             event_type=SalesLoopEventType.NEW_LEAD,
-                            tenant_id=tenant_id,
+                            tenant_id=lead_tenant_id,
                             lead_id=str(lead.id),
+                            broker_id=str(lead.broker_id) if lead.broker_id else None,
                             actor_type=ActorType.SCHEDULER,
                             payload={"trigger": "inactive_lead_scan"},
                             source="inactive_lead_scanner",
@@ -271,14 +298,7 @@ if celery_app:
                 await session.commit()
                 return {"status": "SUCCESS", "leads_scanned": len(leads), "processed": processed}
 
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(_run())
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
+        return run_async(_run())
 
     @celery_app.task(
         name="autonomous_loop.generate_daily_pilot_snapshots",
@@ -354,11 +374,4 @@ if celery_app:
                     "snapshots_created": snapshots_created,
                 }
 
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(_run())
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
+        return run_async(_run())

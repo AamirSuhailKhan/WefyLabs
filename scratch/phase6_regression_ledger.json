@@ -1,0 +1,155 @@
+[
+  {
+    "title": "Deliberate 0048 Type Divergence Reproduction",
+    "category": "REPRODUCTION_UNMIGRATED_0048",
+    "database_target": "PostgreSQL (test_disposable_0048)",
+    "alembic_revision": "0048_schema_reconciliation_parity",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe scratch/action3_reproduce_on_disposable_0048.py",
+    "exit_code": 0,
+    "duration_seconds": 4.1,
+    "test_counts": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "]\n(Background on this error at: https://sqlalche.me/e/20/f405)\n  relational_join: FAILED_AS_EXPECTED: ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedFunctionError'>: operator does not exist: uuid = character varying\nHINT:  No operator matches the given name and argument types. You might need to add explicit type casts.\n[SQL: SELECT leads.id, source_attributions.id AS id_1 \nFROM leads JOIN source_attributions ON leads.id = source_attributions.lead_id]\n(Background on this error at: https://sqlalche.me/e/20/f405)\n  raw_uuid_insert: FAILED_AS_EXPECTED: DataError: invalid input for query argument $2: UUID('35c904e8-1d5a-41d9-a54e-2dc2e93f4a... (expected str, got UUID)\n[TEARDOWN] Dropped disposable database 'test_disposable_0048'.\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "PostgreSQL 0050 Full Operational Readiness Proof",
+    "category": "POSTGRESQL_POST_MIGRATION_0050",
+    "database_target": "PostgreSQL (test_disposable_phase4)",
+    "alembic_revision": "0050_broker_subscription_constraint_parity",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe scratch/phase4_full_migration_readiness_proof.py",
+    "exit_code": 0,
+    "duration_seconds": 6.33,
+    "test_counts": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "[SETUP] Created disposable database 'test_disposable_phase4' from 'leadscore' (0048).\n[MIGRATION] Alembic upgraded to 0050 successfully.\n\n=== PHASE 4 MIGRATION READINESS VERIFIED ===\n{\n  \"verified_revision\": \"0050_broker_subscription_constraint_parity\",\n  \"existing_attributions_preserved\": 3,\n  \"source_attribution_columns\": {\n    \"lead_id\": [\n      \"uuid\",\n      \"YES\"\n    ],\n    \"organization_id\": [\n      \"uuid\",\n      \"NO\"\n    ]\n  },\n  \"broker_constraint_checks\": \"PASSED (accepted pro_monthly and paused)\",\n  \"orm_insert\": \"PASSED\",\n  \"orm_query_by_uuid\": \"PASSED\",\n  \"orm_relational_join\": \"PASSED\",\n  \"orm_delete_set_null\": \"PASSED\",\n  \"tenant_isolation\": \"PASSED\"\n}\n[TEARDOWN] Dropped disposable database 'test_disposable_phase4'.\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Migration Chain 0048 -> 0050 & Modern Constraint Validation",
+    "category": "MIGRATION_CHAIN_VALIDATION",
+    "database_target": "PostgreSQL (test_disposable_chain_0050)",
+    "alembic_revision": "0050_broker_subscription_constraint_parity",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe scratch/test_disposable_chain_0048_to_0050.py",
+    "exit_code": 0,
+    "duration_seconds": 2.98,
+    "test_counts": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "ying, 'active'::character varying, 'paused'::character varying, 'past_due'::character varying, 'cancelled'::character varying, 'completed'::character varying, 'expired'::character varying])::text[])))\",\n    \"fk_source_attributions_lead_id\": \"FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL\",\n    \"fk_source_attributions_organization_id\": \"FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE\"\n  },\n  \"test_update_plan_pro_monthly\": \"SUCCESS\",\n  \"test_update_status_paused\": \"SUCCESS\",\n  \"test_update_status_past_due\": \"SUCCESS\",\n  \"preserved_counts\": {\n    \"leads\": 4,\n    \"organizations\": 7,\n    \"brokers\": 8,\n    \"organization_members\": 7,\n    \"source_attributions\": 3,\n    \"tasks\": 4\n  }\n}\n[TEARDOWN] Dropped disposable database 'test_disposable_chain_0050'.\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Migration 0050 Downgrade Fail-Closed Safeguard Proof",
+    "category": "DOWNGRADE_SAFEGUARD_VERIFICATION",
+    "database_target": "PostgreSQL (test_disposable_downgrade_0050)",
+    "alembic_revision": "0049_source_attribution_uuid_parity",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe scratch/test_downgrade_safeguards_0050.py",
+    "exit_code": 0,
+    "duration_seconds": 10.24,
+    "test_counts": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "Downgrade Safeguard A PASSED: Aborted when modern subscription_status present.\nDowngrade Safeguard B PASSED: Clean downgrade reverted to 0049 successfully.\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "SourceAttribution & GUID TypeDecorator Regression Suite",
+    "category": "ORM_TYPE_REGRESSION",
+    "database_target": "SQLite in-memory + TypeDecorator unit testing",
+    "alembic_revision": "N/A (Schema models verified)",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pytest apps/api/tests/test_source_attribution_regression.py -v",
+    "exit_code": 0,
+    "duration_seconds": 7.51,
+    "test_counts": {
+      "total": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "pi\\tests\\test_source_attribution_regression.py::TestGUIDTypeDecoratorValidation::test_guid_handles_none_gracefully PASSED [ 66%]\napps\\api\\tests\\test_source_attribution_regression.py::TestGUIDTypeDecoratorValidation::test_guid_process_result_value_valid PASSED [ 75%]\napps\\api\\tests\\test_source_attribution_regression.py::TestGUIDTypeDecoratorValidation::test_guid_process_result_value_invalid_raises PASSED [ 83%]\napps\\api\\tests\\test_source_attribution_regression.py::TestSourceAttributionCompatibility::test_source_attribution_insert_and_query_by_uuid PASSED [ 91%]\napps\\api\\tests\\test_source_attribution_regression.py::TestSourceAttributionCompatibility::test_source_attribution_set_null_on_lead_delete PASSED [100%]\n\n============================= 12 passed in 4.40s ==============================\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Part 21 Lead Acquisition Suite",
+    "category": "CRM_DOMAIN_INTEGRITY",
+    "database_target": "SQLite in-memory engine",
+    "alembic_revision": "N/A (Model constraints verified)",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pytest apps/api/tests/test_part21_lead_acquisition.py -q",
+    "exit_code": 0,
+    "duration_seconds": 3.98,
+    "test_counts": {
+      "total": 73,
+      "passed": 73,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "........................................................................ [ 98%]\n.                                                                        [100%]\n73 passed in 1.13s\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Database Safety Guards Suite",
+    "category": "SAFETY_GUARDS_VERIFICATION",
+    "database_target": "PostgreSQL / Alembic Safety Harness",
+    "alembic_revision": "Multi-head inspection",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pytest apps/api/tests/test_database_safety_guards.py -q",
+    "exit_code": 0,
+    "duration_seconds": 17.86,
+    "test_counts": {
+      "total": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "..............                                                           [100%]\n14 passed in 14.83s\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Part 8 Final Integration Suite",
+    "category": "INTEGRATION_SUITE",
+    "database_target": "FastAPI TestClient + In-memory DB",
+    "alembic_revision": "0050_broker_subscription_constraint_parity",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pytest apps/api/tests/test_part8_final_integration.py -q",
+    "exit_code": 0,
+    "duration_seconds": 20.05,
+    "test_counts": {
+      "total": 64,
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "\\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\ntests/test_part8_final_integration.py::TestPhaseBAuthAndTenant::test_auth_register_endpoint_exists\ntests/test_part8_final_integration.py::TestPhaseBAuthAndTenant::test_auth_login_endpoint_exists\n  C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages\\starlette\\_exception_handler.py:59: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.\n    response = await handler(conn, exc)  # type: ignore[arg-type]\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n64 passed, 3 warnings in 16.23s\n",
+    "stderr_tail": ""
+  },
+  {
+    "title": "Part 11 Revenue Intelligence Suite",
+    "category": "REVENUE_INTELLIGENCE",
+    "database_target": "Revenue Intelligence Simulation Engine",
+    "alembic_revision": "N/A (Calculations verified)",
+    "command": "C:\\Users\\aamir\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe -m pytest apps/api/tests/test_part11_revenue_intelligence.py -q",
+    "exit_code": 0,
+    "duration_seconds": 132.59,
+    "test_counts": {
+      "total": 73,
+      "passed": 73,
+      "failed": 0,
+      "skipped": 0
+    },
+    "stdout_tail": "........................................................................ [ 98%]\n.                                                                        [100%]\n73 passed in 128.65s (0:02:08)\n",
+    "stderr_tail": ""
+  }
+]

@@ -236,7 +236,7 @@ class TestBookingService:
         lock_mgr.acquire_hold = AsyncMock(return_value=mock_hold)
         lock_mgr.release_hold = AsyncMock(return_value=True)
 
-        lead = Lead(id=uuid.uuid4(), broker_id=uuid.uuid4(), name="Sarah Jenkins", phone="+971501234567")
+        lead = Lead(id=uuid.uuid4(), organization_id="org_1", broker_id=uuid.uuid4(), name="Sarah Jenkins", phone="+971501234567")
         mock_res_lead = MagicMock()
         mock_res_lead.scalar_one_or_none.return_value = lead
         db.execute.return_value = mock_res_lead
@@ -415,12 +415,14 @@ class TestConflictResolutionAndAITools:
     async def test_ai_agent_find_slots_tool(self):
         from app.modules.calendar.tools.agent_tools import AIAgentCalendarTools
         db = _mock_db()
-        lead = Lead(id=uuid.uuid4(), broker_id=uuid.uuid4(), name="Tariq Al-Hashemi")
+        lead = Lead(id=uuid.uuid4(), organization_id="org_1", broker_id=uuid.uuid4(), name="Tariq Al-Hashemi")
         mock_res_lead = MagicMock()
         mock_res_lead.scalar_one_or_none.return_value = lead
         mock_res_mtg = MagicMock()
         mock_res_mtg.scalars.return_value.all.return_value = []
-        db.execute.side_effect = [mock_res_lead, mock_res_mtg]
+        mock_res_holds = MagicMock()
+        mock_res_holds.scalars.return_value.all.return_value = []
+        db.execute.side_effect = [mock_res_lead, mock_res_mtg, mock_res_holds]
 
         tools = AIAgentCalendarTools(db)
         result = await tools.find_available_slots(str(lead.id), "org_1")

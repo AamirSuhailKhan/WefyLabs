@@ -55,18 +55,9 @@ def extract_qualification_facts_for_message_task(
                 "new_state": summary.snapshot.state,
             }
 
+    from app.core.async_runner import run_async
     try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop and loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(lambda: asyncio.run(_async_extract())).result()
-        else:
-            return asyncio.run(_async_extract())
+        return run_async(_async_extract())
     except Exception as exc:
         logger.error(f"[CELERY_QUALIFICATION] Async fact extraction failed: {exc}")
         raise self.retry(exc=exc)
@@ -110,18 +101,9 @@ def evaluate_lead_qualification_task(
                 "missing_required": result.missing_required_information,
             }
 
+    from app.core.async_runner import run_async
     try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop and loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(lambda: asyncio.run(_async_evaluate())).result()
-        else:
-            return asyncio.run(_async_evaluate())
+        return run_async(_async_evaluate())
     except Exception as exc:
         logger.error(f"[CELERY_QUALIFICATION] Async policy evaluation failed: {exc}")
         raise self.retry(exc=exc)
@@ -185,18 +167,9 @@ def auto_qualify_new_lead_task(
                 "missing_required": result.missing_required_information,
             }
 
+    from app.core.async_runner import run_async
     try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop and loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(lambda: asyncio.run(_run())).result()
-        else:
-            return asyncio.run(_run())
+        return run_async(_run())
     except Exception as exc:
         logger.error(f"[CELERY_AUTO_QUALIFY] Auto-qualification failed: {exc}")
         raise self.retry(exc=exc)

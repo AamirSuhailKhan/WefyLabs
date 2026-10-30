@@ -1,0 +1,31 @@
+{
+  "schema_name": "phase7_test_disposable",
+  "expected_model_tables_count": 401,
+  "actual_db_tables_count": 402,
+  "alembic_version": "0047_webhook_event_claims",
+  "extensions": {
+    "plpgsql": "1.0",
+    "pg_stat_statements": "1.11",
+    "uuid-ossp": "1.1",
+    "pgcrypto": "1.3",
+    "supabase_vault": "0.3.1",
+    "vector": "0.8.2"
+  },
+  "missing_tables": [],
+  "extra_tables": [],
+  "column_mismatches": [],
+  "hnsw_vector_index": true,
+  "webhook_claims_table": true,
+  "webhook_claims_constraints": [
+    {
+      "constraint_name": "uq_webhook_event_claim_provider_org_event",
+      "definition": "UNIQUE (provider, organization_id, provider_event_id)"
+    },
+    {
+      "constraint_name": "webhook_event_claims_pkey",
+      "definition": "PRIMARY KEY (id)"
+    }
+  ],
+  "parity_status": "CERTIFIED_PARITY",
+  "hnsw_index_def": "CREATE INDEX ix_ke_vector_hnsw ON phase7_test_disposable.knowledge_embeddings USING hnsw (embedding vector_cosine_ops)"
+}

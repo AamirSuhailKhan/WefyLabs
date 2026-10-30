@@ -1,0 +1,846 @@
+{
+  "timestamp": "2026-10-28T19:20:00+05:30",
+  "alembic_version": {
+    "live": "0048_schema_reconciliation_parity",
+    "backup": "0048_schema_reconciliation_parity"
+  },
+  "table_counts": {
+    "mismatches": [
+      {
+        "table": "agent_workload_snapshots",
+        "backup_count": 448,
+        "live_count": 528,
+        "diff": 80
+      },
+      {
+        "table": "forecast_snapshot_records",
+        "backup_count": 108,
+        "live_count": 192,
+        "diff": 84
+      },
+      {
+        "table": "pipeline_health_snapshots",
+        "backup_count": 30,
+        "live_count": 36,
+        "diff": 6
+      },
+      {
+        "table": "prediction_drift_records",
+        "backup_count": 3,
+        "live_count": 6,
+        "diff": 3
+      },
+      {
+        "table": "prediction_inference_records",
+        "backup_count": 49,
+        "live_count": 89,
+        "diff": 40
+      },
+      {
+        "table": "sales_loop_audit_entries",
+        "backup_count": 3,
+        "live_count": 6,
+        "diff": 3
+      },
+      {
+        "table": "sales_loop_events",
+        "backup_count": 3,
+        "live_count": 6,
+        "diff": 3
+      },
+      {
+        "table": "source_attributions",
+        "backup_count": 3,
+        "live_count": 5,
+        "diff": 2
+      }
+    ]
+  },
+  "schema_differences": {
+    "tables": {
+      "only_in_live": [],
+      "only_in_backup": [],
+      "common_tables": 411
+    }
+  },
+  "priority_tables_diff": {
+    "activities": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 3,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "agent_workload_snapshots": {
+      "pk_col": "id",
+      "backup_rows": 448,
+      "live_rows": 528,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 80,
+      "content_hash_diff_count": 0
+    },
+    "alembic_version": {
+      "pk_col": "version_num",
+      "backup_rows": 1,
+      "live_rows": 1,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "brokers": {
+      "pk_col": "id",
+      "backup_rows": 8,
+      "live_rows": 8,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "contact_fatigues": {
+      "pk_col": "id",
+      "backup_rows": 1,
+      "live_rows": 1,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "conversations": {
+      "pk_col": "id",
+      "backup_rows": 5,
+      "live_rows": 5,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "follow_up_automation_events": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "follow_up_policies": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "forecast_snapshot_records": {
+      "pk_col": "id",
+      "backup_rows": 108,
+      "live_rows": 192,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 84,
+      "content_hash_diff_count": 0
+    },
+    "lead_automation_states": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "lead_notes": {
+      "pk_col": "id",
+      "backup_rows": 0,
+      "live_rows": 0,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "leads": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "manager_daily_briefs": {
+      "pk_col": "id",
+      "backup_rows": 2,
+      "live_rows": 2,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "next_best_actions": {
+      "pk_col": "id",
+      "backup_rows": 1,
+      "live_rows": 1,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "notifications": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 3,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "organization_members": {
+      "pk_col": "organization_id",
+      "backup_rows": 7,
+      "live_rows": 7,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "organizations": {
+      "pk_col": "id",
+      "backup_rows": 7,
+      "live_rows": 7,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "payment_orders": {
+      "pk_col": "id",
+      "backup_rows": 0,
+      "live_rows": 0,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "pipeline_health_snapshots": {
+      "pk_col": "id",
+      "backup_rows": 30,
+      "live_rows": 36,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 6,
+      "content_hash_diff_count": 0
+    },
+    "prediction_drift_records": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 6,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 3,
+      "content_hash_diff_count": 0
+    },
+    "prediction_inference_records": {
+      "pk_col": "id",
+      "backup_rows": 49,
+      "live_rows": 89,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 40,
+      "content_hash_diff_count": 0
+    },
+    "qualification_facts": {
+      "pk_col": "id",
+      "backup_rows": 6,
+      "live_rows": 6,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "qualification_snapshots": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "recommendations": {
+      "pk_col": "id",
+      "backup_rows": 5,
+      "live_rows": 5,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "sales_loop_audit_entries": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 6,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 3,
+      "content_hash_diff_count": 0
+    },
+    "sales_loop_events": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 6,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 3,
+      "content_hash_diff_count": 0
+    },
+    "scores": {
+      "pk_col": "id",
+      "backup_rows": 0,
+      "live_rows": 0,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "sla_breaches": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 3,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "sla_instances": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 3,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "source_attributions": {
+      "pk_col": "id",
+      "backup_rows": 3,
+      "live_rows": 5,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 2,
+      "content_hash_diff_count": 0
+    },
+    "subscriptions": {
+      "pk_col": "id",
+      "backup_rows": 0,
+      "live_rows": 0,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "tasks": {
+      "pk_col": "id",
+      "backup_rows": 4,
+      "live_rows": 4,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    },
+    "users": {
+      "pk_col": "id",
+      "backup_rows": 7,
+      "live_rows": 7,
+      "missing_in_live_count": 0,
+      "added_in_live_count": 0,
+      "content_hash_diff_count": 0
+    }
+  },
+  "non_empty_tables": [
+    {
+      "table": "activities",
+      "backup_count": 3,
+      "live_count": 3,
+      "match": true
+    },
+    {
+      "table": "agent_workload_snapshots",
+      "backup_count": 448,
+      "live_count": 528,
+      "match": false
+    },
+    {
+      "table": "alembic_version",
+      "backup_count": 1,
+      "live_count": 1,
+      "match": true
+    },
+    {
+      "table": "brokers",
+      "backup_count": 8,
+      "live_count": 8,
+      "match": true
+    },
+    {
+      "table": "contact_fatigues",
+      "backup_count": 1,
+      "live_count": 1,
+      "match": true
+    },
+    {
+      "table": "conversations",
+      "backup_count": 5,
+      "live_count": 5,
+      "match": true
+    },
+    {
+      "table": "follow_up_automation_events",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "follow_up_policies",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "forecast_snapshot_records",
+      "backup_count": 108,
+      "live_count": 192,
+      "match": false
+    },
+    {
+      "table": "lead_automation_states",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "leads",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "manager_daily_briefs",
+      "backup_count": 2,
+      "live_count": 2,
+      "match": true
+    },
+    {
+      "table": "next_best_actions",
+      "backup_count": 1,
+      "live_count": 1,
+      "match": true
+    },
+    {
+      "table": "notifications",
+      "backup_count": 3,
+      "live_count": 3,
+      "match": true
+    },
+    {
+      "table": "organization_members",
+      "backup_count": 7,
+      "live_count": 7,
+      "match": true
+    },
+    {
+      "table": "organizations",
+      "backup_count": 7,
+      "live_count": 7,
+      "match": true
+    },
+    {
+      "table": "pipeline_health_snapshots",
+      "backup_count": 30,
+      "live_count": 36,
+      "match": false
+    },
+    {
+      "table": "prediction_drift_records",
+      "backup_count": 3,
+      "live_count": 6,
+      "match": false
+    },
+    {
+      "table": "prediction_inference_records",
+      "backup_count": 49,
+      "live_count": 89,
+      "match": false
+    },
+    {
+      "table": "qualification_facts",
+      "backup_count": 6,
+      "live_count": 6,
+      "match": true
+    },
+    {
+      "table": "qualification_snapshots",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "recommendations",
+      "backup_count": 5,
+      "live_count": 5,
+      "match": true
+    },
+    {
+      "table": "sales_loop_audit_entries",
+      "backup_count": 3,
+      "live_count": 6,
+      "match": false
+    },
+    {
+      "table": "sales_loop_events",
+      "backup_count": 3,
+      "live_count": 6,
+      "match": false
+    },
+    {
+      "table": "sla_breaches",
+      "backup_count": 3,
+      "live_count": 3,
+      "match": true
+    },
+    {
+      "table": "sla_instances",
+      "backup_count": 3,
+      "live_count": 3,
+      "match": true
+    },
+    {
+      "table": "source_attributions",
+      "backup_count": 3,
+      "live_count": 5,
+      "match": false
+    },
+    {
+      "table": "tasks",
+      "backup_count": 4,
+      "live_count": 4,
+      "match": true
+    },
+    {
+      "table": "users",
+      "backup_count": 7,
+      "live_count": 7,
+      "match": true
+    }
+  ],
+  "missing_from_live": {},
+  "added_in_live": {
+    "agent_workload_snapshots": [
+      "65c5779591a8",
+      "5f4a339bf066",
+      "129215f0190f",
+      "689381b62e1a",
+      "f83603926b29",
+      "193313b36f09",
+      "75525264c921",
+      "ac5a687de603",
+      "083a3db69da8",
+      "34d5551c33c1",
+      "d3fcd17c82f6",
+      "550a080a48c2",
+      "a79c83f4a687",
+      "ec256bb873fe",
+      "7bfd229874a4",
+      "ad84bea787be",
+      "f1597d82f53a",
+      "a8eb106e4342",
+      "91bb453ee1b7",
+      "0d2e96cd77b5",
+      "a3401a546a90",
+      "7831a0712c19",
+      "a8e61b70361c",
+      "53e4d6db361d",
+      "5c6ac5570a61",
+      "e2bbaeb7e275",
+      "c1b7e9b3a452",
+      "b9c35503ab07",
+      "2ce84ebc39ac",
+      "be93b6277ca5",
+      "23ed115a9523",
+      "70a6885fd0d2",
+      "e5c4fbf2de44",
+      "8cf8dba42af1",
+      "f02501489feb",
+      "0df0d4a543a4",
+      "fe7b4409d4e7",
+      "ed077c94881b",
+      "b27fa4d90074",
+      "b6253e81bda1",
+      "1750a491d220",
+      "8288aea7503a",
+      "6bc5942c0e6c",
+      "197648b32d96",
+      "38b8bbc42cab",
+      "8135f75c912c",
+      "620714de12e8",
+      "fe35d49429c5",
+      "d5f671c249ef",
+      "0993eece2627",
+      "e19797d29e21",
+      "3b637e4a4e66",
+      "c077e19cb28a",
+      "edb3ba0b90ed",
+      "e917081be008",
+      "dd162d773696",
+      "7bdc18d00b8b",
+      "35ce7f821105",
+      "3327e4d49dac",
+      "12924ef042b3",
+      "c42e50182306",
+      "d1845642b6ba",
+      "b6d9d9ef1f6f",
+      "9296bd75241c",
+      "5dd6c3ca097d",
+      "91298c8865ae",
+      "61f07c2faf72",
+      "ef8ce7a48169",
+      "20638edf230b",
+      "b27e4f28ffd6",
+      "28a7ab9e1ed5",
+      "db985a5fc56a",
+      "3e72f8ee1075",
+      "2d7dad76be3b",
+      "d185d3062c4b",
+      "546d67c3d246",
+      "3e43e98541cd",
+      "ddb34b1546a9",
+      "78eae8468227",
+      "3c37fac140d5"
+    ],
+    "forecast_snapshot_records": [
+      "6f6c8a961285",
+      "8bc9b6beffdc",
+      "ca88c7b1b2a7",
+      "d5191a5f7035",
+      "4dbe35712b50",
+      "63e74bead89b",
+      "7f5765ef096d",
+      "40a5b629af59",
+      "3540d73ac060",
+      "447eceebd62d",
+      "8c839aea1b7e",
+      "03200147bf48",
+      "7aa1de5b1df5",
+      "0f71e6361ebb",
+      "6f18879e648b",
+      "b0583e89d67d",
+      "ffe04f827e74",
+      "942d4dcfe2f2",
+      "a881d7f9db94",
+      "742fd4214969",
+      "77994b13086a",
+      "c7045a2befc8",
+      "9b858d6b1ba9",
+      "6c2a4ee968b1",
+      "34a07f11925a",
+      "415791f973e6",
+      "0f905ac6b258",
+      "722973ce528f",
+      "483bd2ce79df",
+      "c2ce13618351",
+      "9242a759ad86",
+      "4303e79a347c",
+      "94a6c704abd4",
+      "9d1186e5c389",
+      "dee597560407",
+      "9ca8bc2651a5",
+      "7f5698058fe7",
+      "1c0310eece5a",
+      "dd6550c5b3ae",
+      "5023e9040e32",
+      "0c8a5466b326",
+      "c5c2f51bd09a",
+      "0ce2d4d60db8",
+      "215a67edc91e",
+      "389b150c2d00",
+      "00ee3cde76b1",
+      "b0b5f0369690",
+      "94e57115cf25",
+      "c3af4982b058",
+      "05b27bb9c308",
+      "bce8da236622",
+      "0cf803b581db",
+      "db3656d35f18",
+      "ddca205a2c6d",
+      "a83f9415e5d7",
+      "0c441590b954",
+      "83d9c65db289",
+      "37ff10d4b43c",
+      "9b3894ad7db8",
+      "15cf9d0c68cf",
+      "48179cf5db5a",
+      "4d9bf667661a",
+      "c675481ca12e",
+      "471aca28ad5e",
+      "d61d3904e79f",
+      "a8049d29e694",
+      "b0c47ebe13b9",
+      "3369841e7a4f",
+      "6e1b8acb8a96",
+      "aa8f005fce22",
+      "3f09c350ecc9",
+      "f445d803f695",
+      "a2eeb16b8ad4",
+      "7ebecba561ba",
+      "1b85dd3c3558",
+      "4cce3a7078d1",
+      "15c0953268dd",
+      "df974e756aad",
+      "0b5712d714b9",
+      "65037611ca82",
+      "65ee090a1dc0",
+      "da8f9ee3556c",
+      "9ab29c1cb0f2",
+      "dffdf4937c42"
+    ],
+    "pipeline_health_snapshots": [
+      "08fee602fc2f",
+      "a68231b81db2",
+      "f2c67e2e46f6",
+      "1aaebf8c720a",
+      "776dc08d4028",
+      "93b721310b45"
+    ],
+    "prediction_drift_records": [
+      "6535f9c37e4b",
+      "5fdd93e77fbc",
+      "ad02daac4905"
+    ],
+    "prediction_inference_records": [
+      "f124247251a8",
+      "0f15babe7fd4",
+      "98ad18326f92",
+      "b14c6af2e673",
+      "35cde19842d7",
+      "d1650505538a",
+      "760419934ee7",
+      "2aad3a274c43",
+      "a9cc2e11825d",
+      "c7c95424254e",
+      "d8108b5c9ec7",
+      "5d84a211693a",
+      "e76c6fb1d2c9",
+      "bfc63eabaefd",
+      "c473a5566bd6",
+      "7a557814702d",
+      "a16296a787d7",
+      "169af55a5544",
+      "5cf7b51aa19a",
+      "13694c716f19",
+      "ab9b55a677a3",
+      "72869769d95e",
+      "1f4c7fdf53bc",
+      "75303e388758",
+      "ad957287b804",
+      "4c61670cd0d5",
+      "0ea48c71f256",
+      "9e5aa9ffcbae",
+      "e5161077f21f",
+      "05d8a2e7175e",
+      "f13a1b65e581",
+      "fdd8f6f025ff",
+      "c6d52dfcc33f",
+      "fb899baa3b89",
+      "670db82878d3",
+      "b93600959014",
+      "2082422038a4",
+      "f3d863604b04",
+      "2440d78ca1f3",
+      "3483b42579ed"
+    ],
+    "sales_loop_audit_entries": [
+      "f79b3f91ffe0",
+      "55f800011039",
+      "01e453146ec6"
+    ],
+    "sales_loop_events": [
+      "fb1880bcb010",
+      "b3592d71f398",
+      "e9e892edd557"
+    ],
+    "source_attributions": [
+      "06eff48cb8c1",
+      "47c035ec1a12"
+    ]
+  },
+  "content_hash_differences": {},
+  "foreign_keys_summary": {
+    "total_relevant_fks": 94,
+    "cascade_count": 80,
+    "restrict_count": 14,
+    "cascade_sample": [
+      {
+        "parent_table": "brokers",
+        "child_table": "api_keys",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "availability_rules",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "calendar_accounts",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "channel_partners",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "command_center_dismissals",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "contacts",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "copilot_conversations",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "customer_health_records",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "deal_commissions",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "deal_transactions",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "deals",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "demo_sessions",
+        "fk_column": "demo_broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "developer_api_keys",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "lead_notes",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      },
+      {
+        "parent_table": "brokers",
+        "child_table": "lead_tags",
+        "fk_column": "broker_id",
+        "on_delete": "CASCADE"
+      }
+    ]
+  }
+}

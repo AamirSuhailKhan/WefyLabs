@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.dependencies import get_db
 from app.modules.communication.canonical_service import canonical_communication_service
+from app.services.conversation_service import process_incoming_whatsapp_message
 
 logger = logging.getLogger("wefylabs.whatsapp")
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
@@ -64,6 +65,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     5. Resolves or creates canonical OmnichannelConversation and ChannelMessage
     6. Processes delivery receipts (sent -> delivered -> read | failed)
     7. Emits transactional OutboxEvent
+    8. Dispatches lead qualification and conversational workflows
     """
     raw_body = await request.body()
     headers_dict = dict(request.headers)
@@ -81,15 +83,48 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             detail="Webhook JSON body must be an object.",
         )
 
-    try:
-        result = await canonical_communication_service.ingest_inbound_webhook(
-            db=db,
-            provider_name="whatsapp_cloud",
-            raw_body=raw_body,
-            headers=headers_dict,
-            parsed_payload=data,
-            enforce_signature=True,
+    # 1. Enforce Meta HMAC signature verification fail-closed on ALL incoming webhooks
+    app_secret = getattr(settings, "WHATSAPP_APP_SECRET", None)
+    if not app_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="WhatsApp webhook signature verification is not configured.",
         )
+    sig_header = request.headers.get("X-Hub-Signature-256") or request.headers.get("x-hub-signature-256")
+    if not verify_meta_signature(raw_body, sig_header or "", app_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Meta webhook HMAC signature",
+        )
+
+    try:
+        canonical_result = None
+        try:
+            canonical_result = await canonical_communication_service.ingest_inbound_webhook(
+                db=db,
+                provider_name="whatsapp_cloud",
+                raw_body=raw_body,
+                headers=headers_dict,
+                parsed_payload=data,
+                enforce_signature=True,
+            )
+        except HTTPException as he:
+            if "identify exactly one configured WhatsApp phone number" in str(he.detail):
+                canonical_result = None
+            else:
+                raise
+
+        if canonical_result is not None and canonical_result.get("action") == "duplicate_suppressed":
+            return {"status": "ok", "result": canonical_result}
+
+        if "messages" in data and "entry" not in data:
+            result = await process_incoming_whatsapp_message(db, data)
+            return {"status": "ok", "result": result}
+
+        if canonical_result is not None:
+            return {"status": "ok", "result": canonical_result}
+
+        result = await process_incoming_whatsapp_message(db, data)
         return {"status": "ok", "result": result}
     except HTTPException:
         raise

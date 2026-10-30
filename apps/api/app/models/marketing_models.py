@@ -574,9 +574,11 @@ class TrackingLink(Base, TimestampMixin):
     landing_page_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("marketing_landing_pages.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Decoupled reference to channel_partners.id (UUID, no DB FK constraint, matches migration 0033)
     channel_partner_id: Mapped[Optional[str]] = mapped_column(
-        String(36), ForeignKey("channel_partners.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36), nullable=True, index=True
     )
+
 
     # Destination
     destination_url: Mapped[str] = mapped_column(Text, nullable=False)

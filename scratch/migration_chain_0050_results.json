@@ -1,0 +1,22 @@
+{
+  "current_revision": "0050_broker_subscription_constraint_parity",
+  "verified_constraints": {
+    "ck_brokers_onboarding_status": "CHECK (((onboarding_status)::text = ANY ((ARRAY['AUTHENTICATED_NOT_ONBOARDED'::character varying, 'ONBOARDING_IN_PROGRESS'::character varying, 'ONBOARDED'::character varying, 'SUSPENDED'::character varying])::text[])))",
+    "ck_brokers_subscription_plan": "CHECK (((subscription_plan IS NULL) OR ((subscription_plan)::text = ANY ((ARRAY['monthly'::character varying, 'annual'::character varying, 'starter'::character varying, 'professional'::character varying, 'starter_monthly'::character varying, 'starter_annual'::character varying, 'pro_monthly'::character varying, 'pro_annual'::character varying, 'premium_custom'::character varying])::text[]))))",
+    "ck_brokers_subscription_status": "CHECK (((subscription_status)::text = ANY ((ARRAY['trial'::character varying, 'active'::character varying, 'paused'::character varying, 'past_due'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[])))",
+    "ck_subscriptions_status": "CHECK (((status)::text = ANY ((ARRAY['created'::character varying, 'active'::character varying, 'paused'::character varying, 'past_due'::character varying, 'cancelled'::character varying, 'completed'::character varying, 'expired'::character varying])::text[])))",
+    "fk_source_attributions_lead_id": "FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL",
+    "fk_source_attributions_organization_id": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  "test_update_plan_pro_monthly": "SUCCESS",
+  "test_update_status_paused": "SUCCESS",
+  "test_update_status_past_due": "SUCCESS",
+  "preserved_counts": {
+    "leads": 4,
+    "organizations": 7,
+    "brokers": 8,
+    "organization_members": 7,
+    "source_attributions": 3,
+    "tasks": 4
+  }
+}

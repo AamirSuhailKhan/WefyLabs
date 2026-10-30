@@ -103,9 +103,15 @@ class TestObservabilityAPIEndpoints:
         assert "http_requests" in body or "HELP" in body
 
     def test_v1_metrics_endpoint_exposition(self):
-        resp = self.client.get("/v1/metrics")
-        assert resp.status_code == 200
-        assert "text/plain" in resp.headers.get("content-type", "")
+        from app.dependencies import require_super_admin
+        from unittest.mock import MagicMock
+        app.dependency_overrides[require_super_admin] = lambda: MagicMock(email="admin@wefylabs.com", role="super_admin")
+        try:
+            resp = self.client.get("/v1/metrics")
+            assert resp.status_code == 200
+            assert "text/plain" in resp.headers.get("content-type", "")
+        finally:
+            app.dependency_overrides.pop(require_super_admin, None)
 
     def test_capabilities_endpoint_safe_flags(self):
         resp = self.client.get("/health/capabilities")

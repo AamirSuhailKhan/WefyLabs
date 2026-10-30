@@ -1,0 +1,36 @@
+{
+  "target_revision": "0049_source_attribution_uuid_parity",
+  "column_types": {
+    "lead_id": [
+      "uuid",
+      "YES"
+    ],
+    "organization_id": [
+      "uuid",
+      "NO"
+    ]
+  },
+  "preserved_row_count": 3,
+  "preserved_rows": [
+    {
+      "id": "061baa67-3f42-456a-a06d-f9dc5fd2144b",
+      "organization_id": "ccd09e2e-5732-4142-adec-66c560b4629d",
+      "lead_id": "5c8dd178-ec1a-4d58-8b2c-35de346dc981"
+    },
+    {
+      "id": "8ec5d3f6-d0e7-44e9-8349-60596166d36b",
+      "organization_id": "35c904e8-1d5a-41d9-a54e-2dc2e93f4a9d",
+      "lead_id": "dac1a157-657b-4e48-8e76-f5469ee2af6b"
+    },
+    {
+      "id": "b42226f6-a2af-46c1-a63e-60aab53cd6bf",
+      "organization_id": "352a376a-a4e9-4bbe-b4ae-b5aa39f52657",
+      "lead_id": "07d39718-ec8a-4ccd-847f-30b174d6699b"
+    }
+  ],
+  "foreign_keys": {
+    "fk_source_attributions_lead_id": "FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL",
+    "fk_source_attributions_organization_id": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+  },
+  "deletion_behavior": "PASSED: Lead deleted, SourceAttribution record preserved with lead_id SET NULL."
+}

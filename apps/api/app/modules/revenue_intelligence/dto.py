@@ -348,3 +348,7 @@ class PropensityScoreDTO(BaseModel):
     calculation_breakdown: List[str]
     generated_at: str
     data_window_days: int = 30
+
+
+# ── Canonical Domain Consolidation: Re-export Build 09 DTOs ───────────────────
+from app.modules.revenue_intelligence.dto_b09 import *  # noqa: F401, F403

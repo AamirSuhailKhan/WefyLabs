@@ -1,0 +1,66 @@
+{
+  "indexes": {
+    "count_a": 2376,
+    "count_b": 2375,
+    "count_pilot": 2375,
+    "in_a_not_in_b": [
+      [
+        "alembic_version",
+        "alembic_version_pkey"
+      ],
+      [
+        "knowledge_embeddings",
+        "ix_ke_vector_hnsw"
+      ]
+    ],
+    "in_b_not_in_a": [
+      [
+        "alembic_version",
+        "alembic_version_pkc"
+      ]
+    ],
+    "in_pilot_not_in_b": []
+  },
+  "extensions": {
+    "path_a": [
+      [
+        "pgcrypto",
+        "1.3"
+      ],
+      [
+        "plpgsql",
+        "1.0"
+      ],
+      [
+        "uuid-ossp",
+        "1.1"
+      ],
+      [
+        "vector",
+        "0.8.7"
+      ]
+    ],
+    "path_b": [
+      [
+        "plpgsql",
+        "1.0"
+      ]
+    ],
+    "pilot": [
+      [
+        "plpgsql",
+        "1.0"
+      ],
+      [
+        "vector",
+        "0.8.7"
+      ]
+    ]
+  },
+  "constraints": {
+    "count_a": 826,
+    "count_b": 825,
+    "count_pilot": 825,
+    "diff_count_ab": 13
+  }
+}

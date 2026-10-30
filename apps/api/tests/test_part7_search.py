@@ -123,3 +123,74 @@ def test_saved_search_create_dto():
     assert dto.name == "Hot Leads in Dubai"
     assert dto.filters["score"] == "hot"
     assert dto.is_shared is True
+
+
+# ─── Search Provider Unconfigured & Vector Fallback Tests ─────────────────────
+
+@pytest.mark.asyncio
+async def test_meilisearch_unconfigured_safe_handling():
+    from app.modules.search.providers.search_providers import MeilisearchSearchProvider
+    provider = MeilisearchSearchProvider()
+    assert not provider.is_configured()
+
+    health = await provider.health()
+    assert health["status"] == "unconfigured"
+
+    res = await provider.search("luxury villa", organization_id="org-1")
+    assert res.total == 0
+    assert res.hits == []
+    assert res.provider == "meilisearch"
+
+    assert await provider.autocomplete("lux", organization_id="org-1") == []
+    assert await provider.facets("lux", organization_id="org-1", entity_type="property", facet_fields=["city"]) == {}
+    assert await provider.index_document({"id": "1", "entity_type": "lead"}) is False
+    assert (await provider.bulk_index([{"id": "1"}]))["indexed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_vector_search_provider_unconfigured_handling():
+    from app.modules.search.providers.search_providers import VectorSearchProvider
+    provider = VectorSearchProvider(db=None)
+    assert not provider.is_configured()
+
+    health = await provider.health()
+    assert health["status"] == "unconfigured"
+
+    res = await provider.search("villa", organization_id="org-1")
+    assert res.total == 0
+    assert res.hits == []
+
+    semantic_res = await provider.semantic_search([0.1, 0.2, 0.3], organization_id="org-1")
+    assert semantic_res == []
+
+
+@pytest.mark.asyncio
+async def test_vector_search_provider_with_mocked_pgvector():
+    from unittest.mock import AsyncMock, patch, MagicMock
+    from app.modules.search.providers.search_providers import VectorSearchProvider
+    from app.modules.knowledge.providers.vector_store_provider import VectorHit
+
+    mock_db = AsyncMock()
+    provider = VectorSearchProvider(db=mock_db)
+    assert provider.is_configured()
+
+    mock_hits = [
+        VectorHit(
+            chunk_id="chunk-001",
+            document_id="doc-001",
+            organization_id="org-1",
+            score=0.92,
+            metadata={"title": "Downtown Dubai Property Guide", "snippet": "Prime residential area."}
+        )
+    ]
+
+    with patch("app.modules.knowledge.providers.vector_store_provider.PgVectorStoreProvider.search", new_callable=AsyncMock) as mock_search:
+        mock_search.return_value = mock_hits
+        results = await provider.semantic_search([0.1, 0.2, 0.3], organization_id="org-1", limit=5)
+
+        assert len(results) == 1
+        assert results[0].id == "chunk-001"
+        assert results[0].display_title == "Downtown Dubai Property Guide"
+        assert results[0].score == 0.92
+        assert results[0].organization_id == "org-1"
+

@@ -25,10 +25,9 @@ def process_identity_resolution_queue(lead_data: Dict[str, Any], organization_id
             service = IdentityResolutionService(db=db, redis_client=None)
             return await service.resolve_lead(lead_data, organization_id)
 
+    from app.core.async_runner import run_async
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_run())
-        loop.close()
+        result = run_async(_run())
         logger.info(
             f"[IDENTITY_WORKER] Resolved lead {lead_data.get('id')}: "
             f"decision={result.get('decision')} identity={result.get('identity_id')}"

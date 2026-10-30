@@ -56,10 +56,35 @@ DEFAULT_CATALOG = [
         ]
     },
     {
+        "code": "pilot",
+        "name": "14-Day Paid Pilot",
+        "description": "Commercial 14-day paid pilot for brokerage teams: ₹4,999 for full inside-sales automation, AI qualification, and WhatsApp engagement.",
+        "sort_order": 1,
+        "versions": [
+            {
+                "version": 1,
+                "interval": PlanInterval.CUSTOM.value,
+                "price": Decimal("4999.00"),
+                "currency": "INR",
+                "trial_days": 14,
+                "entitlements": [
+                    {"key": "team_members", "type": EntitlementType.SEAT_LIMIT.value, "limit": 3},
+                    {"key": "ai_messages_per_month", "type": EntitlementType.AI_TOKEN_LIMIT.value, "limit": 250},
+                    {"key": "whatsapp_messages_per_month", "type": EntitlementType.MESSAGE_LIMIT.value, "limit": 750},
+                    {"key": "active_leads", "type": EntitlementType.LEAD_LIMIT.value, "limit": 750},
+                    {"key": "property_inventory", "type": EntitlementType.PROPERTY_LIMIT.value, "limit": 250},
+                    {"key": "workflow_executions", "type": EntitlementType.AUTOMATION_LIMIT.value, "limit": 150},
+                    {"key": "exports", "type": EntitlementType.EXPORT_LIMIT.value, "limit": 25},
+                    {"key": "avm_valuation", "type": EntitlementType.BOOLEAN.value, "bool": True},
+                ]
+            }
+        ]
+    },
+    {
         "code": "starter",
         "name": "Starter",
         "description": "Growing brokers seeking AI automation and omnichannel WhatsApp messaging.",
-        "sort_order": 1,
+        "sort_order": 2,
         "versions": [
             {
                 "version": 1,

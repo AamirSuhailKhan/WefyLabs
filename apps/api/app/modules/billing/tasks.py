@@ -42,8 +42,9 @@ def reconcile_pending_orders_task(self):
                 except Exception as e:
                     logger.warning(f"[Reconcile Task] Failed to reconcile order {order.id}: {e}")
 
+    from app.core.async_runner import run_async
     try:
-        asyncio.run(_run())
+        run_async(_run())
         return {"status": "success"}
     except Exception as exc:
         logger.error(f"[Reconcile Task] Error: {exc}")

@@ -98,6 +98,14 @@ PLANS: Dict[str, Dict[str, Any]] = {
         "price_usd": 1990,
         "features": ["Unlimited AI Qualifications", "Dedicated WhatsApp Number", "Custom AI Prompts", "Multi-Office Hierarchy", "SLA Guarantee", "Dedicated Support"],
     },
+    "pilot_14d": {
+        "name": "14-Day Paid Pilot",
+        "amount": 499900,  # ₹4,999.00 in paise
+        "period": "14_days",
+        "plan_type": "pilot",
+        "price_usd": 69,
+        "features": ["150 AI Lead Qualifications", "WhatsApp Inside-Sales Bot", "Site Visit Scheduling", "Command Center Access", "Up to 3 Broker Seats", "14-Day Pilot Validity"],
+    },
 }
 
 
@@ -170,11 +178,11 @@ class RazorpayProductionService:
         plan_info = PLANS.get(plan_id)
         if not plan_info:
             return None
-        plan_code = plan_info.get("plan_type")          # starter | professional | enterprise
-        catalog_code = {"starter": "starter", "professional": "pro", "enterprise": "enterprise"}.get(plan_code)
+        plan_code = plan_info.get("plan_type")          # starter | professional | enterprise | pilot
+        catalog_code = {"starter": "starter", "professional": "pro", "enterprise": "enterprise", "pilot": "pilot"}.get(plan_code)
         if not catalog_code:
             return None
-        interval = "monthly" if plan_info.get("period") == "monthly" else "annual"
+        interval = PlanInterval.CUSTOM.value if plan_info.get("period") == "14_days" else ("monthly" if plan_info.get("period") == "monthly" else "annual")
         try:
             stmt = (
                 select(Plan, PlanVersion)

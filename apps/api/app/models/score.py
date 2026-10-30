@@ -19,7 +19,8 @@ class Score(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -33,6 +34,7 @@ class Score(Base):
     extracted_data: Mapped[Dict[str, Any]] = mapped_column(
         JSONBType,
         default=dict,
+        server_default=text("'{}'"),
         nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(

@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, level-1 ]
+    branches: [ main, level-1, level-2, level-3 ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, level-3 ]
 
 jobs:
   test-api:
@@ -13,7 +13,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: leadscore_test
           POSTGRES_USER: postgres
@@ -96,6 +96,35 @@ jobs:
           fi
           echo "[OK] Single Alembic head confirmed."
 
+      - name: ── DATABASE SAFETY GATE ── Static test isolation audit
+        run: |
+          python apps/api/scripts/audit_test_database_safety.py
+
+      - name: ── DATABASE SAFETY GUARDS ── Enforce runtime isolation & tracker
+        env:
+          ENV: testing
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_super_secret_jwt_key_ci_environment_32chars
+          SUPABASE_JWT_SECRET: supabase_jwt_secret_test_placeholder_for_ci_only
+        run: |
+          cd apps/api
+          poetry run pytest tests/test_database_safety_guards.py tests/test_startup_ddl_guards.py -v
+
+      - name: ── CRM ACCEPTANCE SUITE ── Isolated CRM dry run & cleanup
+        env:
+          ENV: testing
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_test
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_super_secret_jwt_key_ci_environment_32chars
+          SUPABASE_JWT_SECRET: supabase_jwt_secret_test_placeholder_for_ci_only
+          FOLLOWUP_HUB_DISPATCH_ENABLED: "false"
+          WHATSAPP_ENABLED: "false"
+        run: |
+          cd apps/api
+          poetry run python scripts/run_acceptance_pilot.py
+
       - name: Run Pytest Suite
         env:
           ENV: testing
@@ -117,6 +146,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: ── GIT INTEGRITY ── Check for whitespace errors or merge conflict markers
+        run: git diff --check HEAD~1 || true
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5

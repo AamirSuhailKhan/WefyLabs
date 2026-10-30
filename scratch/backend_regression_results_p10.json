@@ -1,0 +1,147 @@
+{
+  "total_suites": 9,
+  "total_files": 18,
+  "total_collected": 360,
+  "total_passed": 360,
+  "total_failed": 0,
+  "total_skipped": 0,
+  "total_errors": 0,
+  "total_duration_seconds": 361.41,
+  "suites": [
+    {
+      "suite_id": "S1",
+      "name": "Database Bootstrap & Migrations",
+      "files": [
+        "apps/api/tests/test_database_bootstrap_and_migrations.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 29.21,
+      "collected": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S2",
+      "name": "OAuth Security & Redis Rate Limiting",
+      "files": [
+        "apps/api/tests/test_oauth_multiworker_security.py",
+        "apps/api/tests/test_redis_rate_limiter.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 16.29,
+      "collected": 21,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S3",
+      "name": "Tenant Boundary & Isolation Security",
+      "files": [
+        "apps/api/tests/test_tenant_isolation_security.py",
+        "apps/api/tests/test_tenant_matrix_security.py",
+        "apps/api/tests/test_p0_tenant_isolation_remediation.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 73.88,
+      "collected": 30,
+      "passed": 30,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S4",
+      "name": "Webhook Security & Signature Hardening",
+      "files": [
+        "apps/api/tests/test_webhook_security.py",
+        "apps/api/tests/test_whatsapp_webhook_security_hardening.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 18.98,
+      "collected": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S5",
+      "name": "Razorpay Production & Billing Subscriptions",
+      "files": [
+        "apps/api/tests/test_razorpay_production.py",
+        "apps/api/tests/test_master_build_13_billing.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 79.52,
+      "collected": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S6",
+      "name": "Autonomous Sales Loop & Stage 1 Pilot Safety",
+      "files": [
+        "apps/api/tests/test_part21_8_autonomous_sales_loop.py",
+        "apps/api/tests/test_phase2c_production_pilot.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 5.05,
+      "collected": 100,
+      "passed": 100,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S7",
+      "name": "Sales Pipeline & Deal Lifecycle",
+      "files": [
+        "apps/api/tests/test_master_build_08_sales_pipeline.py",
+        "apps/api/tests/test_part18_deal_lifecycle.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 118.39,
+      "collected": 44,
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S8",
+      "name": "Security Architecture & High-Value Product",
+      "files": [
+        "apps/api/tests/test_stage_b_c_security_architecture_consolidation.py",
+        "apps/api/tests/test_stage_f_high_value_product_completion.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 14.21,
+      "collected": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    },
+    {
+      "suite_id": "S9",
+      "name": "Master Intelligence Graph & Telemetry Security",
+      "files": [
+        "apps/api/tests/test_master_build_14_intelligence.py",
+        "apps/api/tests/test_master_build_14_security.py"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 5.88,
+      "collected": 92,
+      "passed": 92,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0
+    }
+  ]
+}

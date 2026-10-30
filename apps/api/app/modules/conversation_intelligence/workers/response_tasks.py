@@ -36,13 +36,9 @@ def process_inbound_customer_response(self, message_payload: Dict[str, Any]):
             msg_dto = InboundCustomerMessage(**message_payload)
             return await service.ingest_inbound_message(msg_dto)
 
+    from app.core.async_runner import run_async
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(_async_process(), loop)
-            return future.result()
-        else:
-            return asyncio.run(_async_process())
+        return run_async(_async_process())
     except Exception as exc:
         logger.error(f"[Celery] Inbound response task error: {exc}", exc_info=True)
         raise self.retry(exc=exc)

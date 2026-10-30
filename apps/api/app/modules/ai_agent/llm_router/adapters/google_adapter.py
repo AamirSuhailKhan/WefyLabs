@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import time
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from app.modules.ai_agent.llm_router.base_adapter import BaseLLMAdapter, LLMResponse
@@ -20,23 +21,30 @@ from app.modules.ai_agent.llm_router.base_adapter import BaseLLMAdapter, LLMResp
 logger = logging.getLogger("wefylabs.llm.google")
 
 _COST_PER_1K = {
-    # Gemini 3.x / 2.x pricing (USD per 1K tokens)
-    "gemini-3.8-flash": {"input": 0.000075, "output": 0.0003},
+    # Gemini 3.x pricing (Current 2026 official pay-as-you-go list rates: USD per 1K tokens)
+    "gemini-3.8-flash": {"input": 0.00075, "output": 0.00375},
+    "gemini-3.6-flash": {"input": 0.00075, "output": 0.00375},
+    "gemini-3.7-flash": {"input": 0.00075, "output": 0.00375},
+    # Gemini 2.5 series (USD per 1K tokens)
     "gemini-2.5-flash": {"input": 0.000075, "output": 0.0003},
     "gemini-2.5-pro": {"input": 0.00125, "output": 0.005},
+    # Retired / legacy variants mapped for cost tracking
     "gemini-2.0-flash": {"input": 0.000075, "output": 0.0003},
     "gemini-2.0-flash-lite": {"input": 0.000038, "output": 0.00015},
-    # Legacy name mappings (backward compat with env vars)
-    "gemini-3.5-flash": {"input": 0.000075, "output": 0.0003},
-    "gemini-3.7-flash": {"input": 0.00010, "output": 0.0004},
+    "gemini-3.5-flash": {"input": 0.00150, "output": 0.0090},
     "gemini-3.1-pro": {"input": 0.00125, "output": 0.005},
 }
 
-# Canonical model to use if environment specifies a non-existent name
+# Only aliases for model identifiers which are not a supported stable text target.
+# Supported IDs (including gemini-2.5-flash and gemini-3.8-flash) are deliberately
+# passed through unchanged so an operator-selected model is never silently
+# substituted with an older model.
 _MODEL_ALIAS = {
-    "gemini-2.5-flash": "gemini-3.8-flash",
-    "gemini-3.5-flash": "gemini-3.8-flash",
-    "gemini-3.7-flash": "gemini-3.8-flash",
+    "gemini-1.5-flash": "gemini-3.6-flash",
+    "gemini-1.5-flash-001": "gemini-3.6-flash",
+    "gemini-1.5-flash-002": "gemini-3.6-flash",
+    "gemini-1.5-pro": "gemini-3.6-flash",
+    "gemini-2.0-flash": "gemini-2.5-flash",
     "gemini-3.1-pro": "gemini-2.5-pro",
 }
 
@@ -140,12 +148,20 @@ class GoogleAdapter(BaseLLMAdapter):
     - Circuit breaker friendly: never raises, always returns LLMResponse
     """
 
-    def __init__(self, api_key: str, model: str = "gemini-3.8-flash"):
+    def __init__(self, api_key: str, model: Optional[str] = None):
         self._api_key = api_key
+        # Check environment variable overrides before default
+        target_model = (
+            model
+            or os.getenv("GEMINI_MODEL_ID")
+            or os.getenv("GEMINI_MODEL")
+            or os.getenv("DEFAULT_LLM_MODEL")
+            or "gemini-3.6-flash"
+        )
         # Resolve legacy model name aliases
-        self._model = _MODEL_ALIAS.get(model, model)
-        if model != self._model:
-            logger.info(f"[GoogleAdapter] Model alias resolved: {model} -> {self._model}")
+        self._model = _MODEL_ALIAS.get(target_model, target_model)
+        if target_model != self._model:
+            logger.info(f"[GoogleAdapter] Model alias resolved: {target_model} -> {self._model}")
 
     @property
     def provider_name(self) -> str:
@@ -177,6 +193,17 @@ class GoogleAdapter(BaseLLMAdapter):
                 provider=self.provider_name,
                 model=self._model,
             )
+
+        import os
+        if os.getenv("ENV") == "testing" and os.getenv("ALLOW_LIVE_AI_CALLS_IN_TESTS", "0") != "1":
+            return LLMResponse(
+                content="",
+                success=False,
+                error="Live AI network calls disabled during automated tests",
+                provider=self.provider_name,
+                model=self._model,
+            )
+
 
         try:
             from google import genai  # type: ignore
@@ -260,7 +287,29 @@ class GoogleAdapter(BaseLLMAdapter):
         cost = (in_tok / 1000) * cost_map["input"] + (out_tok / 1000) * cost_map["output"]
 
         # ── Determine finish reason ───────────────────────────────────────────
-        finish_reason = "tool_use" if extracted_tool_calls else "stop"
+        candidates = getattr(response, "candidates", []) or []
+        provider_finish_reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+        normalized_finish_reason = str(provider_finish_reason).lower() if provider_finish_reason else ""
+        token_limited = normalized_finish_reason in {"max_tokens", "max_output_tokens", "length"}
+        finish_reason = "tool_use" if extracted_tool_calls else ("length" if token_limited else "stop")
+
+        # A response without text or a function call is not a usable successful
+        # completion.  Keeping this explicit prevents empty provider replies from
+        # being mistaken for deterministic local fallbacks by callers.
+        if not content_text and not extracted_tool_calls:
+            return LLMResponse(
+                content="",
+                prompt_tokens=in_tok,
+                completion_tokens=out_tok,
+                total_tokens=in_tok + out_tok,
+                cost_usd=cost,
+                latency_ms=latency_ms,
+                provider=self.provider_name,
+                model=self._model,
+                finish_reason=finish_reason,
+                success=False,
+                error="Gemini returned no text or tool call" + (" (output token limit reached)" if token_limited else ""),
+            )
 
         logger.debug(
             f"[GoogleAdapter] model={self._model} in={in_tok} out={out_tok} "

@@ -1,0 +1,52 @@
+{
+  "schema_name": "phase9_fresh_disposable",
+  "table_existence": {
+    "expected_model_tables": 410,
+    "actual_db_tables": 411,
+    "missing_tables": [],
+    "extra_tables": [],
+    "status": "PASS"
+  },
+  "column_definitions": {
+    "total_model_columns_checked": 6057,
+    "total_db_columns_found": 6059,
+    "missing_columns": [],
+    "nullability_mismatches": [],
+    "status": "PASS"
+  },
+  "constraints": {
+    "total_constraints_found": 821,
+    "primary_keys_count": 411,
+    "foreign_keys_count": 298,
+    "unique_constraints_count": 82,
+    "check_constraints_count": 30,
+    "webhook_claims_unique_verified": true,
+    "status": "PASS"
+  },
+  "indexes": {
+    "total_indexes_found": 2373,
+    "hnsw_vector_index_present": true,
+    "hnsw_vector_index_def": "CREATE INDEX ix_ke_vector_hnsw ON phase9_fresh_disposable.knowledge_embeddings USING hnsw (embedding vector_cosine_ops)",
+    "hnsw_operator_class_verified": true,
+    "status": "PASS"
+  },
+  "extensions": {
+    "installed_extensions": {
+      "plpgsql": "1.0",
+      "pg_stat_statements": "1.11",
+      "uuid-ossp": "1.1",
+      "pgcrypto": "1.3",
+      "supabase_vault": "0.3.1",
+      "vector": "0.8.2"
+    },
+    "required_extensions_verified": true,
+    "status": "PASS"
+  },
+  "alembic_state": {
+    "table_present": true,
+    "version_column_length": 64,
+    "recorded_revision": "0047_webhook_event_claims",
+    "status": "PASS"
+  },
+  "overall_parity_status": "CERTIFIED_PARITY"
+}

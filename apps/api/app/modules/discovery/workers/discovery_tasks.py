@@ -28,16 +28,12 @@ if CELERY_AVAILABLE and celery_app:
     )
     def execute_discovery_run_task(self, organization_id: str, run_id: str):
         """Execute full discovery run across configured sources in background."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_async_execute_discovery_run(organization_id, run_id))
+            return run_async(_async_execute_discovery_run(organization_id, run_id))
         except Exception as exc:
             logger.error(f"[DISCOVERY_TASK] Run {run_id} failed: {exc}")
             raise self.retry(exc=exc)
-        finally:
-            loop.close()
 
     @celery_app.task(
         name="discovery.process_candidate_task",
@@ -47,15 +43,11 @@ if CELERY_AVAILABLE and celery_app:
     )
     def process_candidate_task(self, organization_id: str, candidate_id: str):
         """Process candidate validation, relevance scoring, and duplicate check."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_async_process_candidate(organization_id, candidate_id))
+            return run_async(_async_process_candidate(organization_id, candidate_id))
         except Exception as exc:
             logger.warning(f"[DISCOVERY_TASK] Candidate {candidate_id} processing error: {exc}")
-        finally:
-            loop.close()
 
 else:
     def execute_discovery_run_task(organization_id: str, run_id: str):

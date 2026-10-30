@@ -6,7 +6,7 @@ Base anchor currency: AED (United Arab Emirates Dirham).
 """
 
 import logging
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)

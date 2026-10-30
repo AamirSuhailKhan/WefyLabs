@@ -25,16 +25,27 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    existing_cols = {c["name"] for c in insp.get_columns("lead_sources")} if insp.has_table("lead_sources") else set()
+
     # Safely alter lead_sources by adding missing columns
     with op.batch_alter_table("lead_sources") as batch_op:
-        batch_op.add_column(sa.Column("description", sa.Text(), nullable=True))
-        batch_op.add_column(sa.Column("channel", sa.String(50), nullable=True, server_default="WEBSITE"))
-        batch_op.add_column(sa.Column("webhook_secret_hash", sa.String(128), nullable=True))
-        batch_op.add_column(sa.Column("webhook_url_token", sa.String(64), nullable=True))
-        batch_op.add_column(sa.Column("rate_limit_per_hour", sa.Integer(), nullable=True))
-        batch_op.add_column(sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")))
+        if "description" not in existing_cols:
+            batch_op.add_column(sa.Column("description", sa.Text(), nullable=True))
+        if "channel" not in existing_cols:
+            batch_op.add_column(sa.Column("channel", sa.String(50), nullable=True, server_default="WEBSITE"))
+        if "webhook_secret_hash" not in existing_cols:
+            batch_op.add_column(sa.Column("webhook_secret_hash", sa.String(128), nullable=True))
+        if "webhook_url_token" not in existing_cols:
+            batch_op.add_column(sa.Column("webhook_url_token", sa.String(64), nullable=True))
+        if "rate_limit_per_hour" not in existing_cols:
+            batch_op.add_column(sa.Column("rate_limit_per_hour", sa.Integer(), nullable=True))
+        if "is_active" not in existing_cols:
+            batch_op.add_column(sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")))
         # Make broker_id nullable if present to support organization-level sources
-        batch_op.alter_column("broker_id", existing_type=sa.UUID(), nullable=True)
+        if "broker_id" in existing_cols:
+            batch_op.alter_column("broker_id", existing_type=sa.UUID(), nullable=True)
 
     # Add indexes for fast querying
     op.create_index("ix_lead_sources_channel", "lead_sources", ["channel"], if_not_exists=True)

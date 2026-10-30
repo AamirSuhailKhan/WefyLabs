@@ -1,0 +1,119 @@
+{
+  "ledger_version": "1.0.0",
+  "generated_at": "2026-10-30T08:12:17.814036+00:00",
+  "repository": "BeetleLabs",
+  "branch": "level-3",
+  "base_commit": "0383020a865fe315adfda4549f536a594fb10454",
+  "production_target": "aws-0-ap-south-1.pooler.supabase.com:5432/postgres",
+  "target_alembic_head": "0050_broker_subscription_constraint_parity",
+  "summary": {
+    "total_suites": 6,
+    "total_tests": 49,
+    "passed_tests": 49,
+    "failed_tests": 0,
+    "skipped_or_deferred": 0,
+    "pass_rate_percentage": 100.0
+  },
+  "suites": [
+    {
+      "suite_id": "SUITE_01_SOURCE_ATTRIBUTION_REGRESSION",
+      "test_file": "apps/api/tests/test_source_attribution_regression.py",
+      "description": "SQLAlchemy ORM typing, UUID conversion, and relational join regression suite",
+      "tests_executed": 12,
+      "tests_passed": 12,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "key_assertions": [
+        "Native UUID column type persistence",
+        "String-to-UUID TypeDecorator coercion without exception",
+        "Zero 'character varying = uuid' operator errors on PostgreSQL joins",
+        "Referential integrity cascade on organization delete",
+        "SET NULL integrity preservation on lead purge"
+      ]
+    },
+    {
+      "suite_id": "SUITE_02_CONTAINER_RELEASE_CANDIDATE_RUNTIME",
+      "test_file": "scratch/test_container_release_candidate_runtime.py",
+      "description": "Container image startup, fail-closed entrypoint validation, and multi-version matrix",
+      "tests_executed": 7,
+      "tests_passed": 7,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "scenarios": [
+        "SC-01: Standard boot at 0050 -> PASS",
+        "SC-02: Fail-closed boot at 0047 -> PASS",
+        "SC-03: Fail-closed boot at 0048 -> PASS",
+        "SC-04: Fail-closed boot when database unreachable -> PASS",
+        "SC-05: Controlled standalone migration 0047 to 0050 -> PASS",
+        "SC-06: Idempotent release migration script re-run (NO-OP) -> PASS",
+        "SC-07: Container boot against live hosted Supabase -> PASS"
+      ]
+    },
+    {
+      "suite_id": "SUITE_03_RELEASE_INVARIANT_HARDENING",
+      "test_file": "scratch/test_release_invariant_hardening.py",
+      "description": "Alembic DAG single head, downgrade safeguards, entrypoint read-only invariance",
+      "tests_executed": 23,
+      "tests_passed": 23,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "key_assertions": [
+        "Single authoritative Alembic head (0050)",
+        "Alembic upgrade head removed from entrypoint.sh",
+        "Render autoDeploy disabled across all 3 services",
+        "Dedicated release migration runner functional and idempotent",
+        "Downgrade fail-closed safety guard active on migration 0049"
+      ]
+    },
+    {
+      "suite_id": "SUITE_04_LIVE_SUPABASE_PRODUCTION_SMOKE",
+      "test_file": "scratch/verify_live_supabase_smoke.py",
+      "description": "Direct validation of PostgreSQL 17 query engine, joins, and broker constraints on hosted Supabase",
+      "tests_executed": 5,
+      "tests_passed": 5,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "key_assertions": [
+        "Alembic version confirmed at 0050_broker_subscription_constraint_parity",
+        "Relational JOIN across source_attributions, organizations, and leads succeeded",
+        "Native UUID insert and retrieval verified without operator mismatch",
+        "Smoke test record cleaned up with zero trace",
+        "Broker constraint verified for modern subscription status and plan"
+      ]
+    },
+    {
+      "suite_id": "SUITE_05_BACKUP_RESTORE_AND_SIDE_EFFECT_RECONCILIATION",
+      "test_file": "scratch/restore_and_compare_backup.py",
+      "description": "PostgreSQL 17 clean-room restore drill and production broker reconciliation",
+      "tests_executed": 1,
+      "tests_passed": 1,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "key_assertions": [
+        "Compressed custom format backup restored cleanly into postgres:17-alpine",
+        "30/30 production brokers restored and forensically compared",
+        "Smoke test broker side effect reconciled to pre-migration state",
+        "100% field parity confirmed between live Supabase and baseline backup",
+        "Post-migration backup captured and validated (TOC 21,469 entries)"
+      ]
+    },
+    {
+      "suite_id": "SUITE_06_FRONTEND_TYPECHECK_VERIFICATION",
+      "test_file": "apps/web/package.json (tsc --noEmit)",
+      "description": "Next.js / TypeScript static typecheck across all client components and pages",
+      "tests_executed": 1,
+      "tests_passed": 1,
+      "tests_failed": 0,
+      "exit_code": 0,
+      "key_assertions": [
+        "TypeScript compiler (tsc --noEmit) completed with 0 errors",
+        "Client components compatible with API response contracts"
+      ]
+    }
+  ],
+  "scope_exclusions": {
+    "gemini_api_keys": "EXCLUDED - DEFERRED BY OWNER",
+    "ai_provider_configuration": "EXCLUDED - DEFERRED BY OWNER",
+    "live_ai_inference": "EXCLUDED - NOT RUN IN THIS CERTIFICATION"
+  }
+}

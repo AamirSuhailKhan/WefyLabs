@@ -1,0 +1,44 @@
+{
+  "hosted_supabase": {
+    "total_tables": 2697,
+    "by_schema": {
+      "public": 416,
+      "phase7_test_disposable": 411,
+      "phase9_fresh_disposable": 411,
+      "valid_schema": 411,
+      "phase6_standalone_test": 402,
+      "phase6_cert_v1": 372,
+      "pg_catalog": 142,
+      "information_schema": 69,
+      "auth": 27,
+      "storage": 8,
+      "phase11_upgrade_disposable": 6,
+      "phase12_upgrade_disposable": 6,
+      "phase14_upgrade_disposable": 6,
+      "phase9_upgrade_disposable": 3,
+      "realtime": 3,
+      "extensions": 2,
+      "vault": 2
+    },
+    "public_count": 416
+  },
+  "local_docker": {
+    "total_tables": 620,
+    "by_schema": {
+      "public": 411,
+      "pg_catalog": 140,
+      "information_schema": 69
+    },
+    "public_count": 411
+  },
+  "public_table_diff": {
+    "in_sb_not_loc": [
+      "lead_candidates",
+      "discovery_jobs",
+      "source_evidences",
+      "discovery_events",
+      "discovery_policies"
+    ],
+    "in_loc_not_sb": []
+  }
+}

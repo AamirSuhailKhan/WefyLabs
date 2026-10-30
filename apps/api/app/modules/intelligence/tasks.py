@@ -18,19 +18,7 @@ from app.modules.intelligence.service import IntelligenceService
 logger = logging.getLogger(__name__)
 
 
-def _run_async(coro):
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(lambda: asyncio.run(coro)).result()
-    else:
-        return asyncio.run(coro)
+from app.core.async_runner import run_async as _run_async
 
 
 @celery_app.task(

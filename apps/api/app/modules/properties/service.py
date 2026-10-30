@@ -13,7 +13,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

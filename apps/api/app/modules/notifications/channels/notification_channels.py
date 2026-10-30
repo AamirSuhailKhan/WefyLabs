@@ -68,7 +68,7 @@ class EmailChannelAdapter(INotificationChannel):
             email_provider = channel_mgr.get_provider("email")
             if not email_provider.is_configured():
                 logger.info("[NOTIFY: email] SMTP provider unconfigured, skipping external email dispatch.")
-                return True
+                return False
 
             recipient = payload.recipient_id if "@" in payload.recipient_id else (payload.metadata or {}).get("email") or f"{payload.recipient_id}@notification.local"
             outbound_dto = OutboundMessageDTO(
@@ -96,10 +96,37 @@ class WhatsAppChannelAdapter(INotificationChannel):
 
     async def send(self, payload: NotificationPayload) -> bool:
         import logging
+        import uuid
+        from app.modules.communication.channel_manager.manager import get_channel_manager
+        from app.modules.communication.provider_adapters.base_provider import OutboundMessageDTO
+
         logger = logging.getLogger(__name__)
         logger.info(f"[NOTIFY: whatsapp] → {payload.recipient_id}: {payload.title}")
-        # TODO: call WhatsApp Cloud API via whatsapp_service
-        return True
+
+        channel_mgr = get_channel_manager()
+        try:
+            provider = channel_mgr.get_provider("whatsapp")
+            if not provider.is_configured():
+                logger.warning(f"[NOTIFY: whatsapp] WhatsApp provider unconfigured, delivery skipped for recipient={payload.recipient_id}")
+                return False
+
+            outbound_dto = OutboundMessageDTO(
+                message_id=str(uuid.uuid4()),
+                conversation_id=payload.recipient_id,
+                organization_id=(payload.metadata or {}).get("organization_id", "system"),
+                channel="whatsapp",
+                provider_name=provider.provider_name,
+                recipient_identifier=payload.recipient_id,
+                content=payload.body or payload.title,
+                message_type="text",
+                content_structured={"title": payload.title},
+                idempotency_key=f"notify:whatsapp:{payload.recipient_id}:{payload.title}",
+            )
+            resp = await provider.send(outbound_dto)
+            return bool(resp.success)
+        except Exception as e:
+            logger.error(f"[NOTIFY: whatsapp] Failed to dispatch WhatsApp notification: {e}")
+            return False
 
 
 class TelegramChannelAdapter(INotificationChannel):
@@ -108,10 +135,37 @@ class TelegramChannelAdapter(INotificationChannel):
 
     async def send(self, payload: NotificationPayload) -> bool:
         import logging
+        import uuid
+        from app.modules.communication.channel_manager.manager import get_channel_manager
+        from app.modules.communication.provider_adapters.base_provider import OutboundMessageDTO
+
         logger = logging.getLogger(__name__)
         logger.info(f"[NOTIFY: telegram] → {payload.recipient_id}: {payload.title}")
-        # TODO: call Telegram Bot API
-        return True
+
+        channel_mgr = get_channel_manager()
+        try:
+            provider = channel_mgr.get_provider("telegram")
+            if not provider.is_configured():
+                logger.warning(f"[NOTIFY: telegram] Telegram provider unconfigured, delivery skipped for recipient={payload.recipient_id}")
+                return False
+
+            outbound_dto = OutboundMessageDTO(
+                message_id=str(uuid.uuid4()),
+                conversation_id=payload.recipient_id,
+                organization_id=(payload.metadata or {}).get("organization_id", "system"),
+                channel="telegram",
+                provider_name=provider.provider_name,
+                recipient_identifier=payload.recipient_id,
+                content=payload.body or payload.title,
+                message_type="text",
+                content_structured={"title": payload.title},
+                idempotency_key=f"notify:telegram:{payload.recipient_id}:{payload.title}",
+            )
+            resp = await provider.send(outbound_dto)
+            return bool(resp.success)
+        except Exception as e:
+            logger.error(f"[NOTIFY: telegram] Failed to dispatch Telegram notification: {e}")
+            return False
 
 
 class SMSChannelAdapter(INotificationChannel):
@@ -120,7 +174,34 @@ class SMSChannelAdapter(INotificationChannel):
 
     async def send(self, payload: NotificationPayload) -> bool:
         import logging
+        import uuid
+        from app.modules.communication.channel_manager.manager import get_channel_manager
+        from app.modules.communication.provider_adapters.base_provider import OutboundMessageDTO
+
         logger = logging.getLogger(__name__)
         logger.info(f"[NOTIFY: sms] → {payload.recipient_id}: {payload.title}")
-        # TODO: integrate Twilio or local SMS gateway
-        return True
+
+        channel_mgr = get_channel_manager()
+        try:
+            provider = channel_mgr.get_provider("sms")
+            if not provider.is_configured():
+                logger.warning(f"[NOTIFY: sms] SMS provider unconfigured, delivery skipped for recipient={payload.recipient_id}")
+                return False
+
+            outbound_dto = OutboundMessageDTO(
+                message_id=str(uuid.uuid4()),
+                conversation_id=payload.recipient_id,
+                organization_id=(payload.metadata or {}).get("organization_id", "system"),
+                channel="sms",
+                provider_name=provider.provider_name,
+                recipient_identifier=payload.recipient_id,
+                content=payload.body or payload.title,
+                message_type="text",
+                content_structured={"title": payload.title},
+                idempotency_key=f"notify:sms:{payload.recipient_id}:{payload.title}",
+            )
+            resp = await provider.send(outbound_dto)
+            return bool(resp.success)
+        except Exception as e:
+            logger.error(f"[NOTIFY: sms] Failed to dispatch SMS notification: {e}")
+            return False

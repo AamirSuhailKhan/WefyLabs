@@ -25,7 +25,8 @@ class Lead(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
@@ -45,16 +46,19 @@ class Lead(Base):
     source: Mapped[str] = mapped_column(
         String(50),
         default="manual",
+        server_default=text("'manual'"),
         nullable=False
     )
     score: Mapped[str] = mapped_column(
         String(20),
         default="pending",
+        server_default=text("'pending'"),
         nullable=False
     )
     score_confidence: Mapped[float] = mapped_column(
         Float,
         default=0.0,
+        server_default=text("0.0"),
         nullable=False
     )
     budget_min: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
@@ -64,6 +68,7 @@ class Lead(Base):
     preferred_locations: Mapped[List[str]] = mapped_column(
         PreferredLocationsType,
         default=list,
+        server_default=text("'{}'"),
         nullable=False
     )
     timeline: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -71,11 +76,13 @@ class Lead(Base):
     status: Mapped[str] = mapped_column(
         String(20),
         default="pending",
+        server_default=text("'pending'"),
         nullable=False
     )
     pipeline_stage: Mapped[str] = mapped_column(
         String(100),  # No DB CheckConstraint — validated by RegionalPipelineService
         default="new",
+        server_default=text("'new'"),
         nullable=False
     )
     # ── Global / Multi-Country Fields ──────────────────────────────────────────
@@ -86,7 +93,7 @@ class Lead(Base):
     )  # FK to markets.id (nullable — no FK enforced here to avoid circular dep in test isolation)
     locale: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)          # "en-AE", "ar-AE"
     # Confidence of country inference (0.0 - 1.0)
-    country_confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    country_confidence: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"), nullable=False)
     # phone | form | declared | property_location | crm_data | ip (lowest confidence)
     country_inference_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # Budget with explicit currency — never store budget without currency
@@ -94,6 +101,7 @@ class Lead(Base):
     notes: Mapped[List[Dict[str, Any]]] = mapped_column(
         JSONBType,
         default=list,
+        server_default=text("'[]'"),
         nullable=False
     )
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

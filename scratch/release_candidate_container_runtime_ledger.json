@@ -1,0 +1,61 @@
+{
+  "Container_Runtime_1A_Prod_At_0047_Fails_Closed": {
+    "scenario": "Container_Runtime_1A_Prod_At_0047_Fails_Closed",
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "rev_after": "0047_webhook_event_claims",
+      "stdout": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0047_webhook_event_claims\n[FATAL] Deployed database revision mismatch!\nEnvironment:                production\nExpected authoritative head: 0050_broker_subscription_constraint_parity\nFound database revision:     0047_webhook_event_claims\nAutomatic migrations are disabled on normal container startup to prevent concurrent DDL.\nAn authorized operator must execute 'python scripts/release_migration.py' before starting this release.\n"
+    }
+  },
+  "Container_Runtime_1B_Prod_At_0048_Fails_Closed": {
+    "scenario": "Container_Runtime_1B_Prod_At_0048_Fails_Closed",
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "rev_after": "0048_schema_reconciliation_parity",
+      "stdout": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0048_schema_reconciliation_parity\n[FATAL] Deployed database revision mismatch!\nEnvironment:                production\nExpected authoritative head: 0050_broker_subscription_constraint_parity\nFound database revision:     0048_schema_reconciliation_parity\nAutomatic migrations are disabled on normal container startup to prevent concurrent DDL.\nAn authorized operator must execute 'python scripts/release_migration.py' before starting this release.\n"
+    }
+  },
+  "Container_Runtime_1C_Reject_Startup_Migrations": {
+    "scenario": "Container_Runtime_1C_Reject_Startup_Migrations",
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "stdout": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[FATAL] RUN_MIGRATIONS_ON_STARTUP=true is rejected.\nIn-process migrations on container boot are permanently disabled to prevent concurrent DDL races.\nThe dedicated release runner 'python scripts/release_migration.py' must be executed during maintenance windows.\nAborting startup.\n"
+    }
+  },
+  "Container_Runtime_1D_Prod_At_0050_Succeeds": {
+    "scenario": "Container_Runtime_1D_Prod_At_0050_Succeeds",
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "stdout": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0050_broker_subscription_constraint_parity\n[BeetleLabs] Schema verified at required head '0050_broker_subscription_constraint_parity'. Proceeding with API server startup.\n[BeetleLabs] DRY_RUN_VALIDATION_ONLY=true. Pre-flight startup validation passed. Exiting cleanly.\n"
+    }
+  },
+  "Container_Runtime_1E_Dedicated_Runner_Upgrades_0047_To_0050": {
+    "scenario": "Container_Runtime_1E_Dedicated_Runner_Upgrades_0047_To_0050",
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "final_rev": "0050_broker_subscription_constraint_parity",
+      "stdout": "\nResult:\n{\n  \"status\": \"MIGRATION_SUCCESSFUL\",\n  \"initial_revision\": \"0047_webhook_event_claims\",\n  \"final_revision\": \"0050_broker_subscription_constraint_parity\",\n  \"target_head\": \"0050_broker_subscription_constraint_parity\",\n  \"sanitized_url\": \"postgresql://***:***@postgres:5432/rc_disposable_0047\"\n}\n"
+    }
+  },
+  "Container_Runtime_1F_Dedicated_Runner_Safe_NoOp_At_0050": {
+    "scenario": "Container_Runtime_1F_Dedicated_Runner_Safe_NoOp_At_0050",
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "stdout": "\nResult:\n{\n  \"status\": \"ALREADY_AT_HEAD\",\n  \"revision\": \"0050_broker_subscription_constraint_parity\",\n  \"target_head\": \"0050_broker_subscription_constraint_parity\",\n  \"sanitized_url\": \"postgresql://***:***@postgres:5432/rc_disposable_0047\"\n}\n"
+    }
+  },
+  "Container_Runtime_1G_Reject_Port_6543_Via_Target_Env": {
+    "scenario": "Container_Runtime_1G_Reject_Port_6543_Via_Target_Env",
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "stderr": "2026-10-30 06:59:28,141 [INFO] ==================================================================\n2026-10-30 06:59:28,141 [INFO] WEFYLABS AUTHORIZED RELEASE MIGRATION RUNNER\n2026-10-30 06:59:28,141 [INFO] Target Database:   postgresql://***:***@postgres:6543/rc_disposable_0047\n2026-10-30 06:59:28,141 [INFO] Target Host:       postgres:6543\n2026-10-30 06:59:28,141 [INFO] Target Schema DB:   rc_disposable_0047\n2026-10-30 06:59:28,142 [INFO] Target Head Rev:   0050_broker_subscription_constraint_parity\n2026-10-30 06:59:28,142 [INFO] Dry Run Mode:      False\n2026-10-30 06:59:28,142 [INFO] ==================================================================\n2026-10-30 06:59:28,142 [ERROR] [FATAL MIGRATION FAILURE] RuntimeError: FATAL: Target port 6543 detected (Supabase Transaction Pooler). Transaction pooling mode does NOT support DDL operations, advisory locks, or prepared statements. Connect using Session Mode (port 5432) or the direct database connection.\n"
+    }
+  }
+}

@@ -22,7 +22,8 @@ from decimal import Decimal
 from typing import Optional, Any
 from sqlalchemy import (
     String, Text, DateTime, Boolean, Integer, Numeric,
-    JSON, Index, UniqueConstraint, ForeignKey, Enum as SAEnum
+    JSON, Index, UniqueConstraint, ForeignKey, Enum as SAEnum,
+    CHAR, TypeDecorator
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,7 +31,45 @@ from app.database import Base
 
 JSONBType = JSONB().with_variant(JSON(), "sqlite")
 NumericType = Numeric(precision=20, scale=4)  # Decimal-safe — NEVER use Float for budget
-UUIDType = UUID(as_uuid=True).with_variant(String(36), "sqlite")
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses native UUID(as_uuid=True) to match Lead.id and Organization.id.
+    Strictly validates and coerces string UUIDs to Python uuid.UUID objects.
+    Rejects invalid UUID values by raising ValueError rather than silently returning unconverted values.
+    """
+    impl = UUID(as_uuid=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        if isinstance(value, str):
+            try:
+                return uuid.UUID(value)
+            except (ValueError, AttributeError) as err:
+                raise ValueError(
+                    f"Invalid UUID string passed to GUID column: {value!r}. Must be a valid 32- or 36-character hexadecimal UUID string."
+                ) from err
+        raise TypeError(
+            f"Expected uuid.UUID or valid UUID str, got {type(value).__name__}: {value!r}"
+        )
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, AttributeError) as err:
+            raise ValueError(
+                f"Invalid UUID data encountered in database result for GUID column: {value!r}."
+            ) from err
+
+UUIDType = GUID()
 
 
 def _gen_uuid() -> str:
@@ -152,7 +191,7 @@ class LeadSource(Base):
     # Rate limiting config per source
     rate_limit_per_hour: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, insert_default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -487,10 +526,14 @@ class SourceAttribution(Base):
     __tablename__ = "source_attributions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_gen_uuid)
-    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    organization_id: Mapped[Any] = mapped_column(
+        UUIDType, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     # The canonical CRM Lead this attribution belongs to
-    lead_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    lead_id: Mapped[Optional[Any]] = mapped_column(
+        UUIDType, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Acquisition provenance
     source_id: Mapped[Optional[str]] = mapped_column(

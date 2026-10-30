@@ -528,6 +528,13 @@ class TestPhaseOSystemContracts:
                 "0041_master_build_14_intelligence",
                 "0042_phase2c_pilot_tables",
                 "0043_schema_drift_remediation",
+                "0044_token_blacklist_revocation",
+                "0045_broker_auth_version",
+                "0046_broker_google_subject",
+                "0047_webhook_event_claims",
+                "0048_schema_reconciliation_parity",
+                "0049_source_attribution_uuid_parity",
+                "0050_broker_subscription_constraint_parity",
             ]
         )
         assert has_valid_head, (
@@ -598,7 +605,9 @@ class TestPhaseOSystemContracts:
         main_py = pathlib.Path(__file__).parent.parent / "app" / "main.py"
         with open(str(main_py)) as f:
             content = f.read()
-        idx = content.find("create_all")
+        idx = content.find("Base.metadata.create_all")
+        if idx == -1:
+            idx = content.find("create_all")
         assert idx != -1, "create_all not found in main.py"
         before = content[max(0, idx - 500):idx]
         assert any(kw in before for kw in ["is_prod", "ENV", "production"]), (

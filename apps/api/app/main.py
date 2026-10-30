@@ -125,19 +125,36 @@ async def lifespan(app: FastAPI):
     # Perform startup domain subscriber registration & DB schema integrity check
     try:
         register_default_subscribers()
-        # In production, Alembic is the authoritative migration tool.
-        # create_all() is only run in development/testing for convenience.
-        is_prod = settings.ENV.lower() in ("production", "prod", "staging")
-        if not is_prod:
+        # ARCH-STARTUP-03: Prevent unversioned DDL drift.
+        # Alembic is the authoritative schema migration tool.
+        # create_all() is strictly bypassed for PostgreSQL to prevent drift,
+        # and only permitted if explicitly enabled via AUTO_CREATE_SCHEMA_ON_STARTUP=True
+        # or when running SQLite in-memory test suites.
+        is_sqlite = engine.dialect.name == "sqlite"
+        auto_create = getattr(settings, "AUTO_CREATE_SCHEMA_ON_STARTUP", False)
+        is_prod = getattr(settings, "ENV", "development").lower() in ("production", "prod", "staging")
+
+        if auto_create and not is_sqlite and is_prod:
+            raise RuntimeError(
+                "[DB Security Violation] AUTO_CREATE_SCHEMA_ON_STARTUP=True is strictly forbidden "
+                "for non-SQLite databases in production/staging! Alembic migrations are authoritative."
+            )
+
+        if is_sqlite or (auto_create and not is_prod):
             async with engine.begin() as conn:
                 from app.models import Base
                 await conn.run_sync(Base.metadata.create_all)
-            _startup_logger.info("[DB] Development schema sync complete via create_all")
+            _startup_logger.info(
+                f"[DB] Schema initialized via create_all (dialect={engine.dialect.name}, auto_create={auto_create})"
+            )
         else:
             _startup_logger.info(
-                "[DB] Production mode: schema managed by Alembic migrations — skipping create_all"
+                f"[DB] Schema managed by Alembic migrations — create_all bypassed (dialect={engine.dialect.name})"
             )
     except Exception as e:
+        if isinstance(e, RuntimeError) and "[DB Security Violation]" in str(e):
+            _startup_logger.critical(f"[FATAL STARTUP ERROR] {e}")
+            raise
         _startup_logger.warning(f"[DB Startup Warning] {e}")
 
     # Safe Google OAuth 2.0 startup configuration diagnostic (no secrets exposed)
@@ -150,6 +167,14 @@ async def lifespan(app: FastAPI):
         f"client_id_format: {'valid' if validate_google_client_id(cid) else 'unconfigured_or_placeholder'} | "
         f"redirect_uri: {settings.GOOGLE_OAUTH_REDIRECT_URI}"
     )
+
+    # Warm up communication channel manager to eliminate lazy first-request latency spikes
+    try:
+        from app.modules.communication.channel_manager.manager import get_channel_manager
+        get_channel_manager()
+        _startup_logger.info("[Startup] Communication ChannelManager pre-warmed.")
+    except Exception as e:
+        _startup_logger.warning(f"[Startup Warning] ChannelManager pre-warm: {e}")
 
     yield
     # Perform shutdown cleanup
@@ -191,7 +216,6 @@ from app.presentation.api.v1.properties import router as properties_router
 from app.presentation.api.v1.transactions import router as transactions_router
 from app.presentation.api.v1.copilot import router as copilot_router
 from app.presentation.api.v1.predictive import router as predictive_router
-from app.presentation.api.v1.workflows import router as workflows_router
 from app.presentation.api.v1.performance import router as performance_router
 from app.presentation.api.v1.portal import router as portal_router
 from app.presentation.api.v1.mobile import router as mobile_router
@@ -223,9 +247,7 @@ from app.modules.calendar.router import router as calendar_router
 app.include_router(health_router)
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
-app.include_router(auth_router)
 app.include_router(invitations_router, prefix=settings.API_V1_STR)
-app.include_router(invitations_router)
 app.include_router(brokers_router, prefix=settings.API_V1_STR)
 app.include_router(leads_router, prefix=settings.API_V1_STR)
 app.include_router(clean_leads_v1_router, prefix=settings.API_V1_STR)
@@ -244,9 +266,15 @@ app.include_router(event_history_router, prefix=settings.API_V1_STR)
 app.include_router(system_health_router, prefix=settings.API_V1_STR)
 
 # ─── Part 7 — Enterprise Search Platform Routers ────────────────────────────────
-app.include_router(search_platform_router, prefix=settings.API_V1_STR)
-app.include_router(saved_searches_router, prefix=settings.API_V1_STR)
-app.include_router(search_history_router, prefix=settings.API_V1_STR)
+# Canonical routes: /api/v1/search, /api/v1/saved-searches, /api/v1/search/history
+app.include_router(search_platform_router, prefix="/api")
+app.include_router(saved_searches_router, prefix="/api")
+app.include_router(search_history_router, prefix="/api")
+
+# Backward-compatibility aliases: /api/v1/v1/* (preserves existing API consumers)
+app.include_router(search_platform_router, prefix=settings.API_V1_STR, include_in_schema=False)
+app.include_router(saved_searches_router, prefix=settings.API_V1_STR, include_in_schema=False)
+app.include_router(search_history_router, prefix=settings.API_V1_STR, include_in_schema=False)
 
 # ─── Part 8 — Enterprise Observability & Reliability Routers ───────────────────
 app.include_router(prometheus_metrics_router)
@@ -296,7 +324,6 @@ app.include_router(properties_router, prefix=settings.API_V1_STR)
 app.include_router(transactions_router, prefix=settings.API_V1_STR)
 app.include_router(copilot_router, prefix=settings.API_V1_STR)
 app.include_router(predictive_router, prefix=settings.API_V1_STR)
-app.include_router(workflows_router, prefix=settings.API_V1_STR)
 app.include_router(performance_router, prefix=settings.API_V1_STR)
 app.include_router(portal_router, prefix=settings.API_V1_STR)
 app.include_router(mobile_router, prefix=settings.API_V1_STR)
@@ -315,7 +342,6 @@ app.include_router(recommendation_router, prefix=settings.API_V1_STR)
 
 # ─── Volume 2 Part 8 — AI Follow-Up & Autonomous Lead Nurturing Engine ─────────
 app.include_router(enterprise_follow_up_router, prefix=settings.API_V1_STR)
-app.include_router(enterprise_follow_up_router, prefix="/api")
 
 # ─── Volume 2 Part 10 — CRM Intelligence & Autonomous Sales Operations Engine ──
 app.include_router(crm_intelligence_router)

@@ -5,11 +5,23 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
-# Phase 0 P0.1: pin the testing environment BEFORE any application module is
-# imported. This guarantees the OAuth state/replay store uses its bounded
-# in-memory backend (deterministic tests) and mock-disabled production paths
-# stay disabled regardless of the developer's local .env.
+# Phase 0 P0.1: Ensure default testing environment before application imports.
+# This guarantees OAuth state/replay store uses bounded in-memory backend and
+# mock-disabled production paths stay disabled regardless of local .env.
 os.environ.setdefault("ENV", "testing")
+from app.config import settings
+
+@pytest.fixture(autouse=True)
+def scope_test_environment(monkeypatch):
+    """Enforces strict per-test environment isolation.
+    Guarantees default ENV is 'testing' for each test, while allowing individual
+    tests to monkeypatch or patch settings.ENV to 'development' or 'production'
+    without leaking side-effects across test runs."""
+    monkeypatch.setenv("ENV", "testing")
+    monkeypatch.setattr(settings, "ENV", "testing")
+    yield
+
+
 
 from app.models import Base, Broker, Lead  # noqa: E402
 

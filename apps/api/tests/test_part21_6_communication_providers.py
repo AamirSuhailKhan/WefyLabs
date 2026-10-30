@@ -904,6 +904,7 @@ async def test_duplicate_webhook_deduplication(db_session: AsyncSession):
 
     # Pre-insert existing
     item = InboundQueue(
+        organization_id=str(uuid.uuid4()),
         idempotency_key=idem_key,
         channel="whatsapp",
         provider_name="whatsapp_cloud",

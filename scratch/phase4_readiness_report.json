@@ -1,0 +1,20 @@
+{
+  "verified_revision": "0050_broker_subscription_constraint_parity",
+  "existing_attributions_preserved": 3,
+  "source_attribution_columns": {
+    "lead_id": [
+      "uuid",
+      "YES"
+    ],
+    "organization_id": [
+      "uuid",
+      "NO"
+    ]
+  },
+  "broker_constraint_checks": "PASSED (accepted pro_monthly and paused)",
+  "orm_insert": "PASSED",
+  "orm_query_by_uuid": "PASSED",
+  "orm_relational_join": "PASSED",
+  "orm_delete_set_null": "PASSED",
+  "tenant_isolation": "PASSED"
+}

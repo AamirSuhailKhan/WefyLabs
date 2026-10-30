@@ -1,0 +1,402 @@
+{
+  "leadscore_0048": {
+    "database": "leadscore (0048)",
+    "revision": "0048_schema_reconciliation_parity",
+    "table_counts": {
+      "leads": 4,
+      "organizations": 7,
+      "brokers": 8,
+      "organization_members": 7,
+      "source_attributions": 3,
+      "tasks": 4
+    },
+    "source_attributions_columns": [
+      {
+        "column": "id",
+        "type": "character varying",
+        "nullable": "NO",
+        "default": null
+      },
+      {
+        "column": "organization_id",
+        "type": "character varying",
+        "nullable": "NO",
+        "default": null
+      },
+      {
+        "column": "lead_id",
+        "type": "character varying",
+        "nullable": "NO",
+        "default": null
+      },
+      {
+        "column": "source_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "campaign_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "acquisition_event_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "prospect_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "channel",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "provider",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "external_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "landing_page",
+        "type": "text",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "referrer",
+        "type": "text",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_source",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_medium",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_campaign",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_term",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_content",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "first_touch_at",
+        "type": "timestamp with time zone",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "last_touch_at",
+        "type": "timestamp with time zone",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "created_at",
+        "type": "timestamp with time zone",
+        "nullable": "NO",
+        "default": null
+      }
+    ],
+    "source_attributions_constraints": [
+      {
+        "name": "source_attributions_acquisition_event_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (acquisition_event_id) REFERENCES lead_acquisition_events(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_campaign_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (campaign_id) REFERENCES lead_campaigns(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "source_attributions_prospect_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (prospect_id) REFERENCES lead_prospects(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_source_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (source_id) REFERENCES lead_sources(id) ON DELETE SET NULL"
+      }
+    ],
+    "source_attributions_samples": [
+      {
+        "id": "8ec5d3f6-d0e7-44e9-8349-60596166d36b",
+        "organization_id": "35c904e8-1d5a-41d9-a54e-2dc2e93f4a9d",
+        "lead_id": "dac1a157-657b-4e48-8e76-f5469ee2af6b",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 08:51:21.242303+00:00"
+      },
+      {
+        "id": "061baa67-3f42-456a-a06d-f9dc5fd2144b",
+        "organization_id": "ccd09e2e-5732-4142-adec-66c560b4629d",
+        "lead_id": "5c8dd178-ec1a-4d58-8b2c-35de346dc981",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 08:56:48.395942+00:00"
+      },
+      {
+        "id": "b42226f6-a2af-46c1-a63e-60aab53cd6bf",
+        "organization_id": "352a376a-a4e9-4bbe-b4ae-b5aa39f52657",
+        "lead_id": "07d39718-ec8a-4ccd-847f-30b174d6699b",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 09:56:14.231827+00:00"
+      }
+    ]
+  },
+  "leadscore_pilot_0049": {
+    "database": "leadscore_pilot (0049)",
+    "revision": "0049_source_attribution_uuid_parity",
+    "table_counts": {
+      "leads": 6,
+      "organizations": 7,
+      "brokers": 8,
+      "organization_members": 7,
+      "source_attributions": 5,
+      "tasks": 4
+    },
+    "source_attributions_columns": [
+      {
+        "column": "id",
+        "type": "character varying",
+        "nullable": "NO",
+        "default": null
+      },
+      {
+        "column": "organization_id",
+        "type": "uuid",
+        "nullable": "NO",
+        "default": null
+      },
+      {
+        "column": "lead_id",
+        "type": "uuid",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "source_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "campaign_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "acquisition_event_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "prospect_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "channel",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "provider",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "external_id",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "landing_page",
+        "type": "text",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "referrer",
+        "type": "text",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_source",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_medium",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_campaign",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_term",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "utm_content",
+        "type": "character varying",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "first_touch_at",
+        "type": "timestamp with time zone",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "last_touch_at",
+        "type": "timestamp with time zone",
+        "nullable": "YES",
+        "default": null
+      },
+      {
+        "column": "created_at",
+        "type": "timestamp with time zone",
+        "nullable": "NO",
+        "default": null
+      }
+    ],
+    "source_attributions_constraints": [
+      {
+        "name": "fk_source_attributions_lead_id",
+        "type": "f",
+        "definition": "FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "fk_source_attributions_organization_id",
+        "type": "f",
+        "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "source_attributions_acquisition_event_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (acquisition_event_id) REFERENCES lead_acquisition_events(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_campaign_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (campaign_id) REFERENCES lead_campaigns(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "source_attributions_prospect_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (prospect_id) REFERENCES lead_prospects(id) ON DELETE SET NULL"
+      },
+      {
+        "name": "source_attributions_source_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (source_id) REFERENCES lead_sources(id) ON DELETE SET NULL"
+      }
+    ],
+    "source_attributions_samples": [
+      {
+        "id": "8ec5d3f6-d0e7-44e9-8349-60596166d36b",
+        "organization_id": "35c904e8-1d5a-41d9-a54e-2dc2e93f4a9d",
+        "lead_id": "dac1a157-657b-4e48-8e76-f5469ee2af6b",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 08:51:21.242303+00:00"
+      },
+      {
+        "id": "061baa67-3f42-456a-a06d-f9dc5fd2144b",
+        "organization_id": "ccd09e2e-5732-4142-adec-66c560b4629d",
+        "lead_id": "5c8dd178-ec1a-4d58-8b2c-35de346dc981",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 08:56:48.395942+00:00"
+      },
+      {
+        "id": "b42226f6-a2af-46c1-a63e-60aab53cd6bf",
+        "organization_id": "352a376a-a4e9-4bbe-b4ae-b5aa39f52657",
+        "lead_id": "07d39718-ec8a-4ccd-847f-30b174d6699b",
+        "channel": "WEBSITE",
+        "provider": "crm_manual",
+        "created_at": "2026-10-25 09:56:14.231827+00:00"
+      },
+      {
+        "id": "f235ca90-1cc2-4f98-8d1a-a3d764e5c16e",
+        "organization_id": "daa81693-c613-48ce-9fe9-bdc031bebfb2",
+        "lead_id": "9cb7b14a-0a0b-4429-911e-a26874169887",
+        "channel": "manual",
+        "provider": "crm_manual",
+        "created_at": "2026-10-29 07:51:06.772044+00:00"
+      },
+      {
+        "id": "9b6256f9-3884-440e-9884-0034f3317d6d",
+        "organization_id": "daa81693-c613-48ce-9fe9-bdc031bebfb2",
+        "lead_id": "f024f84b-fa74-43c9-a1f5-2591a9225a75",
+        "channel": "manual",
+        "provider": "crm_manual",
+        "created_at": "2026-10-29 08:49:13.962940+00:00"
+      }
+    ]
+  }
+}

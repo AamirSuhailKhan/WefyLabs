@@ -188,7 +188,7 @@ class TestWhatsAppWebhookIntegration:
             content=b"not-json",
             headers={"Content-Type": "application/json"},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
 
     async def test_webhook_does_not_expose_exception_detail(self, client):
         resp = await client.post(

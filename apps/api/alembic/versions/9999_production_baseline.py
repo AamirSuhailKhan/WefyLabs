@@ -105,12 +105,83 @@ branch_labels = None
 depends_on = None
 
 
+POST_MERGE_TABLES = {
+    "ai_action_authorizations", "ai_action_outcomes", "ai_contribution_records",
+    "ai_request_records", "attribution_results", "attribution_touchpoints",
+    "benchmark_definitions", "benchmark_snapshots", "billing_accounts",
+    "billing_adjustments", "billing_customers", "billing_periods",
+    "booking_intents", "booking_reconciliation_tasks", "campaign_approvals",
+    "campaign_audit_logs", "campaign_events", "campaign_listing_links",
+    "canonical_invoice_lines", "canonical_invoices", "canonical_subscriptions",
+    "channel_partners", "command_center_dismissals", "commitments",
+    "copilot_conversations", "copilot_messages", "cost_events",
+    "cp_commissions", "cp_project_agreements", "credit_balances",
+    "credit_ledger_entries", "credit_notes", "customer_payment_proofs",
+    "customer_portal_invites", "customer_support_requests",
+    "customer_transaction_acknowledgements", "data_quality_issues",
+    "deal_approval_requests", "deal_bookings", "deal_closings",
+    "deal_commercial_audit_logs", "deal_commissions", "deal_documents",
+    "deal_offers", "deal_post_sales", "deal_reservations",
+    "deal_stage_history", "deals", "demo_sessions",
+    "drift_alert_records", "entitlement_consumptions", "entitlement_grants",
+    "experiment_assignments", "experiment_conversions", "experiment_variants",
+    "experiments", "follow_up_automation_events", "follow_up_rules",
+    "forecast_snapshots_v2", "funnel_transition_records", "insight_records",
+    "intelligence_snapshots", "inventory_availability_snapshots",
+    "lead_automation_states", "lead_property_interests", "learning_events",
+    "listing_distributions", "marketing_assets", "marketing_campaigns",
+    "marketing_landing_pages", "metric_definitions", "negotiation_rounds",
+    "objection_records", "onboarding_states", "opportunity_stage_history",
+    "organization_invitations", "organization_learning_profiles",
+    "outbox_events", "outcome_events", "password_reset_tokens",
+    "payment_audit_logs", "payment_orders", "payment_refunds",
+    "payment_transactions", "payment_webhook_events", "pilot_action_records",
+    "pilot_approval_items", "pilot_audit_events", "pilot_evidence_records",
+    "pilot_human_decisions", "pilot_metric_snapshots", "pilot_observations",
+    "pilot_stage_transitions", "pilot_tenants", "pipeline_stage_configs",
+    "plan_entitlements", "plan_versions", "plans",
+    "policy_registry_entries", "price_book_entries", "project_buildings",
+    "project_floors", "project_launches", "project_media",
+    "project_phases", "project_price_books", "project_unit_status_logs",
+    "project_units", "property_listing_publications",
+    "property_payment_transactions", "property_shortlists",
+    "real_estate_developers", "real_estate_projects",
+    "recommendation_quality_snapshots", "revenue_anomalies", "revenue_events",
+    "revenue_feedback_logs", "revenue_funnel_snapshots",
+    "revenue_leakage_events", "revenue_leakage_events_v2",
+    "revenue_opportunities", "revenue_reconciliation_records",
+    "sales_loop_audit_entries", "sales_loop_dead_letters",
+    "sales_loop_events", "sales_outcome_edges", "sales_pipelines",
+    "site_visit_outcomes", "site_visits", "subscription_items",
+    "tenant_activations", "token_blacklist", "tracking_links",
+    "unit_economics_records", "unit_economics_snapshots", "unit_holds",
+    "usage_aggregates", "usage_events", "usage_meters", "webhook_event_claims"
+}
+
+
 def upgrade() -> None:
-    # INTENTIONALLY EMPTY -- stamp-only baseline.
-    # All 215 tables already exist in production Supabase.
-    # Run:     python -m alembic stamp 9999_production_baseline
-    # DO NOT:  python -m alembic upgrade 9999_production_baseline
-    pass
+    # Production Baseline:
+    # Path 2 (Existing database): If baseline tables (e.g. organizations) already exist,
+    # this is a no-op, preserving existing data and state.
+    # Path 1 (Fresh database): Provisions untracked baseline tables catalogued in this baseline.
+    bind = op.get_bind()
+    curr_schema = bind.execute(sa.text("SELECT current_schema()")).scalar()
+    insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names(schema=curr_schema))
+
+    if "organizations" in existing_tables:
+        return
+
+    from app.database import Base
+    import app.models
+
+    baseline_tables = [
+        t for name, t in Base.metadata.tables.items()
+        if name not in POST_MERGE_TABLES and name not in existing_tables
+    ]
+
+    if baseline_tables:
+        Base.metadata.create_all(bind, tables=baseline_tables, checkfirst=False)
 
 
 def downgrade() -> None:

@@ -64,18 +64,14 @@ if CELERY_AVAILABLE and celery_app:
 
         Runs: normalize → deduplicate → quality score → AI extraction
         """
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(
+            return run_async(
                 _async_process_acquisition_event(organization_id, prospect_id, source_id)
             )
         except Exception as exc:
             logger.error(f"[ACQ_TASK] process_acquisition_event failed: {exc}")
             raise self.retry(exc=exc)
-        finally:
-            loop.close()
 
     @celery_app.task(
         name="lead_acquisition.async_ai_extract_fields",
@@ -85,18 +81,14 @@ if CELERY_AVAILABLE and celery_app:
     )
     def async_ai_extract_fields(self, organization_id: str, prospect_id: str):
         """Async AI field extraction for a prospect."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(
+            return run_async(
                 _async_ai_extract(organization_id, prospect_id)
             )
         except Exception as exc:
             logger.warning(f"[ACQ_TASK] AI extraction failed for prospect {prospect_id}: {exc}")
             # AI extraction failure is non-fatal — log and continue
-        finally:
-            loop.close()
 
     @celery_app.task(
         name="lead_acquisition.retry_failed_acquisition",
@@ -125,18 +117,14 @@ if CELERY_AVAILABLE and celery_app:
         event_data: dict,
     ):
         """Async task to retrieve Meta lead data from Graph API and ingest."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(
+            return run_async(
                 _async_fetch_and_ingest_meta_lead(organization_id, source_id, leadgen_id, event_data)
             )
         except Exception as exc:
             logger.error(f"[ACQ_TASK] fetch_and_ingest_meta_lead failed: {exc}")
             raise self.retry(exc=exc)
-        finally:
-            loop.close()
 
 else:
     # No-op stubs when Celery unavailable (test environments)

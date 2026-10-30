@@ -1,0 +1,167 @@
+{
+  "Phase2_Client_Version_Check": {
+    "scenario": "Phase2_Client_Version_Check",
+    "target_database": "pg17://127.0.0.1:5433/postgres",
+    "expected_result": "pg_dump >= 17.0 and pg_restore >= 17.0 matching server 17.x",
+    "actual_result": "dump=pg_dump (PostgreSQL) 17.11, restore=pg_restore (PostgreSQL) 17.11, server=17.11",
+    "status": "PASSED",
+    "details": {
+      "dump_ver": "pg_dump (PostgreSQL) 17.11",
+      "restore_ver": "pg_restore (PostgreSQL) 17.11",
+      "server_ver": "17.11"
+    }
+  },
+  "Phase2_PG17_pg_dump_Env_Injection": {
+    "scenario": "Phase2_PG17_pg_dump_Env_Injection",
+    "target_database": "pg17://127.0.0.1:5433/preflight_pg17_backup_src",
+    "expected_result": "Exit Code 0 and valid compressed archive",
+    "actual_result": "rc=0, bytes=11092",
+    "status": "PASSED",
+    "details": {
+      "stderr": ""
+    }
+  },
+  "Phase2_PG17_Catalog_Inspection": {
+    "scenario": "Phase2_PG17_Catalog_Inspection",
+    "target_database": "pg17://127.0.0.1:5433/preflight_pg17_backup_src",
+    "expected_result": "Exit Code 0 and catalog contains all tables",
+    "actual_result": "rc=0, entries=40",
+    "status": "PASSED",
+    "details": {
+      "toc_entries": 40
+    }
+  },
+  "Phase2_PG17_Data_And_Schema_Parity": {
+    "scenario": "Phase2_PG17_Data_And_Schema_Parity",
+    "target_database": "pg17://127.0.0.1:5433/preflight_pg17_restore_tgt",
+    "expected_result": "Exact count parity across organizations, brokers, subscriptions, leads, attributions",
+    "actual_result": "orgs=1/1, brokers=1/1, subs=1/1, leads=1/1, attrs=1/1",
+    "status": "PASSED",
+    "details": {
+      "restored_rev": "0050_broker_subscription_constraint_parity"
+    }
+  },
+  "Phase3A_Clean_DB_Quiescent_Boundary": {
+    "scenario": "Phase3A_Clean_DB_Quiescent_Boundary",
+    "target_database": "pg16://127.0.0.1:5432/preflight_quiescence_test",
+    "expected_result": "0 active or in-transaction sessions",
+    "actual_result": "found 0 non-idle sessions",
+    "status": "PASSED",
+    "details": {
+      "rows": []
+    }
+  },
+  "Phase3B_Detect_Idle_In_Transaction_Writer": {
+    "scenario": "Phase3B_Detect_Idle_In_Transaction_Writer",
+    "target_database": "pg16://127.0.0.1:5432/preflight_quiescence_test",
+    "expected_result": "Quiescence check REJECTS open write transaction (state='idle in transaction')",
+    "actual_result": "detected=True, count=1",
+    "status": "PASSED",
+    "details": {
+      "sessions_detected": [
+        "pid=41641, state=idle in transaction, xact_start=2026-10-29 15:12:58.059581+00:00"
+      ]
+    }
+  },
+  "Phase3C_Quiescence_Restored_After_Drain": {
+    "scenario": "Phase3C_Quiescence_Restored_After_Drain",
+    "target_database": "pg16://127.0.0.1:5432/preflight_quiescence_test",
+    "expected_result": "0 non-idle sessions after transaction commit and client close",
+    "actual_result": "count=0",
+    "status": "PASSED",
+    "details": {
+      "count": 0
+    }
+  },
+  "Phase4A_Target_Consistency_Overrides_Conflicting_Env": {
+    "scenario": "Phase4A_Target_Consistency_Overrides_Conflicting_Env",
+    "target_database": "postgresql://postgres:postgres@127.0.0.1:5432/preflight_runner_target_test",
+    "expected_result": "Alembic upgrades intended target URL despite conflicting DATABASE_URL in environment",
+    "actual_result": "rc=0, final_rev=0050_broker_subscription_constraint_parity",
+    "status": "PASSED",
+    "details": {
+      "output_summary": [
+        "  \"final_revision\": \"0050_broker_subscription_constraint_parity\",",
+        "  \"target_head\": \"0050_broker_subscription_constraint_parity\",",
+        "  \"sanitized_url\": \"postgresql://***:***@127.0.0.1:5432/preflight_runner_target_test\"",
+        "}"
+      ]
+    }
+  },
+  "Phase4B_Already_At_0050_Safe_NoOp": {
+    "scenario": "Phase4B_Already_At_0050_Safe_NoOp",
+    "target_database": "postgresql://postgres:postgres@127.0.0.1:5432/preflight_runner_target_test",
+    "expected_result": "Exit Code 0 and ALREADY_AT_HEAD status without DDL",
+    "actual_result": "rc=0, status=ALREADY_AT_HEAD",
+    "status": "PASSED",
+    "details": {
+      "stdout": [
+        "  \"status\": \"ALREADY_AT_HEAD\",",
+        "  \"revision\": \"0050_broker_subscription_constraint_parity\",",
+        "  \"target_head\": \"0050_broker_subscription_constraint_parity\",",
+        "  \"sanitized_url\": \"postgresql://***:***@127.0.0.1:5432/preflight_runner_target_test\"",
+        "}"
+      ]
+    }
+  },
+  "Phase4C_Reject_Port_6543_Transaction_Pooler": {
+    "scenario": "Phase4C_Reject_Port_6543_Transaction_Pooler",
+    "target_database": "postgresql://postgres:postgres@127.0.0.1:6543/preflight_runner_target_test",
+    "expected_result": "Exit Code 1 and explicit error rejecting transaction pooling mode",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "err": "2026-10-29 20:43:09,125 [INFO] ==================================================================\n2026-10-29 20:43:09,12"
+    }
+  },
+  "Phase5A_Absent_ENV_Fails_Closed": {
+    "scenario": "Phase5A_Absent_ENV_Fails_Closed",
+    "target_database": "N/A",
+    "expected_result": "Exit Code 1",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=unset\n[ERROR] Required environment v"
+    }
+  },
+  "Phase5B_Empty_ENV_Fails_Closed": {
+    "scenario": "Phase5B_Empty_ENV_Fails_Closed",
+    "target_database": "N/A",
+    "expected_result": "Exit Code 1",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=unset\n[ERROR] Required environment v"
+    }
+  },
+  "Phase5C_Malformed_ENV_Fails_Closed": {
+    "scenario": "Phase5C_Malformed_ENV_Fails_Closed",
+    "target_database": "N/A",
+    "expected_result": "Exit Code 1",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production_staging_hybrid\n[FATAL] In"
+    }
+  },
+  "Phase5D_Reject_Startup_Migrations": {
+    "scenario": "Phase5D_Reject_Startup_Migrations",
+    "target_database": "N/A",
+    "expected_result": "Exit Code 1",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[FATAL] RUN_MIGRATIONS_ON"
+    }
+  },
+  "Phase5E_Prod_Fails_On_Revision_0048": {
+    "scenario": "Phase5E_Prod_Fails_On_Revision_0048",
+    "target_database": "leadscore (rev 0048)",
+    "expected_result": "Exit Code 1",
+    "actual_result": "rc=1",
+    "status": "PASSED",
+    "details": {
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup i"
+    }
+  }
+}

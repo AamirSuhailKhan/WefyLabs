@@ -204,8 +204,9 @@ if celery_app:
     )
     def dispatch_due_follow_up_executions_task(self, limit: int = DEFAULT_BATCH_LIMIT) -> Dict[str, Any]:
         """Celery wrapper around :func:`dispatch_due_follow_up_executions`."""
+        from app.core.async_runner import run_async
         try:
-            return asyncio.run(dispatch_due_follow_up_executions(limit=limit))
+            return run_async(dispatch_due_follow_up_executions(limit=limit))
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("[FollowUpDispatch] Task crashed: %s", exc)
             if self.request.retries < self.max_retries:

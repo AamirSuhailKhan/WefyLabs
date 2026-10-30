@@ -1,28 +1,31 @@
 import asyncio
-import os
-from dotenv import load_dotenv
-
-load_dotenv('apps/api/.env')
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 
-async def inspect():
-    url = os.environ.get('DATABASE_URL')
-    engine = create_async_engine(url, poolclass=NullPool)
+async def main():
+    engine = create_async_engine("postgresql+asyncpg://postgres:postgres@localhost:5432/leadscore_pilot")
     async with engine.connect() as conn:
-        res = await conn.execute(text("""
-            SELECT table_name, column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name LIKE 'pilot_%'
-            ORDER BY table_name, ordinal_position
-        """))
-        curr = None
+        res = await conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'brokers'"))
+        cols = res.fetchall()
+        print("Columns in brokers:")
+        for col, dt in cols:
+            print(f"  {col}: {dt}")
+        
+        res = await conn.execute(text("SELECT id, email, name, auth_version FROM brokers LIMIT 5"))
+        print("\nBrokers:")
         for r in res.fetchall():
-            if r[0] != curr:
-                curr = r[0]
-                print(f"\n--- Table: {curr} ---")
-            print(f"  {r[1]} ({r[2]}, nullable={r[3]})")
+            print(" ", r)
+            
+        res = await conn.execute(text("SELECT id, name FROM organizations LIMIT 5"))
+        print("\nOrganizations:")
+        for r in res.fetchall():
+            print(" ", r)
 
-if __name__ == '__main__':
-    asyncio.run(inspect())
+        res = await conn.execute(text("SELECT broker_id, organization_id, role FROM organization_members LIMIT 5"))
+        print("\nOrganization Members:")
+        for r in res.fetchall():
+            print(" ", r)
+    await engine.dispose()
+
+if __name__ == "__main__":
+    asyncio.run(main())

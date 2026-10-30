@@ -1,0 +1,116 @@
+{
+  "manifest_version": "1.0.0",
+  "created_at": "2026-10-30T08:15:00Z",
+  "git_context": {
+    "branch": "level-3",
+    "base_head": "0383020a865fe315adfda4549f536a594fb10454",
+    "tracking_remote": "origin/level-3"
+  },
+  "target_release_candidate": {
+    "image_tag": "wefylabs-api:rc-0050",
+    "image_sha256": "747540e497957c7e937bd3e00925f749c8a5cde4c1a3b95f22572e89839da8c1",
+    "authoritative_alembic_head": "0050_broker_subscription_constraint_parity"
+  },
+  "scope_exclusions": {
+    "gemini_api_keys": "DEFERRED_BY_OWNER",
+    "ai_provider_configuration": "DEFERRED_BY_OWNER",
+    "live_ai_inference": "NOT_VERIFIED_IN_THIS_RUN"
+  },
+  "critical_artifacts": [
+    {
+      "path": "apps/api/app/models/acquisition_models.py",
+      "sha256": "b8a91dadac0e467d87d2218f77883cf30089123d6faf505c5022f12da26c5b20",
+      "size_bytes": 28390
+    },
+    {
+      "path": "apps/api/app/models/broker.py",
+      "sha256": "1ce511d5cd7a351269a20a154e43fc6de0a4bbfdc60dd2ae43d26f081ceef34c",
+      "size_bytes": 5434
+    },
+    {
+      "path": "apps/api/app/models/subscription.py",
+      "sha256": "26889bbad5698d6f2e256b048ad2ad6683ebbe778bc370bb3dfa7d56b9e8e28b",
+      "size_bytes": 2084
+    },
+    {
+      "path": "apps/api/alembic/versions/0048_schema_reconciliation_parity.py",
+      "sha256": "ff91f5efca5a6743f1ed172fd64b1576e993ad17cb9d05282d2ce14a4b005b51",
+      "size_bytes": 2630
+    },
+    {
+      "path": "apps/api/alembic/versions/0049_source_attribution_uuid_parity.py",
+      "sha256": "5248ec7648a08d314809672216d08f59317513ae2d3fcd228c4a17bc8afad054",
+      "size_bytes": 4259
+    },
+    {
+      "path": "apps/api/alembic/versions/0050_broker_subscription_constraint_parity.py",
+      "sha256": "4d8d83ffd1f208567d6a4035d7a3d772fed0f131ff8df77f24c7834b874e998f",
+      "size_bytes": 5969
+    },
+    {
+      "path": "apps/api/alembic/env.py",
+      "sha256": "ebb8ced00878d994e1ed44baf2ac6831b5174f0f6ea41286d899886a529415a6",
+      "size_bytes": 4545
+    },
+    {
+      "path": "apps/api/scripts/release_migration.py",
+      "sha256": "b813951adef63c6afe1bdb8db2b61171c5109bcce504ca9746ed3624bca44c39",
+      "size_bytes": 13278
+    },
+    {
+      "path": "apps/api/entrypoint.sh",
+      "sha256": "9cd47fc5ecfa77c1d265b1da1129167f51e1e58f8b03f2f1887d4c7f37282b70",
+      "size_bytes": 6068
+    },
+    {
+      "path": "apps/api/Dockerfile",
+      "sha256": "97f93e90021889a3455b47d76291c4d92aed171cc4ed5d32be63c1bf061df0a5",
+      "size_bytes": 298
+    },
+    {
+      "path": "apps/api/app/presentation/api/health.py",
+      "sha256": "d699d180fca90bcb670b3d67cb78bc26109d535e4ae06c2f73bf5505bd84363b",
+      "size_bytes": 14075
+    },
+    {
+      "path": "render.yaml",
+      "sha256": "f003707a9a9cf34a624550cdef84843ee46938b79fc35e0921aab9c5d42a2e82",
+      "size_bytes": 4544
+    },
+    {
+      "path": "apps/api/tests/test_source_attribution_regression.py",
+      "sha256": "5d856798b2daf376e117d8b356be05aab4b7465217f79c2d41275b79043b0444",
+      "size_bytes": 9984
+    },
+    {
+      "path": "scratch/test_container_release_candidate_runtime.py",
+      "sha256": "4632cca943b06e570919d3a1c928c228201146f8e22af366534e31cd3f89703b",
+      "size_bytes": 11734
+    },
+    {
+      "path": "scratch/test_release_invariant_hardening.py",
+      "sha256": "c492dbb7b6b8b8f5f928542d13a571e9c4d66816ed4bd0653f307d57ac289202",
+      "size_bytes": 24070
+    },
+    {
+      "path": "scratch/verify_live_supabase_smoke.py",
+      "sha256": "106478e9e62c8b0133cb92b8183816d77995db31c4a7826997426f63e415279a",
+      "size_bytes": 3564
+    },
+    {
+      "path": "scratch/restore_and_compare_backup.py",
+      "sha256": "835fe4ed46535265bc1f89059819242fa10439d74c3f89d664877bd0973a0179",
+      "size_bytes": 6510
+    },
+    {
+      "path": "backups/supabase_prod_backup_pre_resolution.dump",
+      "sha256": "e08499a3b6927d10daee0cbff5059ebe5d85ef9d37c2adaeee266084c04b2ccc",
+      "size_bytes": 9824522
+    },
+    {
+      "path": "backups/supabase_prod_post_0050_20261030_072000.dump",
+      "sha256": "c03a40b541ba73fc96e6b6d60c1842841cdba5470c784786f3968633cd1d691c",
+      "size_bytes": 9825456
+    }
+  ]
+}

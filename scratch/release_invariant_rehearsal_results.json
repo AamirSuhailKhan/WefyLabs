@@ -1,0 +1,190 @@
+{
+  "ENV_Gate_1A_Absent_ENV": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=unset\n[ERROR] Required environment variable 'ENV' is not set. Aborting."
+    }
+  },
+  "ENV_Gate_1B_Empty_ENV": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=unset\n[ERROR] Required environment variable 'ENV' is not set. Aborting."
+    }
+  },
+  "ENV_Gate_1C_Malformed_ENV": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=staging_custom_123\n[FATAL] Invalid or unrecognized environment classification 'staging_custom_123'.\nStartup aborted. Allowed values: production, staging, development, local, testing."
+    }
+  },
+  "ENV_Gate_1D_Reject_Startup_Migrations": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[FATAL] RUN_MIGRATIONS_ON_STARTUP=true is rejected.\nIn-process migrations on container boot are permanently disabled to prevent concurrent DDL races.\nThe dedicated release runner 'python scripts/release_migration.py' must be executed during maintenance windows.\nAborting startup."
+    }
+  },
+  "ENV_Gate_1E_Prod_At_0047_Fails_Closed": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0047_webhook_event_claims\n[FATAL] Deployed database revision mismatch!\nEnvironment:                production\nExpected authoritative head: 0050_broker_subscription_constraint_parity\nFound database revision:     0047_webhook_event_claims\nAutomatic migrations are disabled on normal container startup to prevent concurrent DDL.\nAn authorized operator must execute 'python scripts/release_migration.py' before starting this release."
+    }
+  },
+  "ENV_Gate_1F_Prod_At_0048_Fails_Closed": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0048_schema_reconciliation_parity\n[FATAL] Deployed database revision mismatch!\nEnvironment:                production\nExpected authoritative head: 0050_broker_subscription_constraint_parity\nFound database revision:     0048_schema_reconciliation_parity\nAutomatic migrations are disabled on normal container startup to prevent concurrent DDL.\nAn authorized operator must execute 'python scripts/release_migration.py' before starting this release."
+    }
+  },
+  "ENV_Gate_1G_Prod_At_0050_Succeeds": {
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=production\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0050_broker_subscription_constraint_parity\n[BeetleLabs] Schema verified at required head '0050_broker_subscription_constraint_parity'. Proceeding with API server startup.\n[BeetleLabs] DRY_RUN_VALIDATION_ONLY=true. Pre-flight startup validation passed. Exiting cleanly."
+    }
+  },
+  "ENV_Gate_1H_Dev_Permissive": {
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "out": "[BeetleLabs] Starting production deployment...\n[BeetleLabs] ENV=development\n[BeetleLabs] Automatic migration on startup is DISABLED (single-runner policy).\n[BeetleLabs] Checking database schema readiness against required head '0050_broker_subscription_constraint_parity'...\n[BeetleLabs] Database current revision: 0047_webhook_event_claims\n[BeetleLabs] Non-production environment 'development' active. Current revision: 0047_webhook_event_claims.\n[BeetleLabs] DRY_RUN_VALIDATION_ONLY=true. Pre-flight startup validation passed. Exiting cleanly."
+    }
+  },
+  "Runner_2A_Reject_Port_6543_Transaction_Pooler": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "err": "2026-10-30 12:30:44,367 [INFO] ==================================================================\n2026-10-30 12:30:44,368 [INFO] WEFYLABS AUTHORIZED RELEASE MIGRATION RUNNER\n2026-10-30 12:30:44,368 [I"
+    }
+  },
+  "Runner_2B_Reject_Multiple_Database_Heads": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "err": "2026-10-30 12:30:52,957 [INFO] ==================================================================\n2026-10-30 12:30:52,957 [INFO] WEFYLABS AUTHORIZED RELEASE MIGRATION RUNNER\n2026-10-30 12:30:52,957 [I"
+    }
+  },
+  "Runner_2C_Reject_Unauthorized_Predecessor": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1,
+      "err": "2026-10-30 12:30:57,495 [INFO] ==================================================================\n2026-10-30 12:30:57,495 [INFO] WEFYLABS AUTHORIZED RELEASE MIGRATION RUNNER\n2026-10-30 12:30:57,495 [I"
+    }
+  },
+  "Runner_2D_Dry_Run_Success": {
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "out": "\nResult:\n{\n  \"status\": \"DRY_RUN_PASSED\",\n  \"predecessor\": \"0047_webhook_event_claims\",\n  \"target_head\": \"0050_broker_subscription_constraint_parity\"\n}\n"
+    }
+  },
+  "Runner_2E_Full_Migration_Execution_Success": {
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "out": "\nResult:\n{\n  \"status\": \"MIGRATION_SUCCESSFUL\",\n  \"initial_revision\": \"0047_webhook_event_claims\",\n  \"final_revision\": \"0050_broker_subscription_constraint_parity\",\n  \"target_head\": \"0050_broker_subscr"
+    }
+  },
+  "Runner_2F_Already_At_0050_Safe_NoOp": {
+    "status": "PASSED",
+    "details": {
+      "rc": 0,
+      "out": "\nResult:\n{\n  \"status\": \"ALREADY_AT_HEAD\",\n  \"revision\": \"0050_broker_subscription_constraint_parity\",\n  \"target_head\": \"0050_broker_subscription_constraint_parity\",\n  \"sanitized_url\": \"postgresql://**"
+    }
+  },
+  "Runner_2G_Reject_Wrong_Credentials": {
+    "status": "PASSED",
+    "details": {
+      "rc": 1
+    }
+  },
+  "Backup_3A_pg_dump_Env_Injection": {
+    "status": "PASSED",
+    "details": {
+      "size_bytes": 1505051
+    }
+  },
+  "Backup_3B_pg_restore_Catalog_Verification": {
+    "status": "PASSED",
+    "details": {
+      "catalog_lines": 3512
+    }
+  },
+  "Backup_3C_pg_restore_Integrity_Verification": {
+    "status": "PASSED",
+    "details": {
+      "restored_rev": "0050_broker_subscription_constraint_parity",
+      "leads_src": 5,
+      "leads_restored": 5,
+      "attributions_src": 4,
+      "attributions_restored": 4
+    }
+  },
+  "Health_4A_Liveness_Endpoints": {
+    "status": "PASSED",
+    "details": {
+      "live_json": {
+        "status": "alive",
+        "service": "WefyLabs API",
+        "version": "1.0.0"
+      },
+      "liveness_json": {
+        "status": "alive",
+        "service": "WefyLabs API",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "Health_4B_Readiness_Endpoints": {
+    "status": "PASSED",
+    "details": {
+      "readiness_json": {
+        "status": "ready",
+        "database": "ok",
+        "cache": "ok",
+        "checks": {
+          "database": "ok",
+          "redis": "ok"
+        },
+        "version": "1.0.0"
+      }
+    }
+  },
+  "Health_4C_Deep_Health_Migration_Contract": {
+    "status": "PASSED",
+    "details": {
+      "status": "healthy",
+      "db_status": "ok",
+      "migration_head": "0050_broker_subscription_constraint_parity"
+    }
+  },
+  "Health_4D_Readiness_Fails_Closed_On_DB_Error": {
+    "status": "PASSED",
+    "details": {
+      "status_code": 503,
+      "readiness_json": {
+        "status": "not_ready",
+        "database": "error",
+        "cache": "ok",
+        "checks": {
+          "database": "failed",
+          "redis": "ok"
+        },
+        "version": "1.0.0"
+      },
+      "deep_db_status": "error"
+    }
+  },
+  "Isolation_5A_Worker_Beat_No_Migrations": {
+    "status": "PASSED",
+    "details": {
+      "worker_cmd": "celery -A app.celery_app.celery_app worker --loglevel=info -...",
+      "beat_cmd": "celery -A app.celery_app.celery_app beat --loglevel=info --s..."
+    }
+  }
+}

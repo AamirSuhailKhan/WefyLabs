@@ -26,21 +26,21 @@ export interface NavWorkspace {
 
 export const PRIMARY_WORKSPACES: NavWorkspace[] = [
   {
-    label: 'Home',
+    label: 'Command Center',
     href: '/dashboard',
     matchPrefixes: ['/dashboard'],
+    subItems: [
+      { label: 'Overview', href: '/dashboard' },
+      { label: 'Tasks & Follow-Ups', href: '/dashboard/tasks' },
+    ],
   },
   {
-    label: 'Inbox',
-    href: '/dashboard/inbox',
-    matchPrefixes: ['/dashboard/inbox'],
-  },
-  {
-    label: 'Leads',
+    label: 'Leads & Inbox',
     href: '/dashboard/leads',
-    matchPrefixes: ['/dashboard/leads', '/dashboard/lead-capture', '/dashboard/crm/leads', '/leads'],
+    matchPrefixes: ['/dashboard/leads', '/dashboard/inbox', '/dashboard/lead-capture', '/dashboard/crm/leads', '/leads', '/dashboard/crm/activities'],
     subItems: [
       { label: 'Leads Directory', href: '/dashboard/leads' },
+      { label: 'WhatsApp Inbox', href: '/dashboard/inbox' },
       { label: 'Lead Capture Hub', href: '/dashboard/lead-capture' },
       { label: 'Customer Activities', href: '/dashboard/crm/activities' },
     ],
@@ -50,51 +50,35 @@ export const PRIMARY_WORKSPACES: NavWorkspace[] = [
     href: '/dashboard/properties',
     matchPrefixes: ['/dashboard/properties', '/dashboard/inventory', '/dashboard/matching'],
     subItems: [
-      { label: 'Property Search & Detail', href: '/dashboard/properties' },
+      { label: 'Property Catalog & Search', href: '/dashboard/properties' },
+      { label: 'AI Property Matching', href: '/dashboard/matching' },
       { label: 'Supply & Unit Inventory', href: '/dashboard/inventory' },
-      { label: 'AI Unit Matching', href: '/dashboard/matching' },
     ],
   },
   {
-    label: 'Pipeline',
-    href: '/dashboard/deals',
-    matchPrefixes: ['/dashboard/deals', '/dashboard/pipeline', '/dashboard/crm/pipeline'],
+    label: 'Site Visits',
+    href: '/dashboard/calendar',
+    matchPrefixes: ['/dashboard/calendar', '/dashboard/deals', '/dashboard/pipeline', '/dashboard/crm/pipeline'],
     subItems: [
+      { label: 'Site Visits & Calendar', href: '/dashboard/calendar' },
       { label: 'Commercial Deals & Bookings', href: '/dashboard/deals' },
       { label: 'Pipeline Kanban Board', href: '/dashboard/pipeline' },
     ],
   },
   {
-    label: 'Tasks',
-    href: '/dashboard/tasks',
-    matchPrefixes: ['/dashboard/tasks', '/dashboard/crm/tasks'],
-  },
-  {
-    label: 'Calendar',
-    href: '/dashboard/calendar',
-    matchPrefixes: ['/dashboard/calendar'],
-  },
-  {
-    label: 'Revenue',
-    href: '/dashboard/revenue-intelligence',
-    matchPrefixes: ['/dashboard/revenue-intelligence', '/dashboard/intelligence', '/dashboard/analytics'],
-    subItems: [
-      { label: 'Revenue Command Center', href: '/dashboard/revenue-intelligence' },
-      { label: 'Intelligence OS (Moat & Benchmarks)', href: '/dashboard/intelligence' },
-      { label: 'Executive Analytics', href: '/dashboard/analytics' },
-      { label: 'Predictive Propensity', href: '/dashboard/analytics/predictions' },
-    ],
-  },
-  {
-    label: 'Settings',
+    label: 'Settings & Billing',
     href: '/dashboard/settings',
-    matchPrefixes: ['/dashboard/settings', '/settings'],
+    matchPrefixes: ['/dashboard/settings', '/settings', '/dashboard/revenue-intelligence'],
+    subItems: [
+      { label: 'Workspace & Billing Settings', href: '/dashboard/settings' },
+      { label: 'Revenue Command Center', href: '/dashboard/revenue-intelligence' },
+    ],
   },
 ];
 
-// The core 5 workspaces always visible on medium screens
-const COMPACT_CORE_WORKSPACES = PRIMARY_WORKSPACES.slice(0, 5); // Home, Inbox, Leads, Properties, Pipeline
-const COMPACT_MORE_WORKSPACES = PRIMARY_WORKSPACES.slice(5); // Tasks, Calendar, Revenue, Settings
+// The core 5 workspaces always visible across desktop viewports
+const COMPACT_CORE_WORKSPACES = PRIMARY_WORKSPACES;
+const COMPACT_MORE_WORKSPACES: NavWorkspace[] = [];
 
 interface DashboardNavProps {
   onAddLead?: () => void;
@@ -306,60 +290,62 @@ export default function DashboardNav({ onAddLead }: DashboardNavProps) {
               );
             })}
 
-            {/* "More" Dropdown for remaining workspaces */}
-            <div
-              className="relative"
-              onMouseEnter={() => setMoreDropdownOpen(true)}
-              onMouseLeave={() => setMoreDropdownOpen(false)}
-            >
-              <button
-                className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                  isMoreActive
-                    ? 'bg-[#1A1A1A] text-white'
-                    : 'text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-[#FAF7F2]'
-                }`}
+            {/* "More" Dropdown for remaining workspaces (only rendered if extra workspaces exist) */}
+            {COMPACT_MORE_WORKSPACES.length > 0 && (
+              <div
+                className="relative"
+                onMouseEnter={() => setMoreDropdownOpen(true)}
+                onMouseLeave={() => setMoreDropdownOpen(false)}
               >
-                <span>More</span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </button>
+                <button
+                  className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                    isMoreActive
+                      ? 'bg-[#1A1A1A] text-white'
+                      : 'text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-[#FAF7F2]'
+                  }`}
+                >
+                  <span>More</span>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
 
-              {moreDropdownOpen && (
-                <div className="absolute top-full right-0 pt-1.5 z-50 min-w-[210px]">
-                  <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl p-1.5 shadow-lg space-y-1">
-                    {COMPACT_MORE_WORKSPACES.map((ws) => {
-                      const active = isWorkspaceActive(ws);
-                      return (
-                        <div key={ws.label}>
-                          <Link
-                            href={ws.href}
-                            className={`block px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                              active
-                                ? 'bg-[#1A1A1A] text-white font-semibold'
-                                : 'text-[#4A4A4A] hover:bg-[#F0EDE8] hover:text-[#1A1A1A]'
-                            }`}
-                          >
-                            {ws.label}
-                          </Link>
-                          {ws.subItems && (
-                            <div className="pl-3 py-0.5 space-y-0.5 border-l border-[#D4D0C8] ml-2 mt-0.5">
-                              {ws.subItems.map((sub) => (
-                                <Link
-                                  key={sub.label}
-                                  href={sub.href}
-                                  className="block px-2 py-1 text-[11px] text-[#6B6B6B] hover:text-[#1A1A1A] rounded"
-                                >
-                                  {sub.label}
-                                </Link>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                {moreDropdownOpen && (
+                  <div className="absolute top-full right-0 pt-1.5 z-50 min-w-[210px]">
+                    <div className="bg-[#FAF7F2] border border-[#D4D0C8] rounded-xl p-1.5 shadow-lg space-y-1">
+                      {COMPACT_MORE_WORKSPACES.map((ws) => {
+                        const active = isWorkspaceActive(ws);
+                        return (
+                          <div key={ws.label}>
+                            <Link
+                              href={ws.href}
+                              className={`block px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                active
+                                  ? 'bg-[#1A1A1A] text-white font-semibold'
+                                  : 'text-[#4A4A4A] hover:bg-[#F0EDE8] hover:text-[#1A1A1A]'
+                              }`}
+                            >
+                              {ws.label}
+                            </Link>
+                            {ws.subItems && (
+                              <div className="pl-3 py-0.5 space-y-0.5 border-l border-[#D4D0C8] ml-2 mt-0.5">
+                                {ws.subItems.map((sub) => (
+                                  <Link
+                                    key={sub.label}
+                                    href={sub.href}
+                                    className="block px-2 py-1 text-[11px] text-[#6B6B6B] hover:text-[#1A1A1A] rounded"
+                                  >
+                                    {sub.label}
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Actions, Entitlement & Profile */}

@@ -1,0 +1,118 @@
+{
+  "phase": "PHASE_14",
+  "server_url": "http://127.0.0.1:8014",
+  "total_flows_tested": 12,
+  "flows_passed": 12,
+  "all_flows_passed": true,
+  "flows": {
+    "flow_01_liveness_readiness": {
+      "endpoint": "/health",
+      "status_code": 200,
+      "response": {
+        "status": "healthy",
+        "service": "WefyLabs API",
+        "version": "1.0.0",
+        "environment": "development",
+        "dependencies": {
+          "database": {
+            "status": "ok",
+            "latency_ms": 295.16,
+            "migration_head": "0047_webhook_event_claims"
+          },
+          "redis": {
+            "status": "ok",
+            "latency_ms": 563.09
+          },
+          "gemini": {
+            "status": "configured",
+            "provider": "google-gemini",
+            "model": "gemini-3.5-flash"
+          },
+          "smtp": {
+            "status": "configured"
+          }
+        },
+        "outbox_queue": {
+          "pending": 0,
+          "failed": 0,
+          "dead_letter": 0
+        },
+        "security_metrics": {
+          "AUTH_FAILURE": 0,
+          "AUTHZ_FAILURE": 0,
+          "RATE_LIMIT": 0,
+          "INVALID_WEBHOOK": 0,
+          "SUSPICIOUS_INPUT": 0,
+          "TENANT_BOUNDARY_VIOLATION": 0,
+          "AI_POLICY_REJECTION": 0,
+          "SYSTEM_SECURITY_ERROR": 0
+        }
+      },
+      "v1_status": 200,
+      "outcome": "PASS"
+    },
+    "flow_02_auth_and_profile": {
+      "register_status": 201,
+      "me_status": 200,
+      "user_email": "pilot_p14_d4613f@example.com",
+      "organization_id": null,
+      "outcome": "PASS"
+    },
+    "flow_03_lead_ingestion_and_retrieval": {
+      "create_status": 201,
+      "get_status": 200,
+      "lead_id": "ac3fa37f-b20f-4271-8bdb-99dfb1ed3338",
+      "outcome": "PASS"
+    },
+    "flow_04_cross_tenant_isolation": {
+      "target_lead_id": "ac3fa37f-b20f-4271-8bdb-99dfb1ed3338",
+      "cross_tenant_request_status": 404,
+      "outcome": "PASS"
+    },
+    "flow_05_property_recommendations": {
+      "status_code": 200,
+      "outcome": "PASS"
+    },
+    "flow_06_stage1_shadow_and_emergency_controls": {
+      "pause_status": 200,
+      "state_status": 200,
+      "resume_status": 200,
+      "outcome": "PASS"
+    },
+    "flow_07_followup_and_human_gating": {
+      "state_status": 200,
+      "outcome": "PASS"
+    },
+    "flow_08_sales_pipeline_retrieval": {
+      "status_code": 200,
+      "outcome": "PASS"
+    },
+    "flow_09_revenue_and_reconciliation": {
+      "analytics_revenue_status": 200,
+      "reconciliation_tasks_status": 200,
+      "outcome": "PASS"
+    },
+    "flow_10_billing_plans_and_entitlements": {
+      "status_code": 200,
+      "plans": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "outcome": "PASS"
+    },
+    "flow_11_duplicate_webhook_handling": {
+      "attempt_1_status": 503,
+      "attempt_2_status": 503,
+      "outcome": "PASS"
+    },
+    "flow_12_fail_closed_webhook_security": {
+      "forged_request_status": 503,
+      "behavior": "FAIL_CLOSED_REJECTED",
+      "outcome": "PASS"
+    }
+  }
+}

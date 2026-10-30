@@ -46,7 +46,7 @@ from sqlalchemy.dialects import postgresql
 revision = "0014_global_infrastructure"
 down_revision = "0013_ai_memory_engine"
 branch_labels = None
-depends_on = None
+depends_on = "002_enterprise_foundation"
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -112,7 +112,7 @@ def upgrade() -> None:
     op.create_table(
         "markets",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-        sa.Column("country_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("countries.id", ondelete="CASCADE"), nullable=False, index=True),
+        sa.Column("country_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("countries.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(100), nullable=False),
         sa.Column("slug", sa.String(100), nullable=False, unique=True),
         sa.Column("display_name", sa.String(200), nullable=True),
@@ -420,58 +420,84 @@ def upgrade() -> None:
     _drop_constraint_if_exists(conn, "leads", "ck_leads_source")
 
     # Widen pipeline_stage column (was String(30))
-    op.alter_column("leads", "pipeline_stage", type_=sa.String(100))
+    if _column_exists(conn, "leads", "pipeline_stage"):
+        op.alter_column("leads", "pipeline_stage", type_=sa.String(100))
 
     # Add global fields
-    op.add_column("leads", sa.Column("country_code", sa.String(2), nullable=True))
-    op.add_column("leads", sa.Column("market_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.add_column("leads", sa.Column("locale", sa.String(10), nullable=True))
-    op.add_column("leads", sa.Column("country_confidence", sa.Float(), nullable=False, server_default="0.0"))
-    op.add_column("leads", sa.Column("country_inference_source", sa.String(30), nullable=True))
-    op.add_column("leads", sa.Column("budget_currency", sa.String(3), nullable=True))
+    for col_name, col_type, null_opt, def_val in [
+        ("country_code", sa.String(2), True, None),
+        ("market_id", postgresql.UUID(as_uuid=True), True, None),
+        ("locale", sa.String(10), True, None),
+        ("country_confidence", sa.Float(), False, "0.0"),
+        ("country_inference_source", sa.String(30), True, None),
+        ("budget_currency", sa.String(3), True, None),
+    ]:
+        if not _column_exists(conn, "leads", col_name):
+            op.add_column("leads", sa.Column(col_name, col_type, nullable=null_opt, server_default=def_val))
 
-    op.create_index("ix_leads_country_code", "leads", ["country_code"])
-    op.create_index("ix_leads_market_id", "leads", ["market_id"])
-    op.create_index("ix_leads_country_market", "leads", ["country_code", "market_id"])
+    for idx_name, cols in [
+        ("ix_leads_country_code", ["country_code"]),
+        ("ix_leads_market_id", ["market_id"]),
+        ("ix_leads_country_market", ["country_code", "market_id"]),
+    ]:
+        if not _index_exists(conn, idx_name):
+            op.create_index(idx_name, "leads", cols)
 
     # ─────────────────────────────────────────────────────────────────────────
     # ALTER EXISTING TABLES — ORGANIZATIONS
     # ─────────────────────────────────────────────────────────────────────────
+    if _table_exists(conn, "organizations"):
+        # country_code — change from String(2) NOT NULL DEFAULT "IN" → nullable, no default
+        if _column_exists(conn, "organizations", "country_code"):
+            op.alter_column("organizations", "country_code", nullable=True, server_default=None)
 
-    # country_code — change from String(2) NOT NULL DEFAULT "IN" → nullable, no default
-    op.alter_column("organizations", "country_code", nullable=True, server_default=None)
-
-    op.add_column("organizations", sa.Column("operating_market_ids", postgresql.JSONB(), nullable=True))
-    op.add_column("organizations", sa.Column("reporting_currency_code", sa.String(3), nullable=True))
-    op.add_column("organizations", sa.Column("default_timezone", sa.String(100), nullable=True))
-    op.add_column("organizations", sa.Column("data_residency_region", sa.String(50), nullable=True))
+        for col_name, col_type in [
+            ("operating_market_ids", postgresql.JSONB()),
+            ("reporting_currency_code", sa.String(3)),
+            ("default_timezone", sa.String(100)),
+            ("data_residency_region", sa.String(50)),
+        ]:
+            if not _column_exists(conn, "organizations", col_name):
+                op.add_column("organizations", sa.Column(col_name, col_type, nullable=True))
 
     # ─────────────────────────────────────────────────────────────────────────
     # ALTER EXISTING TABLES — PROPERTY LISTINGS
     # ─────────────────────────────────────────────────────────────────────────
+    if _table_exists(conn, "property_listings"):
+        # Rename currency → currency_code (no default)
+        _rename_column_if_exists(conn, "property_listings", "currency", "currency_code")
+        if _column_exists(conn, "property_listings", "currency_code"):
+            op.alter_column("property_listings", "currency_code", server_default=None)
 
-    # Rename currency → currency_code (no default)
-    _rename_column_if_exists(conn, "property_listings", "currency", "currency_code")
-    op.alter_column("property_listings", "currency_code", server_default=None)
+        # Rename built_up_area_sqft → area_value; add area_unit
+        _rename_column_if_exists(conn, "property_listings", "built_up_area_sqft", "area_value")
+        _add_column_if_not_exists(conn, "property_listings", "area_unit", "VARCHAR(20) NOT NULL DEFAULT 'sqft'")
 
-    # Rename built_up_area_sqft → area_value; add area_unit
-    _rename_column_if_exists(conn, "property_listings", "built_up_area_sqft", "area_value")
-    _add_column_if_not_exists(conn, "property_listings", "area_unit", "VARCHAR(20) NOT NULL DEFAULT 'sqft'")
+        # City/locality — make nullable (remove Dubai/Dubai Marina defaults)
+        if _column_exists(conn, "property_listings", "city"):
+            op.alter_column("property_listings", "city", nullable=True, server_default=None)
+        if _column_exists(conn, "property_listings", "locality"):
+            op.alter_column("property_listings", "locality", nullable=True, server_default=None)
 
-    # City/locality — make nullable (remove Dubai/Dubai Marina defaults)
-    op.alter_column("property_listings", "city", nullable=True, server_default=None)
-    op.alter_column("property_listings", "locality", nullable=True, server_default=None)
+        # Widen property_type (was String(50) → String(100))
+        if _column_exists(conn, "property_listings", "property_type"):
+            op.alter_column("property_listings", "property_type", type_=sa.String(100))
 
-    # Widen property_type (was String(50) → String(100))
-    op.alter_column("property_listings", "property_type", type_=sa.String(100))
+        # Add global fields
+        for col_name, col_type in [
+            ("country_code", sa.String(2)),
+            ("market_id", postgresql.UUID(as_uuid=True)),
+            ("extended_fields", postgresql.JSONB()),
+        ]:
+            if not _column_exists(conn, "property_listings", col_name):
+                op.add_column("property_listings", sa.Column(col_name, col_type, nullable=True))
 
-    # Add global fields
-    op.add_column("property_listings", sa.Column("country_code", sa.String(2), nullable=True))
-    op.add_column("property_listings", sa.Column("market_id", postgresql.UUID(as_uuid=True), nullable=True))
-    op.add_column("property_listings", sa.Column("extended_fields", postgresql.JSONB(), nullable=True))
-
-    op.create_index("ix_property_listings_country_code", "property_listings", ["country_code"])
-    op.create_index("ix_property_listings_market_id", "property_listings", ["market_id"])
+        for idx_name, cols in [
+            ("ix_property_listings_country_code", ["country_code"]),
+            ("ix_property_listings_market_id", ["market_id"]),
+        ]:
+            if not _index_exists(conn, idx_name):
+                op.create_index(idx_name, "property_listings", cols)
 
 
 def downgrade() -> None:
@@ -553,3 +579,30 @@ def _add_column_if_not_exists(conn, table: str, column_name: str, column_def: st
     ), {"table": table, "col": column_name})
     if result.scalar() == 0:
         conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN {column_name} {column_def}"))
+
+
+def _table_exists(conn, table: str) -> bool:
+    """Check if table exists in current database schema."""
+    result = conn.execute(sa.text(
+        "SELECT COUNT(*) FROM information_schema.tables "
+        "WHERE table_name = :table AND table_schema = current_schema()"
+    ), {"table": table})
+    return (result.scalar() or 0) > 0
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    """Check if column exists in table in current database schema."""
+    result = conn.execute(sa.text(
+        "SELECT COUNT(*) FROM information_schema.columns "
+        "WHERE table_name = :table AND column_name = :col AND table_schema = current_schema()"
+    ), {"table": table, "col": column})
+    return (result.scalar() or 0) > 0
+
+
+def _index_exists(conn, index_name: str) -> bool:
+    """Check if index exists in current database schema."""
+    result = conn.execute(sa.text(
+        "SELECT COUNT(*) FROM pg_indexes "
+        "WHERE indexname = :idx AND schemaname = current_schema()"
+    ), {"idx": index_name})
+    return (result.scalar() or 0) > 0

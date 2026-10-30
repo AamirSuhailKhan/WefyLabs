@@ -5,7 +5,7 @@ Evaluates organization-defined scoring rules against extracted feature vectors.
 Supports runtime editing without code deployment.
 """
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

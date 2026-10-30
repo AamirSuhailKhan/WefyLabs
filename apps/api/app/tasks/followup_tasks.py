@@ -25,14 +25,7 @@ from app.modules.follow_up.service import FollowUpOrchestratorService
 logger = logging.getLogger(__name__)
 
 
-def run_async(coro):
-    """Utility helper to run async coroutine inside Celery synchronous task."""
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from app.core.async_runner import run_async
 
 
 # ── Backward Compatible Legacy Helpers ─────────────────────────────────────────

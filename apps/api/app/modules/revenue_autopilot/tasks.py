@@ -24,24 +24,7 @@ from app.modules.revenue_autopilot.engine import RevenueAutopilotEngine
 logger = logging.getLogger("beetlelabs.revenue_autopilot.tasks")
 
 
-def _run_async(coro):
-    """Helper to run async coroutines inside synchronous Celery worker threads."""
-    try:
-        current_loop = asyncio.get_running_loop()
-    except RuntimeError:
-        current_loop = None
-
-    if current_loop is not None and current_loop.is_running():
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            return executor.submit(lambda: asyncio.run(coro)).result()
-    else:
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
+from app.core.async_runner import run_async as _run_async
 
 
 @shared_task(name="app.modules.revenue_autopilot.tasks.evaluate_revenue_opportunities_task")

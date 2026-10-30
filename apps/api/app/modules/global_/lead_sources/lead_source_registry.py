@@ -207,6 +207,120 @@ class MetaLeadAdsAdapter(BaseLeadSourceAdapter):
         )
 
 
+class MagicBricksAdapter(BaseLeadSourceAdapter):
+    """India MagicBricks Lead API / Webhook adapter."""
+    provider_name = "magicbricks"
+    category = "PORTAL"
+    supported_countries = ["IN"]
+
+    def normalize(self, raw_payload: Dict[str, Any], default_country: Optional[str] = "IN") -> NormalizedLeadPayload:
+        phone_raw = (
+            raw_payload.get("mobile") or raw_payload.get("contact_number") or
+            raw_payload.get("phone") or raw_payload.get("user_mobile")
+        )
+        normalized_phone = PhoneService.normalize_to_e164(phone_raw, default_region="IN") if phone_raw else None
+
+        budget = None
+        budget_raw = raw_payload.get("budget") or raw_payload.get("budget_max") or raw_payload.get("max_budget")
+        if budget_raw is not None:
+            try:
+                budget = Decimal(str(budget_raw))
+            except Exception:
+                pass
+
+        locations = []
+        loc = raw_payload.get("locality") or raw_payload.get("city") or raw_payload.get("location")
+        if loc:
+            locations.append(str(loc))
+
+        property_types = []
+        ptype = raw_payload.get("property_type") or raw_payload.get("prop_type")
+        if ptype:
+            property_types.append(str(ptype))
+
+        return NormalizedLeadPayload(
+            source_provider=self.provider_name,
+            source_category=self.category,
+            country_code="IN",
+            name=raw_payload.get("name") or raw_payload.get("customer_name") or raw_payload.get("user_name") or "MagicBricks Lead",
+            email=raw_payload.get("email") or raw_payload.get("user_email"),
+            phone=normalized_phone,
+            raw_phone=phone_raw,
+            budget_max=budget,
+            budget_currency="INR",
+            preferred_locations=locations,
+            preferred_property_types=property_types,
+            bedrooms=str(raw_payload.get("bhk") or raw_payload.get("bedrooms") or "") or None,
+            external_lead_id=str(raw_payload.get("lead_id") or raw_payload.get("query_id") or ""),
+            external_listing_id=str(raw_payload.get("project_id") or raw_payload.get("prop_id") or ""),
+            notes=raw_payload.get("comments") or raw_payload.get("remarks") or raw_payload.get("msg"),
+            metadata=raw_payload,
+            consent_obtained=True,
+            consent_details={"source": "magicbricks_lead_webhook", "scope": "inquiry"},
+        )
+
+
+class HousingDotComAdapter(BaseLeadSourceAdapter):
+    """India Housing.com Partner Lead Webhook adapter."""
+    provider_name = "housing"
+    category = "PORTAL"
+    supported_countries = ["IN"]
+
+    def normalize(self, raw_payload: Dict[str, Any], default_country: Optional[str] = "IN") -> NormalizedLeadPayload:
+        phone_raw = (
+            raw_payload.get("phone") or raw_payload.get("mobile") or
+            raw_payload.get("user_phone") or raw_payload.get("contact")
+        )
+        normalized_phone = PhoneService.normalize_to_e164(phone_raw, default_region="IN") if phone_raw else None
+
+        budget_min = None
+        if raw_payload.get("min_budget") is not None:
+            try:
+                budget_min = Decimal(str(raw_payload["min_budget"]))
+            except Exception:
+                pass
+
+        budget_max = None
+        max_b = raw_payload.get("max_budget") or raw_payload.get("budget")
+        if max_b is not None:
+            try:
+                budget_max = Decimal(str(max_b))
+            except Exception:
+                pass
+
+        locations = []
+        if raw_payload.get("locality"):
+            locations.append(str(raw_payload["locality"]))
+        elif raw_payload.get("city"):
+            locations.append(str(raw_payload["city"]))
+
+        property_types = []
+        if raw_payload.get("property_type"):
+            property_types.append(str(raw_payload["property_type"]))
+
+        return NormalizedLeadPayload(
+            source_provider=self.provider_name,
+            source_category=self.category,
+            country_code="IN",
+            name=raw_payload.get("user_name") or raw_payload.get("name") or "Housing.com Lead",
+            email=raw_payload.get("user_email") or raw_payload.get("email"),
+            phone=normalized_phone,
+            raw_phone=phone_raw,
+            budget_min=budget_min,
+            budget_max=budget_max,
+            budget_currency="INR",
+            preferred_locations=locations,
+            preferred_property_types=property_types,
+            bedrooms=str(raw_payload.get("preferred_bhk") or raw_payload.get("bhk") or "") or None,
+            external_lead_id=str(raw_payload.get("lead_id") or raw_payload.get("enquiry_id") or ""),
+            external_listing_id=str(raw_payload.get("listing_id") or raw_payload.get("project_id") or ""),
+            notes=raw_payload.get("remarks") or raw_payload.get("notes"),
+            metadata=raw_payload,
+            consent_obtained=True,
+            consent_details={"source": "housing_dot_com_webhook", "scope": "inquiry"},
+        )
+
+
 class UniversalLeadNormalizer:
     """
     Registry and routing engine for all incoming lead sources.
@@ -214,6 +328,9 @@ class UniversalLeadNormalizer:
     _ADAPTERS: Dict[str, BaseLeadSourceAdapter] = {
         "property_finder": PropertyFinderAdapter(),
         "99acres": NinetyNineAcresAdapter(),
+        "magicbricks": MagicBricksAdapter(),
+        "housing": HousingDotComAdapter(),
+        "housing.com": HousingDotComAdapter(),
         "meta_ads": MetaLeadAdsAdapter(),
         "facebook": MetaLeadAdsAdapter(),
         "instagram": MetaLeadAdsAdapter(),

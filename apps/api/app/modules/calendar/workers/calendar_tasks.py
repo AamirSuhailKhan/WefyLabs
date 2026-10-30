@@ -24,17 +24,7 @@ from app.modules.calendar.conflict_resolution.conflict_service import ConflictRe
 
 logger = logging.getLogger(__name__)
 
-def _run_async(coro):
-    """Helper to run async coroutines inside synchronous Celery worker threads."""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    if loop.is_running():
-        import nest_asyncio
-        nest_asyncio.apply()
-    return loop.run_until_complete(coro)
+from app.core.async_runner import run_async as _run_async
 
 @shared_task(name="app.modules.calendar.workers.calendar_tasks.process_due_reminders_task")
 def process_due_reminders_task():

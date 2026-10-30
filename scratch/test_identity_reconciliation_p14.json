@@ -1,0 +1,28 @@
+{
+  "phase": "PHASE_14.1",
+  "authoritative_collected_total": 3359,
+  "xml_parsed_total": 3359,
+  "exact_identity_matches": 3359,
+  "duplicates_count": 0,
+  "missing_in_xml_count": 0,
+  "unexpected_in_xml_count": 0,
+  "passed_cases": 3357,
+  "skipped_cases": 2,
+  "failed_cases": 0,
+  "error_cases": 0,
+  "skips": [
+    {
+      "batch": "batch_03.xml",
+      "classname": "tests.test_gemini_direct",
+      "name": "test_live_gemini",
+      "reason": "Manual direct integration test with live Gemini API"
+    },
+    {
+      "batch": "batch_03.xml",
+      "classname": "tests.test_google_adapter_contract",
+      "name": "test_complete_safe_live_inference_path_when_authorized",
+      "reason": "Skipping live inference test (ALLOW_LIVE_AI_CALLS_IN_TESTS!=1)"
+    }
+  ],
+  "verdict": "CERTIFIED_IDENTITY_RECONCILIATION"
+}

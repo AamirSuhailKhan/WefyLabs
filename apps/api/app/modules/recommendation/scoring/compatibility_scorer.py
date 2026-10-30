@@ -16,7 +16,7 @@ Weights are dynamic and configurable by organization / market / purchase purpose
 
 import math
 import logging
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 from app.models.property_models import PropertyListing
 from app.models.recommendation_models import BuyerProfile
 from app.modules.recommendation.dto.recommendation_schemas import ScoreBreakdownDTO

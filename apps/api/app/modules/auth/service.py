@@ -1,5 +1,9 @@
 import hashlib
 import os
+import secrets
+import urllib.parse
+import uuid
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone, timedelta
 import jwt
 from fastapi import HTTPException, status
@@ -8,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.broker import Broker, default_trial_ends_at
-from app.modules.auth.schemas import RegisterRequest
+from app.modules.auth.schemas import RegisterRequest, GoogleExchangeRequest
 
 def hash_password(password: str) -> str:
     """Hashes password using PBKDF2-HMAC-SHA256 with random salt."""
@@ -39,7 +43,6 @@ def create_access_token(data: dict | str | uuid.UUID, expires_delta: timedelta |
     to_encode.update({"exp": expire, "iat": now})
     return jwt.encode(to_encode, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
 
-import uuid
 from app.models.user import User
 from app.models.organization import Organization, OrganizationMember
 

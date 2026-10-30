@@ -16,7 +16,8 @@ class Conversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
@@ -36,6 +37,7 @@ class Conversation(Base):
     message_type: Mapped[str] = mapped_column(
         String(20),
         default="text",
+        server_default=text("'text'"),
         nullable=False
     )
     whatsapp_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

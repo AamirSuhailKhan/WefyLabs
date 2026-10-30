@@ -1,3 +1,4 @@
+import os
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
@@ -30,11 +31,16 @@ else:
     _engine_kwargs["pool_size"] = 10 if _IS_PROD else 5
     _engine_kwargs["max_overflow"] = 20 if _IS_PROD else 5
     _engine_kwargs["pool_timeout"] = 30          # Wait max 30s for a pool slot
+    _server_settings = {
+        "application_name": "wefylabs-api",
+    }
+    _schema = getattr(settings, "DB_SCHEMA", None) or os.getenv("DB_SCHEMA")
+    if _schema:
+        _server_settings["search_path"] = f"{_schema}, public"
+
     _engine_kwargs["connect_args"] = {
         "command_timeout": 20,                   # Kill queries exceeding 20s
-        "server_settings": {
-            "application_name": "wefylabs-api",
-        }
+        "server_settings": _server_settings,
     }
 
 engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs)

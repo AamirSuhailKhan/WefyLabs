@@ -79,16 +79,8 @@ def process_email_dispatch(self, email_data: Dict[str, Any]):
         idempotency_key=email_data.get("idempotency_key") or f"celery:email:{recipient}:{subject}",
     )
 
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import nest_asyncio  # in case called in nested loop
-            nest_asyncio.apply()
-            resp = loop.run_until_complete(email_provider.send(outbound_dto))
-        else:
-            resp = loop.run_until_complete(email_provider.send(outbound_dto))
-    except RuntimeError:
-        resp = asyncio.run(email_provider.send(outbound_dto))
+    from app.core.async_runner import run_async
+    resp = run_async(email_provider.send(outbound_dto))
 
     if not resp.success:
         logger.warning(f"[QUEUE: email_queue] Email send failed: {resp.error_code} - {resp.error_message}")

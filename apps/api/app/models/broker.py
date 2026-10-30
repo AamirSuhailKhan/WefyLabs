@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, DateTime, CheckConstraint, text, func
+from sqlalchemy import String, DateTime, CheckConstraint, UniqueConstraint, Boolean, text, func
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.expression import FunctionElement
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,13 +16,26 @@ if TYPE_CHECKING:
 def default_trial_ends_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=7)
 
+class DefaultTrialEndsAt(FunctionElement):
+    name = "default_trial_ends_at"
+    inherit_cache = True
+
+@compiles(DefaultTrialEndsAt, "postgresql")
+def compile_trial_ends_at_pg(element, compiler, **kw):
+    return "now() + interval '7 days'"
+
+@compiles(DefaultTrialEndsAt, "sqlite")
+def compile_trial_ends_at_sqlite(element, compiler, **kw):
+    return "datetime('now', '+7 days')"
+
 class Broker(Base):
     __tablename__ = "brokers"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()")
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     google_subject: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True, index=True)
@@ -34,20 +49,23 @@ class Broker(Base):
     subscription_status: Mapped[str] = mapped_column(
         String(20),
         default="trial",
+        server_default=text("'trial'"),
         nullable=False
     )
     onboarding_status: Mapped[str] = mapped_column(
         String(30),
         default="AUTHENTICATED_NOT_ONBOARDED",
+        server_default=text("'AUTHENTICATED_NOT_ONBOARDED'"),
         nullable=False
     )
     trial_ends_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=default_trial_ends_at,
+        server_default=DefaultTrialEndsAt(),
         nullable=False
     )
     subscription_plan: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    is_demo: Mapped[bool] = mapped_column(default=False, nullable=False, index=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False, index=True)
     razorpay_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     razorpay_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -65,6 +83,9 @@ class Broker(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint("email", name="brokers_email_key"),
+        UniqueConstraint("phone", name="brokers_phone_key"),
+        UniqueConstraint("whatsapp_number", name="brokers_whatsapp_number_key"),
         CheckConstraint(
             "subscription_status IN ('trial', 'active', 'paused', 'past_due', 'cancelled', 'expired')",
             name="ck_brokers_subscription_status"

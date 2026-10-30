@@ -39,16 +39,12 @@ if CELERY_AVAILABLE and celery_app:
     )
     def generate_property_recommendations_task(self, organization_id: str, lead_id: str, top_k: int = 5):
         """Asynchronously compute property recommendations."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_async_generate_recommendations(organization_id, lead_id, top_k))
+            return run_async(_async_generate_recommendations(organization_id, lead_id, top_k))
         except Exception as exc:
             logger.error(f"[REC_TASK] Lead {lead_id} recommendation failed: {exc}")
             raise self.retry(exc=exc)
-        finally:
-            loop.close()
 
 else:
     def generate_property_recommendations_task(organization_id: str, lead_id: str, top_k: int = 5):

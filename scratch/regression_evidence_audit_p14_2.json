@@ -1,0 +1,29 @@
+{
+  "phase": "PHASE_14.2",
+  "authoritative_files": 222,
+  "authoritative_cases": 3359,
+  "xml_batches_parsed": 23,
+  "xml_cases_parsed": 3359,
+  "passed": 3357,
+  "skipped": 2,
+  "failed": 0,
+  "error": 0,
+  "duplicate_identities": 0,
+  "exact_matches": 3359,
+  "skips": [
+    {
+      "batch": "batch_03.xml",
+      "classname": "tests.test_gemini_direct",
+      "name": "test_live_gemini",
+      "reason": "Manual direct integration test with live Gemini API"
+    },
+    {
+      "batch": "batch_03.xml",
+      "classname": "tests.test_google_adapter_contract",
+      "name": "test_complete_safe_live_inference_path_when_authorized",
+      "reason": "Skipping live inference test (ALLOW_LIVE_AI_CALLS_IN_TESTS!=1)"
+    }
+  ],
+  "ledger_verified": true,
+  "verdict": "VERIFIED_PASS"
+}

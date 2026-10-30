@@ -1,0 +1,150 @@
+{
+  "phase": "PHASE_14",
+  "total_cases": 8,
+  "passed_cases": 8,
+  "failed_cases": 0,
+  "outbound_customer_messages_sent": 0,
+  "cases": [
+    {
+      "case": 1,
+      "name": "valid_raw_bytes_hmac",
+      "description": "Correct HMAC-SHA256 over exact raw request-body bytes",
+      "expected_status": 200,
+      "actual_status": 200,
+      "passed": true,
+      "response": {
+        "status": "ok",
+        "result": {
+          "status": "ok",
+          "action": "status_updates_processed",
+          "count": 1,
+          "message_status": "delivered"
+        }
+      }
+    },
+    {
+      "case": 2,
+      "name": "forged_hmac_signature",
+      "description": "Forged HMAC with secret configured on server",
+      "expected_status": 401,
+      "actual_status": 401,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Invalid Meta webhook HMAC signature",
+          "request_id": "req-7609d9966e8a",
+          "timestamp": "2026-10-24T15:01:55.208813+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "Invalid Meta webhook HMAC signature"
+      }
+    },
+    {
+      "case": 3,
+      "name": "altered_body_post_signing",
+      "description": "Altered body payload after HMAC signature was generated",
+      "expected_status": 401,
+      "actual_status": 401,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Invalid Meta webhook HMAC signature",
+          "request_id": "req-92b5b47cd681",
+          "timestamp": "2026-10-24T15:01:55.224810+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "Invalid Meta webhook HMAC signature"
+      }
+    },
+    {
+      "case": 4,
+      "name": "truncated_malformed_signature",
+      "description": "Truncated or malformed HMAC signature header",
+      "expected_status": 401,
+      "actual_status": 401,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Invalid Meta webhook HMAC signature",
+          "request_id": "req-488901e7745e",
+          "timestamp": "2026-10-24T15:01:55.234947+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "Invalid Meta webhook HMAC signature"
+      }
+    },
+    {
+      "case": 5,
+      "name": "missing_signature_header",
+      "description": "Missing X-Hub-Signature-256 header entirely",
+      "expected_status": 401,
+      "actual_status": 401,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Invalid Meta webhook HMAC signature",
+          "request_id": "req-d4ed7d7297f7",
+          "timestamp": "2026-10-24T15:01:55.245808+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "Invalid Meta webhook HMAC signature"
+      }
+    },
+    {
+      "case": 6,
+      "name": "missing_application_secret",
+      "description": "Missing WHATSAPP_APP_SECRET server-side (fail-closed guard)",
+      "expected_status": 503,
+      "actual_status": 503,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "HTTP_ERROR",
+          "message": "WhatsApp webhook signature verification is not configured.",
+          "request_id": "req-10898ca8a677",
+          "timestamp": "2026-10-24T15:01:55.263114+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "WhatsApp webhook signature verification is not configured."
+      }
+    },
+    {
+      "case": 7,
+      "name": "duplicate_event_delivery",
+      "description": "Duplicate delivery of identical signed webhook payload (deduplicated idempotently)",
+      "expected_status": 200,
+      "actual_status": 200,
+      "passed": true,
+      "response": {
+        "status": "ok",
+        "result": {
+          "status": "ok",
+          "action": "duplicate_suppressed",
+          "provider_event_id": "status_wamid.DEDUP_TEST_24dd1ddf9d24_delivered"
+        }
+      }
+    },
+    {
+      "case": 8,
+      "name": "invalid_payload",
+      "description": "Invalid / malformed JSON payload with valid HMAC signature",
+      "expected_status": 400,
+      "actual_status": 400,
+      "passed": true,
+      "response": {
+        "error": {
+          "code": "HTTP_ERROR",
+          "message": "Webhook body must contain valid JSON.",
+          "request_id": "req-35c0e3185187",
+          "timestamp": "2026-10-24T15:01:55.310594+00:00",
+          "path": "/api/v1/whatsapp/webhook"
+        },
+        "detail": "Webhook body must contain valid JSON."
+      }
+    }
+  ]
+}

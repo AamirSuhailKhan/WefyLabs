@@ -23,10 +23,9 @@ def process_lead_scoring_queue(lead_dto: Dict[str, Any], organization_id: str):
             service = LeadIntelligenceService(db=db)
             return await service.score_lead(lead_dto, organization_id)
 
+    from app.core.async_runner import run_async
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(_run())
-        loop.close()
+        result = run_async(_run())
         logger.info(
             f"[SCORING_WORKER] Processed lead {lead_dto.get('id')}: "
             f"score={result.get('lead_score')} temp={result.get('temperature')}"

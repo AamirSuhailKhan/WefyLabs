@@ -757,3 +757,146 @@ async def get_channel_partner_portal(
         "commissions_count": len(commissions),
     }
 
+
+# ===========================================================================
+# PDF Brochure Inventory Review Pipeline (Spec §13.1)
+# ===========================================================================
+
+@inventory_router.post(
+    "/brochure/extract-candidate-inventory",
+    status_code=200,
+    summary="Extract candidate project and units from a brochure PDF for broker review"
+)
+async def extract_candidate_inventory_from_brochure(
+    payload: Dict[str, Any] = Body(...),
+    broker: Broker = Depends(get_current_broker),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ingests and parses a property brochure PDF / text:
+    1. Validates content type and size limits
+    2. Runs FactExtractionService to extract prices, BHKs, areas, and amenities
+    3. Detects existing project duplicates in the broker's organization
+    4. Emits a candidate inventory review model for broker confirmation
+    """
+    org_id = _org(broker)
+    raw_text = payload.get("text") or payload.get("content") or ""
+    file_name = payload.get("file_name", "brochure.pdf")
+    developer_id = payload.get("developer_id")
+    # If base64 bytes are provided:
+    b64_content = payload.get("file_base64")
+    if b64_content and not raw_text:
+        import base64
+        try:
+            content_bytes = base64.b64decode(b64_content)
+            if len(content_bytes) > 50 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Brochure file exceeds 50 MB limit.")
+            from app.modules.knowledge.providers.document_parser import PDFParser
+            parser = PDFParser()
+            parsed_doc = await parser.parse(content_bytes, file_name)
+            raw_text = parsed_doc.full_text
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raw_text = payload.get("fallback_text", "")
+
+    if not raw_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No extractable text or content found in brochure."
+        )
+
+    # Run FactExtractionService
+    from app.modules.knowledge.extraction.fact_extraction_service import FactExtractionService
+    extractor = FactExtractionService()
+    extracted_facts, injection_detected = extractor.extract_from_text(
+        text=raw_text,
+        document_id=str(uuid.uuid4()),
+        organization_id=str(org_id),
+        knowledge_type="brochure"
+    )
+
+    # Synthesize candidate attributes
+    prices = [f for f in extracted_facts if f.fact_type == "PRICE" and f.value_numeric]
+    bedrooms = [f for f in extracted_facts if f.fact_type == "BEDROOMS"]
+    areas = [f for f in extracted_facts if f.fact_type == "AREA" and f.value_numeric]
+    locations = [f for f in extracted_facts if f.fact_type == "LOCATION" and f.value_text]
+    amenities = [f.value_text for f in extracted_facts if f.fact_type == "AMENITY" and f.value_text]
+
+    min_price = min((p.value_numeric for p in prices), default=None)
+    max_price = max((p.value_numeric for p in prices), default=None)
+    min_area = min((a.value_numeric for a in areas), default=None)
+    max_area = max((a.value_numeric for a in areas), default=None)
+
+    project_name_candidate = payload.get("project_name")
+    if not project_name_candidate:
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        project_name_candidate = lines[0][:80] if lines else "New Project from Brochure"
+
+    locality_candidate = locations[0].value_text if locations else payload.get("locality", "Unspecified")
+
+    # Check potential duplicate projects in tenant scope
+    existing_stmt = select(RealEstateProject).where(
+        and_(
+            RealEstateProject.organization_id == org_id,
+            func.lower(RealEstateProject.project_name) == func.lower(project_name_candidate)
+        )
+    )
+    existing_proj = (await db.execute(existing_stmt)).scalars().first()
+
+    # Formulate candidate unit types from detected bedrooms
+    unit_types = []
+    seen_bhk = set()
+    for b in bedrooms:
+        bhk_val = str(b.value_numeric or b.value_text or "2")
+        if bhk_val not in seen_bhk:
+            seen_bhk.add(bhk_val)
+            unit_types.append({
+                "unit_type": f"{bhk_val} BHK" if not bhk_val.lower().endswith("bhk") else bhk_val,
+                "bedrooms": int(float(bhk_val)) if bhk_val.replace(".", "", 1).isdigit() else 2,
+                "super_builtup_area": float(min_area) if min_area else 1250.0,
+                "carpet_area": float(min_area * 0.75) if min_area else 950.0,
+                "base_price": float(min_price) if min_price else 7500000.0,
+                "is_verified": False,
+                "confidence": b.confidence,
+            })
+
+    if not unit_types:
+        unit_types = [
+            {
+                "unit_type": "2 BHK",
+                "bedrooms": 2,
+                "super_builtup_area": float(min_area or 1200),
+                "carpet_area": float((min_area or 1200) * 0.75),
+                "base_price": float(min_price or 6500000),
+                "is_verified": False,
+                "confidence": 0.7,
+            }
+        ]
+
+    return {
+        "status": "candidate_extracted",
+        "requires_human_confirmation": True,
+        "is_verified": False,
+        "is_duplicate": existing_proj is not None,
+        "existing_project_id": str(existing_proj.id) if existing_proj else None,
+        "prompt_injection_detected": injection_detected,
+        "candidate_project": {
+            "project_name": project_name_candidate,
+            "locality": locality_candidate,
+            "city": payload.get("city", "Mumbai"),
+            "developer_id": developer_id,
+            "min_price": float(min_price) if min_price else None,
+            "max_price": float(max_price) if max_price else None,
+            "min_area_sqft": float(min_area) if min_area else None,
+            "max_area_sqft": float(max_area) if max_area else None,
+            "extracted_amenities": amenities[:15],
+            "confidence_score": 0.85 if prices and bedrooms else 0.60,
+            "provenance": {
+                "source_file": file_name,
+                "extracted_at": datetime.now(timezone.utc).isoformat(),
+                "extracted_facts_count": len(extracted_facts),
+            }
+        },
+        "candidate_units": unit_types,
+    }

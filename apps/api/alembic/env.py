@@ -20,37 +20,23 @@ import os
 from logging.config import fileConfig
 from dotenv import load_dotenv
 
-# Ensure .env is loaded from workspace root (3 levels up) or apps/api
+# Ensure .env is loaded without overriding existing environment variables
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env"))
-load_dotenv(root_env, override=True)
+load_dotenv(root_env, override=False)
 load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env")), override=False)
 load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "../.env")), override=False)
 load_dotenv(override=False)
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.config import settings
 
-# Import Base and ALL models so Alembic can detect schema changes.
-# Every new model file must be imported here.
+# Import Base and ALL 401 models so Alembic can detect complete schema changes.
 from app.database import Base
-import app.models.broker
-import app.models.lead
-import app.models.conversation
-import app.models.score
-import app.models.follow_up
-import app.models.subscription
-import app.models.crm_models
-import app.models.organization
-import app.models.audit_log
-import app.models.communication_models
-import app.models.property_models
-import app.models.transaction_models
-import app.models.workflow_models
-import app.models.developer_models
+import app.models
 
 config = context.config
 
@@ -65,29 +51,57 @@ def run_migrations_offline() -> None:
     Run migrations in 'offline' mode.
     Used for generating SQL scripts without a live DB connection.
     """
-    raw_url = os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+    x_args = context.get_x_argument(as_dictionary=True)
+    raw_url = x_args.get("db_url") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
     url = raw_url.replace("+asyncpg", "").replace("+aiosqlite", "")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,  # SQLite compatibility for ALTER TABLE
-        compare_type=True,
-        compare_server_default=True,
-    )
+    target_schema = os.getenv("ALEMBIC_SCHEMA")
+    kwargs = {
+        "url": url,
+        "target_metadata": target_metadata,
+        "literal_binds": True,
+        "dialect_opts": {"paramstyle": "named"},
+        "render_as_batch": True,  # SQLite compatibility for ALTER TABLE
+        "compare_type": True,
+        "compare_server_default": True,
+    }
+    if target_schema:
+        kwargs["version_table_schema"] = target_schema
+    context.configure(**kwargs)
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        render_as_batch=True,   # SQLite compatibility
-        compare_type=True,
-        compare_server_default=True,
-    )
+    target_schema = os.getenv("ALEMBIC_SCHEMA")
+    if target_schema:
+        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {target_schema}"))
+        connection.execute(text(f"SET search_path TO {target_schema}, extensions"))
+        table_name = f"{target_schema}.alembic_version"
+    else:
+        table_name = "alembic_version"
+
+    # Ensure version_num column can hold longer revision names (e.g. 0039_build09_revenue_intelligence is 35 chars)
+    if "postgresql" in connection.dialect.name:
+        connection.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                version_num VARCHAR(64) NOT NULL PRIMARY KEY
+            )
+        """))
+        connection.execute(text(f"""
+            ALTER TABLE {table_name} ALTER COLUMN version_num TYPE VARCHAR(64)
+        """))
+
+    kwargs = {
+        "connection": connection,
+        "target_metadata": target_metadata,
+        "render_as_batch": True,   # SQLite compatibility
+        "compare_type": True,
+        "compare_server_default": True,
+    }
+    if target_schema:
+        kwargs["version_table_schema"] = target_schema
+    context.configure(**kwargs)
+
     with context.begin_transaction():
         context.run_migrations()
 
@@ -96,7 +110,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 async def run_async_migrations() -> None:
     """Creates async engine and runs migrations against live database."""
-    raw_url = os.environ.get("DATABASE_URL") or settings.DATABASE_URL
+    x_args = context.get_x_argument(as_dictionary=True)
+    raw_url = x_args.get("db_url") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
     if "postgresql://" in raw_url and "+asyncpg" not in raw_url:
         raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://")
 
@@ -107,6 +122,7 @@ async def run_async_migrations() -> None:
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        await connection.commit()
 
     await connectable.dispose()
 

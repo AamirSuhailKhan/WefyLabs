@@ -6,7 +6,7 @@ and property facts. Supports multiple languages (English, Hindi, Arabic, Urdu, F
 """
 
 import logging
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

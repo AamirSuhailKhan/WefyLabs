@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+.env.pilot
+.env.*.pilot
 apps/api/.env
 apps/web/.env.local
 
@@ -24,3 +26,18 @@ out/
 .DS_Store
 Thumbs.db
 *.log
+
+# Celery Runtime
+celerybeat-schedule*
+*.schedule
+*.schedule-shm
+*.schedule-wal
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database Backups & Dumps
+backups/
+*.dump

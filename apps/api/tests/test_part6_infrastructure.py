@@ -44,23 +44,34 @@ def test_audit_dto_construction():
 
 @pytest.mark.asyncio
 async def test_all_notification_channels_send():
-    """All channel adapters must implement send() and return True."""
+    """Channel adapters must implement send() interface truthfully."""
     payload = NotificationPayload(
         recipient_id="broker-001",
         title="Test Notification",
         body="Hello World",
         channel="in_app",
     )
-    channels = [
-        InAppChannelAdapter(),
+    # In-App channel always succeeds
+    in_app = InAppChannelAdapter()
+    assert await in_app.send(payload) is True
+
+    # When providers are unconfigured, external adapters must return False (preventing false success)
+    from unittest.mock import MagicMock, patch
+    mock_mgr = MagicMock()
+    mock_provider = MagicMock()
+    mock_provider.is_configured.return_value = False
+    mock_mgr.get_provider.return_value = mock_provider
+
+    unconfigured_channels = [
         EmailChannelAdapter(),
         WhatsAppChannelAdapter(),
         TelegramChannelAdapter(),
         SMSChannelAdapter(),
     ]
-    for channel in channels:
-        result = await channel.send(payload)
-        assert result is True, f"Channel {channel.channel_name} did not return True"
+    with patch("app.modules.communication.channel_manager.manager.get_channel_manager", return_value=mock_mgr):
+        for channel in unconfigured_channels:
+            result = await channel.send(payload)
+            assert result is False, f"Unconfigured channel {channel.channel_name} should return False"
 
 
 def test_notification_dto_defaults():

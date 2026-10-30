@@ -36,16 +36,12 @@ if CELERY_AVAILABLE and celery_app:
     )
     def analyze_lead_prospect_task(self, organization_id: str, lead_id: str, force_refresh: bool = False):
         """Asynchronously analyze lead prospect intelligence."""
-        import asyncio
+        from app.core.async_runner import run_async
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(_async_analyze_lead_prospect(organization_id, lead_id, force_refresh))
+            return run_async(_async_analyze_lead_prospect(organization_id, lead_id, force_refresh))
         except Exception as exc:
             logger.error(f"[PROSPECT_TASK] Lead {lead_id} analysis failed: {exc}")
             raise self.retry(exc=exc)
-        finally:
-            loop.close()
 
 else:
     def analyze_lead_prospect_task(organization_id: str, lead_id: str, force_refresh: bool = False):

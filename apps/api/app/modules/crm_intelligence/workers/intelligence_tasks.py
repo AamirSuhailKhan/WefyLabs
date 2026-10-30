@@ -15,22 +15,14 @@ import logging
 from typing import Dict, Any, List
 
 from app.celery_app import celery_app
+from app.core.async_runner import run_async as _run_async
 from app.database import AsyncSessionLocal
 from app.modules.crm_intelligence.service import CRMIntelligenceService
 
 logger = logging.getLogger(__name__)
 
-def _run_async(coro):
-    """Utility to run an async coroutine inside a synchronous Celery task."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
-
-@celery_app.task(name="evaluate_lead_health_and_decay_task", bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_lead_health_and_decay_task", bind=True, max_retries=3, default_retry_delay=60)
 def evaluate_lead_health_and_decay_task(self, organization_id: str = "org_default"):
     """Periodic task: Evaluates lead health, decay, and neglect detection."""
     async def _run():
@@ -48,7 +40,7 @@ def evaluate_lead_health_and_decay_task(self, organization_id: str = "org_defaul
         raise self.retry(exc=exc)
 
 
-@celery_app.task(name="monitor_sla_breaches_task", bind=True, max_retries=3, default_retry_delay=30)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.monitor_sla_breaches_task", bind=True, max_retries=3, default_retry_delay=30)
 def monitor_sla_breaches_task(self, organization_id: str = "org_default"):
     """Periodic task (every 2 min): Checks active SLA timers and records breaches."""
     async def _run():
@@ -65,7 +57,7 @@ def monitor_sla_breaches_task(self, organization_id: str = "org_default"):
         raise self.retry(exc=exc)
 
 
-@celery_app.task(name="evaluate_pipeline_stagnation_task", bind=True, max_retries=3, default_retry_delay=120)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.evaluate_pipeline_stagnation_task", bind=True, max_retries=3, default_retry_delay=120)
 def evaluate_pipeline_stagnation_task(self, organization_id: str = "org_default"):
     """Periodic task (every 30 min): Evaluates pipeline stage velocity and stagnation."""
     async def _run():
@@ -82,7 +74,7 @@ def evaluate_pipeline_stagnation_task(self, organization_id: str = "org_default"
         raise self.retry(exc=exc)
 
 
-@celery_app.task(name="calculate_agent_workload_task", bind=True, max_retries=3, default_retry_delay=60)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.calculate_agent_workload_task", bind=True, max_retries=3, default_retry_delay=60)
 def calculate_agent_workload_task(self, organization_id: str = "org_default"):
     """Periodic task (every 15 min): Evaluates agent capacity and overload warnings."""
     async def _run():
@@ -99,7 +91,7 @@ def calculate_agent_workload_task(self, organization_id: str = "org_default"):
         raise self.retry(exc=exc)
 
 
-@celery_app.task(name="detect_crm_anomalies_task", bind=True, max_retries=3, default_retry_delay=180)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.detect_crm_anomalies_task", bind=True, max_retries=3, default_retry_delay=180)
 def detect_crm_anomalies_task(self, organization_id: str = "org_default"):
     """Periodic task (hourly): Runs statistical anomaly detection across volume and conversions."""
     async def _run():
@@ -116,7 +108,7 @@ def detect_crm_anomalies_task(self, organization_id: str = "org_default"):
         raise self.retry(exc=exc)
 
 
-@celery_app.task(name="generate_daily_briefs_task", bind=True, max_retries=3, default_retry_delay=300)
+@celery_app.task(name="app.modules.crm_intelligence.workers.intelligence_tasks.generate_daily_briefs_task", bind=True, max_retries=3, default_retry_delay=300)
 def generate_daily_briefs_task(self, organization_id: str = "org_default"):
     """Periodic task (Daily at 07:00 AM UTC): Pre-generates daily operational briefs."""
     async def _run():

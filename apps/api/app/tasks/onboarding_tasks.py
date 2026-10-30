@@ -9,23 +9,13 @@ Scheduled & asynchronous Celery tasks:
 import asyncio
 import logging
 from typing import Dict, Any
-from app.tasks.celery_worker import celery_app
+from app.celery_app import celery_app
 from app.database import AsyncSessionLocal
 
 logger = logging.getLogger("beetlelabs.tasks.onboarding")
 
 
-def _run_async(coro):
-    """Safely runs an async coroutine inside a synchronous Celery task thread."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+from app.core.async_runner import run_async as _run_async
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)

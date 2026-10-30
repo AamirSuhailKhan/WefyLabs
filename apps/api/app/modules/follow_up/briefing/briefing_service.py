@@ -29,14 +29,16 @@ class BriefingService:
     async def get_daily_briefing_data(
         self,
         broker_id: uuid.UUID,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        tenant_tz: Optional[str] = "Asia/Kolkata",
     ) -> Dict[str, Any]:
         """
         Calculates live metrics for the broker:
         - tasks due today
         - overdue tasks
         - uncontacted hot leads
-        - meetings today
+        - site visits / meetings today
+        - pending approvals
         - top priority lead recommendation
         """
         now = datetime.now(timezone.utc)
@@ -62,7 +64,7 @@ class BriefingService:
         res_overdue = await self.db.execute(stmt_overdue)
         overdue_count = res_overdue.scalar() or 0
 
-        # 3. Meetings Today
+        # 3. Meetings / Site Visits Today
         stmt_meetings = select(func.count(Meeting.id)).where(
             Meeting.broker_id == broker_id,
             Meeting.status == "scheduled",
@@ -72,7 +74,17 @@ class BriefingService:
         res_meetings = await self.db.execute(stmt_meetings)
         meetings_today_count = res_meetings.scalar() or 0
 
-        # 4. Hot leads without recent contact (past 48h)
+        # 4. Pending Approvals
+        from app.models.follow_up_models import FollowUpExecution
+        stmt_approvals = select(func.count(FollowUpExecution.id)).where(
+            FollowUpExecution.status == "PENDING_APPROVAL"
+        )
+        if organization_id:
+            stmt_approvals = stmt_approvals.where(FollowUpExecution.organization_id == str(organization_id))
+        res_appr = await self.db.execute(stmt_approvals)
+        pending_approvals_count = res_appr.scalar() or 0
+
+        # 5. Hot leads without recent contact (past 48h)
         forty_eight_h_ago = now - timedelta(hours=48)
         stmt_hot = select(Lead).where(
             Lead.broker_id == broker_id,
@@ -88,7 +100,7 @@ class BriefingService:
         hot_uncontacted_leads = res_hot.scalars().all()
         hot_uncontacted_count = len(hot_uncontacted_leads)
 
-        # 5. Top Priority Lead
+        # 6. Top Priority Lead
         top_priority_lead = None
         if hot_uncontacted_leads:
             top_lead = hot_uncontacted_leads[0]
@@ -130,21 +142,27 @@ class BriefingService:
             f"• {due_today_count} follow-up task(s) due today",
             f"• {overdue_count} overdue task(s)",
             f"• {hot_uncontacted_count} HOT lead(s) without recent contact",
-            f"• {meetings_today_count} scheduled meeting(s) today"
+            f"• {meetings_today_count} scheduled site visit(s) / meeting(s) today",
         ]
+        if pending_approvals_count > 0:
+            briefing_lines.append(f"• {pending_approvals_count} AI action(s) awaiting your approval")
         if top_priority_lead:
             briefing_lines.append(f"\nTop Priority: {top_priority_lead['name']} ({top_priority_lead['reason']})")
         else:
             briefing_lines.append("\nYou have no critical urgent pending items at this time.")
 
         summary_text = "\n".join(briefing_lines)
+        briefing_period_key = f"{broker_id}::{now.strftime('%Y-%m-%d')}"
 
         return {
             "due_today_count": due_today_count,
             "overdue_count": overdue_count,
             "hot_uncontacted_count": hot_uncontacted_count,
             "meetings_today_count": meetings_today_count,
+            "pending_approvals_count": pending_approvals_count,
             "top_priority_lead": top_priority_lead,
             "summary_text": summary_text,
+            "briefing_period_key": briefing_period_key,
+            "tenant_timezone": tenant_tz or "Asia/Kolkata",
             "generated_at": now.isoformat()
         }

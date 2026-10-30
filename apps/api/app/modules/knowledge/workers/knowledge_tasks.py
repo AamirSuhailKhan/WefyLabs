@@ -40,13 +40,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Async runner helper ──────────────────────────────────────────────────────
 
-def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+from app.core.async_runner import run_async as _run_async
 
 
 # ─── Base task with retry config ──────────────────────────────────────────────
